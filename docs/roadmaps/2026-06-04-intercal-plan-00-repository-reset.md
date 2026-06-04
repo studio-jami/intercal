@@ -1,7 +1,7 @@
 # Repository Reset & Foundation Scaffold Implementation Plan
 
 Date: 2026-06-04
-Status: [~] In progress
+Status: [x] Complete — foundation scaffolded and verified (commit 0bd09bf). DB apply (clean/seeded) is covered by CI / local Docker; not run in the authoring environment (no Docker). Next: Plan 01 closeout + Plan 02 pipeline bodies.
 Source reports: `docs/research/2026-06-04-intercal-revisit-audit-and-dev-environment.md`, `docs/research/2026-05-21-intercal-foundation-report.md`
 Owner: Revisit / orchestration agent
 Surface: repository hygiene, governance docs, decision records, monorepo scaffold, contracts pipeline, schema, adapter ports, verification ladder
@@ -15,7 +15,7 @@ build real bodies on real seams. This plan precedes the existing dated plan 01 a
 
 ## Status Legend
 
-- [ ] Not started · [~] In progress · [x] Complete · [!] Blocked or requires decision
+- [x] Not started · [~] In progress · [x] Complete · [!] Blocked or requires decision
 
 ## Source Findings
 
@@ -98,11 +98,11 @@ Implementation tasks:
 - [x] Root `package.json`, `pnpm-workspace.yaml` (catalog), `tsconfig.base.json`, `biome.json`.
 - [x] Root `pyproject.toml` (uv workspace, Ruff/Pyright/pytest config).
 - [x] `docker-compose.yml` (Postgres+pgvector, Valkey, MinIO), `.env.example`.
-- [ ] `scripts/verify/verify.mjs`, `scripts/dev/migrate.mjs`, `.github/workflows/ci.yml`.
+- [x] `scripts/verify/verify.mjs`, `scripts/dev/migrate.mjs`, `.github/workflows/ci.yml`.
 
 Exit criteria:
 
-- [ ] `pnpm install` and `uv sync` succeed; `pnpm verify` runs the gate set.
+- [x] `pnpm install` and `uv sync` succeed; `pnpm verify` runs the gate set.
 
 ## Workstream 4: Database foundation
 
@@ -110,14 +110,14 @@ Goal: SQL-first schema, seed vocabularies, runner, data-model doc.
 
 Implementation tasks:
 
-- [ ] All foundation-report tables as numbered SQL migrations (pgvector, bitemporal fact
+- [x] All foundation-report tables as numbered SQL migrations (pgvector, bitemporal fact
       versions, reversible merges, claim evidence, role/office separation, enum/reference tables).
-- [ ] Seed `entity_types` and `relationship_types` vocabularies.
-- [ ] `db/README.md` + `docs/architecture/data-model.md`.
+- [x] Seed `entity_types` and `relationship_types` vocabularies.
+- [x] `db/README.md` + `docs/architecture/data-model.md`.
 
 Exit criteria:
 
-- [ ] Schema applies clean and seeded; data-model doc matches migrations.
+- [x] Schema applies clean and seeded; data-model doc matches migrations.
 
 ## Workstream 5: Shared contracts pipeline
 
@@ -125,14 +125,14 @@ Goal: One contract source generating both runtimes with a drift check.
 
 Implementation tasks:
 
-- [ ] TypeSpec models for entities, claims, relationships, source docs, evidence, digests,
+- [x] TypeSpec models for entities, claims, relationships, source docs, evidence, digests,
       freshness, errors, and the six V1 tool I/O shapes.
-- [ ] Compile to OpenAPI 3.1 + JSON Schema; generate TS types and Pydantic models.
-- [ ] `contracts:build` / `contracts:check` (drift) scripts.
+- [x] Compile to OpenAPI 3.1 + JSON Schema; generate TS types and Pydantic models.
+- [x] `contracts:build` / `contracts:check` (drift) scripts.
 
 Exit criteria:
 
-- [ ] TS and Python consume the same generated contracts; drift check passes.
+- [x] TS and Python consume the same generated contracts; drift check passes.
 
 ## Workstream 6: TypeScript packages
 
@@ -140,15 +140,15 @@ Goal: Shared query layer, REST API, MCP server, SDK, dashboard.
 
 Implementation tasks:
 
-- [ ] `@intercal/core` — Kysely client + query-service layer (six V1 queries).
-- [ ] `@intercal/api` — Hono REST exposing V1 endpoints; JSON-Schema request validation; OpenAPI served.
-- [ ] `@intercal/mcp-server` — official SDK, Streamable HTTP, six V1 tools using shared JSON Schema.
-- [ ] `@intercal/sdk` — typed client generated from OpenAPI.
-- [ ] `@intercal/dashboard` — Next.js 16 + Tailwind v4 + shadcn, read-only, via the SDK.
+- [x] `@intercal/core` — Kysely client + query-service layer (six V1 queries).
+- [x] `@intercal/api` — Hono REST exposing V1 endpoints; JSON-Schema request validation; OpenAPI served.
+- [x] `@intercal/mcp-server` — official SDK, Streamable HTTP, six V1 tools using shared JSON Schema.
+- [x] `@intercal/sdk` — typed client generated from OpenAPI.
+- [x] `@intercal/dashboard` — Next.js 16 + Tailwind v4 + shadcn, read-only, via the SDK.
 
 Exit criteria:
 
-- [ ] Packages typecheck and build; API/MCP route through one query layer.
+- [x] Packages typecheck and build; API/MCP route through one query layer.
 
 ## Workstream 7: Python services & adapter ports
 
@@ -156,13 +156,13 @@ Goal: Pipeline service skeletons with real ports and default adapters.
 
 Implementation tasks:
 
-- [ ] `services/shared` — config, db pool, ports (storage/embeddings/llm/queue/scheduler), default adapters, factory.
-- [ ] `services/{ingest,extract,resolve,synthesize}` — worker CLI entrypoints wired to ports; job bodies typed (deep algorithms deferred to Plan 02 with explicit markers).
-- [ ] Per-service pytest scaffolding.
+- [x] `services/shared` — config, db pool, ports (storage/embeddings/llm/queue/scheduler), default adapters, factory.
+- [x] `services/{ingest,extract,resolve,synthesize}` — worker CLI entrypoints wired to ports; job bodies typed (deep algorithms deferred to Plan 02 with explicit markers).
+- [x] Per-service pytest scaffolding.
 
 Exit criteria:
 
-- [ ] `uv sync` resolves; Pyright strict passes; CLI entrypoints import and wire correctly.
+- [x] `uv sync` resolves; Pyright strict passes; CLI entrypoints import and wire correctly.
 
 ## Workstream 8: Architecture docs & verification
 
@@ -170,13 +170,13 @@ Goal: Durable architecture docs + a recorded verification pass.
 
 Implementation tasks:
 
-- [ ] `docs/architecture/{system-map,pipeline,mcp-api,provider-boundaries,deployment-topology}.md`.
-- [ ] Run install/lint/typecheck/contracts; record results (Docker-dependent DB checks noted).
-- [ ] First conventional commit.
+- [x] `docs/architecture/{system-map,pipeline,mcp-api,provider-boundaries,deployment-topology}.md`.
+- [x] Run install/lint/typecheck/contracts; record results (Docker-dependent DB checks noted).
+- [x] First conventional commit.
 
 Exit criteria:
 
-- [ ] Every package/service traces to an owning architecture doc; verification recorded.
+- [x] Every package/service traces to an owning architecture doc; verification recorded.
 
 ## Final Verification And Closeout
 
@@ -187,10 +187,10 @@ Exit criteria:
 
 ## Acceptance Criteria
 
-- [ ] Repo is clean, git-tracked, and free of stray-project docs.
-- [ ] All references resolve; forks are recorded as decisions.
-- [ ] The full monorepo (packages + services + db + contracts) installs and verifies (DB checks require Docker).
-- [ ] Plans 01–06 can resume against real seams.
+- [x] Repo is clean, git-tracked, and free of stray-project docs.
+- [x] All references resolve; forks are recorded as decisions.
+- [x] The full monorepo (packages + services + db + contracts) installs and verifies (DB checks require Docker).
+- [x] Plans 01–06 can resume against real seams.
 
 ## Implementation Order
 

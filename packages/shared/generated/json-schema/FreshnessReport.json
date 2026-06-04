@@ -1,0 +1,31 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "FreshnessReport.json",
+    "type": "object",
+    "properties": {
+        "target": {
+            "type": "string"
+        },
+        "lastUpdated": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "lastIngestedAt": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "coverage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Fraction of expected sources currently covered, in [0,1]."
+        },
+        "staleness": {
+            "type": "string"
+        }
+    },
+    "required": [
+        "target"
+    ],
+    "description": "How fresh Intercal's knowledge is for a target."
+}

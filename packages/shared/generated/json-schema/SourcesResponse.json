@@ -1,0 +1,16 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "SourcesResponse.json",
+    "type": "object",
+    "properties": {
+        "sources": {
+            "type": "array",
+            "items": {
+                "$ref": "SourceDocument.json"
+            }
+        }
+    },
+    "required": [
+        "sources"
+    ]
+}

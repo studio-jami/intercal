@@ -1,0 +1,19 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "Confidence.json",
+    "type": "object",
+    "properties": {
+        "score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+        },
+        "method": {
+            "type": "string"
+        }
+    },
+    "required": [
+        "score"
+    ],
+    "description": "A confidence score in [0,1] with the method that produced it."
+}

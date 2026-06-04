@@ -1,0 +1,22 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "EvidenceResponse.json",
+    "type": "object",
+    "properties": {
+        "hits": {
+            "type": "array",
+            "items": {
+                "$ref": "EvidenceHit.json"
+            }
+        },
+        "total": {
+            "type": "integer",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+        }
+    },
+    "required": [
+        "hits",
+        "total"
+    ]
+}

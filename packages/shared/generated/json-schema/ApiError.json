@@ -1,0 +1,19 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "ApiError.json",
+    "type": "object",
+    "properties": {
+        "code": {
+            "type": "string"
+        },
+        "message": {
+            "type": "string"
+        },
+        "details": {}
+    },
+    "required": [
+        "code",
+        "message"
+    ],
+    "description": "A structured API/tool error."
+}

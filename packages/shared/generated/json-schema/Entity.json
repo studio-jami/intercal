@@ -1,0 +1,48 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "Entity.json",
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "string"
+        },
+        "type": {
+            "$ref": "EntityType.json"
+        },
+        "displayName": {
+            "type": "string"
+        },
+        "aliases": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "externalIds": {
+            "type": "array",
+            "items": {
+                "$ref": "ExternalId.json"
+            }
+        },
+        "importance": {
+            "type": "number"
+        },
+        "firstSeen": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "lastUpdated": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "state": {
+            "description": "Denormalized current state; derived from fact versions, not a source of truth."
+        }
+    },
+    "required": [
+        "id",
+        "type",
+        "displayName"
+    ],
+    "description": "A canonical thing: person, org, place, role/office, product, event, concept, etc."
+}

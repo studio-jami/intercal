@@ -1,0 +1,33 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "EntityResponse.json",
+    "type": "object",
+    "properties": {
+        "entity": {
+            "$ref": "Entity.json"
+        },
+        "asOf": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "relationships": {
+            "type": "array",
+            "items": {
+                "$ref": "Relationship.json"
+            }
+        },
+        "facts": {
+            "type": "array",
+            "items": {
+                "$ref": "Claim.json"
+            }
+        },
+        "freshness": {
+            "$ref": "FreshnessReport.json"
+        }
+    },
+    "required": [
+        "entity",
+        "freshness"
+    ]
+}

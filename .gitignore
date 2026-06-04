@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.ty_cache/
+.mypy_cache/
+
+# Builds / outputs
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+coverage/
+.turbo/
+
+# Env / secrets (never commit; .env.example is the only tracked env file)
+.env
+.env.*
+!.env.example
+
+# Local infra / data
+pgdata/
+miniodata/
+*.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json

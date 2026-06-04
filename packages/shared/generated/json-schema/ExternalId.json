@@ -1,0 +1,18 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "ExternalId.json",
+    "type": "object",
+    "properties": {
+        "system": {
+            "type": "string"
+        },
+        "id": {
+            "type": "string"
+        }
+    },
+    "required": [
+        "system",
+        "id"
+    ],
+    "description": "An external identifier for an entity (e.g. a Wikidata QID)."
+}

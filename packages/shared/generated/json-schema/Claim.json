@@ -1,0 +1,65 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "Claim.json",
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "string"
+        },
+        "subject": {
+            "type": "string"
+        },
+        "predicate": {
+            "type": "string"
+        },
+        "object": {
+            "type": "string"
+        },
+        "qualifiers": {},
+        "normalizedText": {
+            "type": "string"
+        },
+        "validFrom": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the claim is/was true in the world (bitemporal valid time)."
+        },
+        "validUntil": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "recordedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When Intercal recorded the claim (bitemporal transaction time)."
+        },
+        "confidence": {
+            "$ref": "Confidence.json"
+        },
+        "status": {
+            "$ref": "ClaimStatus.json"
+        },
+        "contradiction": {
+            "$ref": "ContradictionState.json"
+        },
+        "evidence": {
+            "type": "array",
+            "items": {
+                "$ref": "Citation.json"
+            }
+        }
+    },
+    "required": [
+        "id",
+        "subject",
+        "predicate",
+        "object",
+        "normalizedText",
+        "recordedAt",
+        "confidence",
+        "status",
+        "contradiction",
+        "evidence"
+    ],
+    "description": "An atomic factual assertion extracted from source documents."
+}

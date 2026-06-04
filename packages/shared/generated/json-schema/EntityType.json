@@ -1,0 +1,20 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "EntityType.json",
+    "type": "string",
+    "enum": [
+        "person",
+        "organization",
+        "place",
+        "role",
+        "office",
+        "product",
+        "event",
+        "concept",
+        "legislation",
+        "technical_artifact",
+        "source",
+        "dataset",
+        "jurisdiction"
+    ]
+}

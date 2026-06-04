@@ -1,0 +1,10 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "ContradictionState.json",
+    "type": "string",
+    "enum": [
+        "none",
+        "contested",
+        "contradicted"
+    ]
+}

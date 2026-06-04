@@ -1,0 +1,43 @@
+[project]
+name = "intercal-shared"
+version = "0.1.0"
+description = "Intercal shared library: config, ports, adapters, contracts, and DB utilities."
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.3.0",
+    "asyncpg>=0.29.0",
+]
+
+[project.optional-dependencies]
+# Storage adapter (S3-compatible: MinIO, Cloudflare R2, AWS S3)
+storage-s3 = ["aioboto3>=13.0.0"]
+# Embeddings adapters
+embeddings-local = ["fastembed>=0.4.0"]
+embeddings-openai = ["openai>=1.35.0"]
+# LLM adapters
+llm-gemini = ["google-genai>=1.0.0"]
+llm-groq = ["groq>=0.11.0"]
+llm-anthropic = ["anthropic>=0.40.0"]
+llm-openai = ["openai>=1.35.0"]
+# Queue adapters
+queue-redis = ["redis>=5.0.0"]
+# All adapters (for CI / dev installs)
+all = [
+    "intercal-shared[storage-s3]",
+    "intercal-shared[embeddings-local]",
+    "intercal-shared[embeddings-openai]",
+    "intercal-shared[llm-gemini]",
+    "intercal-shared[llm-groq]",
+    "intercal-shared[llm-anthropic]",
+    "intercal-shared[llm-openai]",
+    "intercal-shared[queue-redis]",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/intercal_shared"]

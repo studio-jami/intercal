@@ -1,0 +1,45 @@
+packages:
+  - "packages/*"
+
+# Shared, single-sourced dependency versions (pnpm catalog).
+# Reference in package.json as e.g. "hono": "catalog:".
+catalog:
+  # Language / build
+  typescript: ^5.9.2
+  tsx: ^4.20.0
+  vitest: ^3.2.0
+  "@types/node": ^24.0.0
+
+  # Contracts (TypeSpec -> OpenAPI 3.1 + JSON Schema)
+  "@typespec/compiler": ^1.5.0
+  "@typespec/http": ^1.5.0
+  "@typespec/rest": ^0.75.0
+  "@typespec/openapi3": ^1.5.0
+  "@typespec/json-schema": ^1.5.0
+  openapi-typescript: ^7.9.0
+
+  # API runtime (Hono runs on Node, Cloudflare, Vercel, Bun — deploy-agnostic)
+  hono: ^4.9.0
+  "@hono/node-server": ^1.14.0
+  ajv: ^8.17.0
+  ajv-formats: ^3.0.1
+
+  # Database (SQL-first; Kysely for typed reads only)
+  kysely: ^0.28.0
+  pg: ^8.13.0
+  "@types/pg": ^8.11.0
+
+  # MCP
+  "@modelcontextprotocol/sdk": ^1.29.0
+
+  # Frontend
+  next: ^16.2.0
+  react: ^19.2.0
+  react-dom: ^19.2.0
+  "@types/react": ^19.2.0
+  "@types/react-dom": ^19.2.0
+  tailwindcss: ^4.1.0
+  "@tailwindcss/postcss": ^4.1.0
+
+  # Observability (optional, behind adapter)
+  pino: ^9.5.0

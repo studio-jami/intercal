@@ -1,0 +1,38 @@
+{
+  "name": "intercal",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Intercal — an open, provenance-backed temporal knowledge substrate for agents and LLM applications.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "pnpm@10.33.2",
+  "engines": {
+    "node": ">=24",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"./packages/**\" build",
+    "dev": "pnpm --filter @intercal/dashboard dev",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "pnpm -r --filter \"./packages/**\" typecheck",
+    "test": "pnpm -r --filter \"./packages/**\" test",
+    "contracts:build": "pnpm --filter @intercal/shared contracts:build",
+    "contracts:check": "pnpm --filter @intercal/shared contracts:check",
+    "db:migrate:clean": "node scripts/dev/migrate.mjs --fresh",
+    "db:migrate:seeded": "node scripts/dev/migrate.mjs --fresh --seed",
+    "db:check": "node scripts/dev/migrate.mjs --check",
+    "py:format:check": "uv run ruff format --check .",
+    "py:lint": "uv run ruff check .",
+    "py:typecheck": "uv run pyright",
+    "py:test": "uv run pytest",
+    "verify": "node scripts/verify/verify.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.0",
+    "pg": "^8.13.0",
+    "typescript": "^5.9.2"
+  }
+}

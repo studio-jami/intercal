@@ -1,0 +1,48 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "DeltaResponse.json",
+    "type": "object",
+    "properties": {
+        "topic": {
+            "type": "string"
+        },
+        "since": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "until": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "summary": {
+            "$ref": "Digest.json"
+        },
+        "changedClaims": {
+            "type": "array",
+            "items": {
+                "$ref": "Claim.json"
+            }
+        },
+        "changedEntities": {
+            "type": "array",
+            "items": {
+                "$ref": "EntitySummary.json"
+            }
+        },
+        "confidence": {
+            "$ref": "Confidence.json"
+        },
+        "freshness": {
+            "$ref": "FreshnessReport.json"
+        }
+    },
+    "required": [
+        "topic",
+        "since",
+        "summary",
+        "changedClaims",
+        "changedEntities",
+        "confidence",
+        "freshness"
+    ]
+}

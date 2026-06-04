@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: intercal
+          POSTGRES_PASSWORD: intercal
+          POSTGRES_DB: intercal
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U intercal -d intercal"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://intercal:intercal@localhost:5432/intercal
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install TypeScript deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Python deps
+        run: uv sync
+
+      - name: Build contracts
+        run: pnpm contracts:build
+
+      - name: Lint (Biome)
+        run: pnpm lint
+
+      - name: Typecheck (TS)
+        run: pnpm typecheck
+
+      - name: Contracts drift
+        run: pnpm contracts:check
+
+      - name: Python lint (Ruff)
+        run: pnpm py:lint
+
+      - name: Python typecheck (Pyright)
+        run: pnpm py:typecheck
+
+      - name: Migrate (clean + seeded)
+        run: pnpm db:migrate:seeded
+
+      - name: Tests
+        run: pnpm test
+
+      - name: Python tests
+        run: pnpm py:test
+
+  # Scheduled pipeline workers run as portable CLI entrypoints (see scripts/workers/).
+  # A separate scheduled workflow (cron) invokes `python -m intercal_ingest <job>` etc.
+  # on the public repo's free Actions minutes — added when Plan 02 lands.

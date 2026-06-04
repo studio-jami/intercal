@@ -1,0 +1,52 @@
+# Local development infrastructure for Intercal.
+# Gives dev<->pilot<->prod parity by service CONTRACT, not by provider:
+#   Postgres+pgvector  -> Neon / Supabase / VPS in deployed envs
+#   Redis/Valkey       -> Upstash / managed Redis
+#   MinIO (S3 API)     -> Cloudflare R2 / any S3-compatible store
+#
+# Usage: docker compose up -d   (then `pnpm db:migrate:seeded`)
+
+services:
+  postgres:
+    # pgvector ships an official image tracking Postgres major + pgvector version.
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_USER: intercal
+      POSTGRES_PASSWORD: intercal
+      POSTGRES_DB: intercal
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U intercal -d intercal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: valkey/valkey:8-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: intercal
+      MINIO_ROOT_PASSWORD: intercal-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10

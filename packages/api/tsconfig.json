@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "verbatimModuleSyntax": false
+  },
+  "references": [{ "path": "../shared" }, { "path": "../core" }],
+  "include": ["src"]
+}

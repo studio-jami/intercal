@@ -1,0 +1,36 @@
+{
+  "name": "@intercal/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Intercal contracts — TypeSpec is the single source; OpenAPI/JSON-Schema/TS types are generated.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "generated"
+  ],
+  "scripts": {
+    "contracts:build": "node scripts/build-contracts.mjs",
+    "contracts:check": "node scripts/check-contracts.mjs",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@typespec/compiler": "catalog:",
+    "@typespec/http": "catalog:",
+    "@typespec/openapi3": "catalog:",
+    "@typespec/json-schema": "catalog:",
+    "openapi-typescript": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

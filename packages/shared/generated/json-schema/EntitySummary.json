@@ -1,0 +1,22 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "EntitySummary.json",
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "string"
+        },
+        "type": {
+            "$ref": "EntityType.json"
+        },
+        "displayName": {
+            "type": "string"
+        }
+    },
+    "required": [
+        "id",
+        "type",
+        "displayName"
+    ],
+    "description": "A compact entity reference used in deltas and lists."
+}

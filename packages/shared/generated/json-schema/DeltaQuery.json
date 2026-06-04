@@ -1,0 +1,29 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "DeltaQuery.json",
+    "type": "object",
+    "properties": {
+        "topic": {
+            "type": "string",
+            "description": "Topic, entity, or claim subject to compute changes for."
+        },
+        "since_date": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Return changes recorded since this date (e.g. a model cutoff)."
+        },
+        "token_budget": {
+            "type": "integer",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+        },
+        "until_date": {
+            "type": "string",
+            "format": "date-time"
+        }
+    },
+    "required": [
+        "topic",
+        "since_date"
+    ]
+}

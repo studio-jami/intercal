@@ -1,0 +1,43 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "SourceDocument.json",
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "string"
+        },
+        "sourceId": {
+            "type": "string"
+        },
+        "title": {
+            "type": "string"
+        },
+        "url": {
+            "type": "string"
+        },
+        "publishedAt": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "ingestedAt": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "language": {
+            "type": "string"
+        },
+        "contentHash": {
+            "type": "string"
+        },
+        "license": {
+            "type": "string"
+        }
+    },
+    "required": [
+        "id",
+        "sourceId",
+        "ingestedAt",
+        "contentHash"
+    ],
+    "description": "Immutable ingested evidence."
+}

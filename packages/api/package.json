@@ -1,0 +1,36 @@
+{
+  "name": "@intercal/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Intercal REST API (Hono) — deploy-agnostic: runs on Node, Vercel, Cloudflare Workers, Bun.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@hono/node-server": "catalog:",
+    "@intercal/core": "workspace:*",
+    "@intercal/shared": "workspace:*",
+    "ajv": "catalog:",
+    "ajv-formats": "catalog:",
+    "hono": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

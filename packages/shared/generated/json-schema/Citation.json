@@ -1,0 +1,24 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "Citation.json",
+    "type": "object",
+    "properties": {
+        "sourceDocumentId": {
+            "type": "string"
+        },
+        "quote": {
+            "type": "string"
+        },
+        "url": {
+            "type": "string"
+        },
+        "publishedAt": {
+            "type": "string",
+            "format": "date-time"
+        }
+    },
+    "required": [
+        "sourceDocumentId"
+    ],
+    "description": "A pointer to evidence in a source document. Every public fact must be citable."
+}

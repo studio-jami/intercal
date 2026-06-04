@@ -1,0 +1,54 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "Relationship.json",
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "string"
+        },
+        "type": {
+            "type": "string"
+        },
+        "fromEntityId": {
+            "type": "string"
+        },
+        "toEntityId": {
+            "type": "string"
+        },
+        "validFrom": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "validUntil": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "recordedAt": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "confidence": {
+            "$ref": "Confidence.json"
+        },
+        "status": {
+            "$ref": "RelationshipStatus.json"
+        },
+        "sourceDocumentIds": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        }
+    },
+    "required": [
+        "id",
+        "type",
+        "fromEntityId",
+        "toEntityId",
+        "recordedAt",
+        "confidence",
+        "status",
+        "sourceDocumentIds"
+    ],
+    "description": "A typed temporal edge between entities, derived from claims and evidence."
+}

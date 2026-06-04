@@ -1,0 +1,1034 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Intercal API",
+    "description": "Intercal public contract — the single source of truth.\nTypeSpec compiles to OpenAPI 3.1 + JSON Schema; TS types and Pydantic models are generated\nfrom those. Do not hand-edit generated artifacts.",
+    "version": "0.0.0"
+  },
+  "tags": [
+    {
+      "name": "knowledge"
+    }
+  ],
+  "paths": {
+    "/v1/claims/verify": {
+      "get": {
+        "operationId": "verifyClaim",
+        "description": "Verify a claim against recorded evidence as of a date.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/VerifyClaimQuery.claim_text"
+          },
+          {
+            "$ref": "#/components/parameters/VerifyClaimQuery.as_of_date"
+          },
+          {
+            "$ref": "#/components/parameters/VerifyClaimQuery.token_budget"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimVerificationResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/v1/delta": {
+      "get": {
+        "operationId": "getDelta",
+        "description": "What changed about a topic since a date, with evidence, confidence, and a token-budgeted summary.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeltaQuery.topic"
+          },
+          {
+            "$ref": "#/components/parameters/DeltaQuery.since_date"
+          },
+          {
+            "$ref": "#/components/parameters/DeltaQuery.token_budget"
+          },
+          {
+            "$ref": "#/components/parameters/DeltaQuery.until_date"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeltaResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/v1/entity": {
+      "get": {
+        "operationId": "getEntity",
+        "description": "Entity state, relationships, and fact history, optionally at a point in time.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EntityQuery.name_or_id"
+          },
+          {
+            "$ref": "#/components/parameters/EntityQuery.at_date"
+          },
+          {
+            "$ref": "#/components/parameters/EntityQuery.token_budget"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntityResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/v1/evidence": {
+      "get": {
+        "operationId": "searchEvidence",
+        "description": "Search source-grounded evidence by query, date range, and sources.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EvidenceQuery.query"
+          },
+          {
+            "$ref": "#/components/parameters/EvidenceQuery.from_date"
+          },
+          {
+            "$ref": "#/components/parameters/EvidenceQuery.to_date"
+          },
+          {
+            "$ref": "#/components/parameters/EvidenceQuery.limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/v1/freshness": {
+      "get": {
+        "operationId": "getFreshness",
+        "description": "Report how fresh Intercal's knowledge is for a topic or entity.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FreshnessQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreshnessReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/v1/sources": {
+      "get": {
+        "operationId": "getSources",
+        "description": "List the source documents backing an entity or claim.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SourcesQuery.entity_or_claim_id"
+          },
+          {
+            "$ref": "#/components/parameters/SourcesQuery.limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourcesResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "knowledge"
+        ]
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "DeltaQuery.since_date": {
+        "name": "since_date",
+        "in": "query",
+        "required": true,
+        "description": "Return changes recorded since this date (e.g. a model cutoff).",
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "explode": false
+      },
+      "DeltaQuery.token_budget": {
+        "name": "token_budget",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "explode": false
+      },
+      "DeltaQuery.topic": {
+        "name": "topic",
+        "in": "query",
+        "required": true,
+        "description": "Topic, entity, or claim subject to compute changes for.",
+        "schema": {
+          "type": "string"
+        },
+        "explode": false
+      },
+      "DeltaQuery.until_date": {
+        "name": "until_date",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "explode": false
+      },
+      "EntityQuery.at_date": {
+        "name": "at_date",
+        "in": "query",
+        "required": false,
+        "description": "Point-in-time read: entity state as of this date.",
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "explode": false
+      },
+      "EntityQuery.name_or_id": {
+        "name": "name_or_id",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "explode": false
+      },
+      "EntityQuery.token_budget": {
+        "name": "token_budget",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "explode": false
+      },
+      "EvidenceQuery.from_date": {
+        "name": "from_date",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "explode": false
+      },
+      "EvidenceQuery.limit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "explode": false
+      },
+      "EvidenceQuery.query": {
+        "name": "query",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "explode": false
+      },
+      "EvidenceQuery.to_date": {
+        "name": "to_date",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "explode": false
+      },
+      "FreshnessQuery": {
+        "name": "topic_or_entity",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "explode": false
+      },
+      "SourcesQuery.entity_or_claim_id": {
+        "name": "entity_or_claim_id",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "explode": false
+      },
+      "SourcesQuery.limit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "explode": false
+      },
+      "VerifyClaimQuery.as_of_date": {
+        "name": "as_of_date",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "explode": false
+      },
+      "VerifyClaimQuery.claim_text": {
+        "name": "claim_text",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "explode": false
+      },
+      "VerifyClaimQuery.token_budget": {
+        "name": "token_budget",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "explode": false
+      }
+    },
+    "schemas": {
+      "ApiError": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {}
+        },
+        "description": "A structured API/tool error."
+      },
+      "Citation": {
+        "type": "object",
+        "required": [
+          "sourceDocumentId"
+        ],
+        "properties": {
+          "sourceDocumentId": {
+            "type": "string"
+          },
+          "quote": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "A pointer to evidence in a source document. Every public fact must be citable."
+      },
+      "Claim": {
+        "type": "object",
+        "required": [
+          "id",
+          "subject",
+          "predicate",
+          "object",
+          "normalizedText",
+          "recordedAt",
+          "confidence",
+          "status",
+          "contradiction",
+          "evidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "predicate": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string"
+          },
+          "qualifiers": {},
+          "normalizedText": {
+            "type": "string"
+          },
+          "validFrom": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the claim is/was true in the world (bitemporal valid time)."
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When Intercal recorded the claim (bitemporal transaction time)."
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/Confidence"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ClaimStatus"
+          },
+          "contradiction": {
+            "$ref": "#/components/schemas/ContradictionState"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            }
+          }
+        },
+        "description": "An atomic factual assertion extracted from source documents."
+      },
+      "ClaimStatus": {
+        "type": "string",
+        "enum": [
+          "proposed",
+          "active",
+          "retracted",
+          "superseded"
+        ]
+      },
+      "ClaimVerificationResponse": {
+        "type": "object",
+        "required": [
+          "claimText",
+          "verdict",
+          "confidence",
+          "supportingEvidence",
+          "contradictingEvidence"
+        ],
+        "properties": {
+          "claimText": {
+            "type": "string"
+          },
+          "verdict": {
+            "$ref": "#/components/schemas/VerificationVerdict"
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/Confidence"
+          },
+          "supportingEvidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            }
+          },
+          "contradictingEvidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            }
+          },
+          "asOf": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Confidence": {
+        "type": "object",
+        "required": [
+          "score"
+        ],
+        "properties": {
+          "score": {
+            "type": "number",
+            "format": "float",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "method": {
+            "type": "string"
+          }
+        },
+        "description": "A confidence score in [0,1] with the method that produced it."
+      },
+      "ContradictionState": {
+        "type": "string",
+        "enum": [
+          "none",
+          "contested",
+          "contradicted"
+        ]
+      },
+      "DeltaResponse": {
+        "type": "object",
+        "required": [
+          "topic",
+          "since",
+          "summary",
+          "changedClaims",
+          "changedEntities",
+          "confidence",
+          "freshness"
+        ],
+        "properties": {
+          "topic": {
+            "type": "string"
+          },
+          "since": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "until": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "changedClaims": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Claim"
+            }
+          },
+          "changedEntities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EntitySummary"
+            }
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/Confidence"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/FreshnessReport"
+          }
+        }
+      },
+      "Digest": {
+        "type": "object",
+        "required": [
+          "topicOrEntity",
+          "content",
+          "citations",
+          "freshness",
+          "generatedAt"
+        ],
+        "properties": {
+          "topicOrEntity": {
+            "type": "string"
+          },
+          "tokenBudget": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "content": {
+            "type": "string"
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            }
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/FreshnessReport"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "A token-budgeted synthesis built from evidence and graph state. A delivery artifact, not canonical."
+      },
+      "Entity": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "displayName"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/EntityType"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "externalIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExternalId"
+            }
+          },
+          "importance": {
+            "type": "number",
+            "format": "float"
+          },
+          "firstSeen": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastUpdated": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "state": {
+            "description": "Denormalized current state; derived from fact versions, not a source of truth."
+          }
+        },
+        "description": "A canonical thing: person, org, place, role/office, product, event, concept, etc."
+      },
+      "EntityResponse": {
+        "type": "object",
+        "required": [
+          "entity",
+          "freshness"
+        ],
+        "properties": {
+          "entity": {
+            "$ref": "#/components/schemas/Entity"
+          },
+          "asOf": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "relationships": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Relationship"
+            }
+          },
+          "facts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Claim"
+            }
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/FreshnessReport"
+          }
+        }
+      },
+      "EntitySummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "displayName"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/EntityType"
+          },
+          "displayName": {
+            "type": "string"
+          }
+        },
+        "description": "A compact entity reference used in deltas and lists."
+      },
+      "EntityType": {
+        "type": "string",
+        "enum": [
+          "person",
+          "organization",
+          "place",
+          "role",
+          "office",
+          "product",
+          "event",
+          "concept",
+          "legislation",
+          "technical_artifact",
+          "source",
+          "dataset",
+          "jurisdiction"
+        ]
+      },
+      "EvidenceHit": {
+        "type": "object",
+        "required": [
+          "documentId",
+          "snippet",
+          "score",
+          "citation"
+        ],
+        "properties": {
+          "documentId": {
+            "type": "string"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number",
+            "format": "float",
+            "minimum": 0
+          },
+          "citation": {
+            "$ref": "#/components/schemas/Citation"
+          }
+        }
+      },
+      "EvidenceResponse": {
+        "type": "object",
+        "required": [
+          "hits",
+          "total"
+        ],
+        "properties": {
+          "hits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EvidenceHit"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ExternalId": {
+        "type": "object",
+        "required": [
+          "system",
+          "id"
+        ],
+        "properties": {
+          "system": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "description": "An external identifier for an entity (e.g. a Wikidata QID)."
+      },
+      "FreshnessReport": {
+        "type": "object",
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "target": {
+            "type": "string"
+          },
+          "lastUpdated": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastIngestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "coverage": {
+            "type": "number",
+            "format": "float",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Fraction of expected sources currently covered, in [0,1]."
+          },
+          "staleness": {
+            "type": "string"
+          }
+        },
+        "description": "How fresh Intercal's knowledge is for a target."
+      },
+      "Relationship": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "fromEntityId",
+          "toEntityId",
+          "recordedAt",
+          "confidence",
+          "status",
+          "sourceDocumentIds"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "fromEntityId": {
+            "type": "string"
+          },
+          "toEntityId": {
+            "type": "string"
+          },
+          "validFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/Confidence"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RelationshipStatus"
+          },
+          "sourceDocumentIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "A typed temporal edge between entities, derived from claims and evidence."
+      },
+      "RelationshipStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "ended",
+          "proposed"
+        ]
+      },
+      "SourceDocument": {
+        "type": "object",
+        "required": [
+          "id",
+          "sourceId",
+          "ingestedAt",
+          "contentHash"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ingestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "language": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "license": {
+            "type": "string"
+          }
+        },
+        "description": "Immutable ingested evidence."
+      },
+      "SourcesResponse": {
+        "type": "object",
+        "required": [
+          "sources"
+        ],
+        "properties": {
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceDocument"
+            }
+          }
+        }
+      },
+      "VerificationVerdict": {
+        "type": "string",
+        "enum": [
+          "supported",
+          "partially_supported",
+          "contradicted",
+          "unverified"
+        ]
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8787",
+      "description": "Local development",
+      "variables": {}
+    }
+  ]
+}

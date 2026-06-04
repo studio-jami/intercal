@@ -1,0 +1,39 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "Digest.json",
+    "type": "object",
+    "properties": {
+        "topicOrEntity": {
+            "type": "string"
+        },
+        "tokenBudget": {
+            "type": "integer",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+        },
+        "content": {
+            "type": "string"
+        },
+        "citations": {
+            "type": "array",
+            "items": {
+                "$ref": "Citation.json"
+            }
+        },
+        "freshness": {
+            "$ref": "FreshnessReport.json"
+        },
+        "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+        }
+    },
+    "required": [
+        "topicOrEntity",
+        "content",
+        "citations",
+        "freshness",
+        "generatedAt"
+    ],
+    "description": "A token-budgeted synthesis built from evidence and graph state. A delivery artifact, not canonical."
+}

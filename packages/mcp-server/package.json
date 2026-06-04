@@ -1,0 +1,35 @@
+{
+  "name": "@intercal/mcp-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Intercal MCP server — official SDK, Streamable HTTP transport, V1 tools over the shared query layer.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "intercal-mcp-stdio": "./dist/stdio.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/http.js",
+    "start:stdio": "node dist/stdio.js",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@intercal/core": "workspace:*",
+    "@intercal/shared": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

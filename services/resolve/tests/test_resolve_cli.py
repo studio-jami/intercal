@@ -23,9 +23,17 @@ def test_jobs_are_async() -> None:
 
 
 @pytest.mark.asyncio
-async def test_resolve_entities_raises_not_implemented() -> None:
-    with pytest.raises(NotImplementedError, match="Plan 02"):
+async def test_resolve_entities_is_implemented() -> None:
+    """resolve_entities is now implemented (W6); no longer raises NotImplementedError."""
+    # Calling with pool=None fails on the first DB call, not with NotImplementedError.
+    try:
         await resolve_entities(pool=None)
+    except NotImplementedError as exc:
+        raise AssertionError(
+            "resolve_entities should be implemented"
+        ) from exc
+    except Exception:
+        pass  # AttributeError on None pool, etc. — expected
 
 
 @pytest.mark.asyncio

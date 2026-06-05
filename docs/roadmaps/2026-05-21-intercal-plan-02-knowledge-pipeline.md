@@ -2,7 +2,7 @@
 
 Date: 2026-05-21
 Aligned: 2026-06-04 to live stack
-Status: [~] Active — W1 complete (2026-06-04); W2 complete (2026-06-05); W3 complete (2026-06-05); W4 complete (2026-06-05); W5 complete (2026-06-05)
+Status: [~] Active — W1 complete (2026-06-04); W2 complete (2026-06-05); W3 complete (2026-06-05); W4 complete (2026-06-05); W5 complete (2026-06-05); W6 complete (2026-06-05)
 Source reports: `docs/research/2026-05-21-intercal-foundation-report.md`, `docs/research/2026-06-04-intercal-revisit-audit-and-dev-environment.md`, `docs/architecture/pipeline.md`, `docs/architecture/data-model.md`; decisions `docs/decisions/0001-foundation-stack.md`, `docs/decisions/0002-final-hosting-topology.md`
 Owner: Main orchestration agent
 Surface: ingestion, normalization, extraction, providers, embeddings, entity resolution, relationships, fact versions, orchestration
@@ -267,7 +267,7 @@ Depends on:
 Enables:
 
 - [x] Workstream 5 embeddings (claims → claim_embeddings).
-- [ ] Workstream 6 entity resolution.
+- [x] Workstream 6 entity resolution.
 - [ ] Workstream 7 relationship derivation.
 
 Repo guidance:
@@ -528,7 +528,7 @@ Depends on:
 
 Enables:
 
-- [ ] Workstream 7 entity resolution scoring.
+- [x] Workstream 6 entity resolution (entity embeddings used for candidate generation).
 - [ ] Plan 03 evidence search and digest assembly.
 
 Repo guidance:
@@ -647,10 +647,12 @@ Suggested verification:
 
 Goal: Create conservative, auditable, reversible entity resolution.
 
+**Status: [x] Complete — 2026-06-05**
+
 Depends on:
 
-- [ ] Workstream 3 mentions/claims.
-- [ ] Workstream 5 embeddings.
+- [x] Workstream 3 mentions/claims.
+- [x] Workstream 5 embeddings.
 
 Enables:
 
@@ -669,20 +671,52 @@ Primary areas:
 
 Implementation tasks:
 
-- [ ] Add exact external-ID merge.
-- [ ] Add exact normalized-name merge within compatible type.
-- [ ] Add role/office separation rules.
-- [ ] Add candidate scoring with positive and negative evidence.
-- [ ] Add reversible merge events and split/unmerge foundation.
-- [ ] Add audit event writes.
+- [x] Exact external-ID match (Wikidata QID / Property ID) → auto-assign to existing entity or
+  create new entity + register external_id row. Decision source: `external_id_match` /
+  `external_id_new`.
+- [x] Exact canonical-name match (case-insensitive, within type_id) → assign to existing entity.
+  Also searches `entity_aliases`. Decision source: `exact_name`.
+- [x] Embedding cosine similarity via `EmbeddingsPort`:
+  - distance ≤ `COSINE_MERGE_THRESHOLD` (0.15) → direct assignment (same entity).
+  - `COSINE_MERGE_THRESHOLD` < distance ≤ `COSINE_REVIEW_THRESHOLD` (0.40) →
+    `needs_review` candidate created in `entity_resolution_candidates`.
+  - Above threshold → separate entities (conservative; no merge).
+- [x] Role/office separation: `ROLE` → `role` type_id, `OFFICE` → `office` type_id — never
+  aliased to the occupant entity.
+- [x] Entity embeddings created on new entity insert (`entity_embeddings` table) so
+  within-run cross-span comparison and future-run re-resolution work correctly.
+- [x] Auto-merge: high-confidence `merge` candidates (confidence ≥ `EXACT_MATCH_CONFIDENCE`
+  = 0.95) are auto-merged via `_perform_merge`: source deprecated, aliases + external IDs
+  re-parented to target, `entity_merge_events` row written for full reversal support.
+- [x] Idempotent: candidates upserted by (left_entity_id, right_entity_id); human/decided
+  rows not overwritten. Mention UPDATE uses `WHERE resolution_status = 'unresolved'`.
+- [x] `derive_relationships` and `write_fact_versions` remain `NotImplementedError("Plan 02 W7 — …")`.
+- [x] `resolve-entities` CLI command updated with `--embeddings/--no-embeddings` flag.
+- [x] 33 W6 unit tests in `services/resolve/tests/test_w6_resolve.py` covering helpers
+  (`normalize_name`, `ordered_pair`, `detect_external_id`), all resolution paths
+  (no mentions, external-ID match, external-ID new, exact name match, new entity, dedup
+  same span, embedding direct match, embedding review candidate, auto-merge,
+  review-not-merged, idempotent re-run, embedding failure non-fatal, counter shape,
+  threshold ordering, CLI flags). All 309 service tests pass.
+- [x] `scripts/dev/verify_w6_resolve.py` integration smoke test.
+- [x] Live verified (2026-06-05) against Neon branch `br-still-water-ajmss6b6`:
+  - 11 unresolved mentions → 11 entities created, 11 mentions resolved, 11 entity_id FKs set.
+  - External IDs registered: Q40156532, Q5, Q5401080 (wikidata); P31 (wikidata_property).
+  - 3 `needs_review` candidates generated (Wikidata QID ARTIFACT entities, cosine dist 0.36–0.38).
+  - 0 auto-merges (all candidates below EXACT_MATCH_CONFIDENCE floor — correct conservative behaviour).
+  - Idempotent re-run: entity count unchanged (11).
+  - Provenance: all 11 resolved mentions carry entity_id FK.
+  - Acceptance gate: ≥1 resolved entity + ≥1 review-needed entity — SATISFIED.
 
 Exit criteria:
 
-- [ ] Tests prove exact merge, ambiguous review, and role/office separation.
+- [x] Tests prove exact merge, ambiguous review, and role/office separation.
+- [x] Live resolution produces ≥1 resolved entity and ≥1 review-needed candidate from real mentions.
 
 Suggested verification:
 
-- `uv run pytest services/resolve/tests`
+- `pnpm py:lint && pnpm py:typecheck && pnpm py:test`
+- `DATABASE_URL=<neon-branch> uv run python scripts/dev/verify_w6_resolve.py`
 
 ## Workstream 7: Relationships And Fact Versions
 

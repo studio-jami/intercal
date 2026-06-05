@@ -33,22 +33,32 @@ def _get_settings() -> Settings:
 
 @app.command("resolve-entities")
 def resolve_entities_cmd(
-    batch_size: int = typer.Option(100, "--batch-size", help="Pairs to process per run."),
+    batch_size: int = typer.Option(100, "--batch-size", help="Mentions to process per run."),
+    use_embeddings: bool = typer.Option(
+        True,
+        "--embeddings/--no-embeddings",
+        help="Use the configured embeddings adapter for similarity-based candidates.",
+    ),
 ) -> None:
     """Generate entity resolution candidates from unresolved mentions.
 
     Idempotent — candidates are upserted; existing decisions are not overwritten.
+    Auto-merges high-confidence exact matches; ambiguous cases land in needs_review.
     """
     cfg = _get_settings()
     _setup_logging(cfg.log_level)
 
     async def _run() -> None:
         from intercal_shared.db import get_pool
+        from intercal_shared.factory import make_embeddings
 
         from intercal_resolve.jobs import resolve_entities
 
         pool = await get_pool(cfg.database_url)
-        await resolve_entities(pool=pool, batch_size=batch_size)
+        emb = make_embeddings(cfg) if use_embeddings else None
+
+        counters = await resolve_entities(pool=pool, embeddings=emb, batch_size=batch_size)
+        print(f"resolve-entities: {counters}")
 
     asyncio.run(_run())
 

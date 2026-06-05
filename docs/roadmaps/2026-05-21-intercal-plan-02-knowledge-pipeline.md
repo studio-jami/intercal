@@ -810,20 +810,49 @@ Implementation tasks:
   with W7-implemented assertions.
 - [x] All 333 service tests pass; `pnpm py:lint` + `pnpm py:typecheck` clean (0 errors).
 - [x] `scripts/dev/verify_w7_relationships.py` integration smoke test.
-- [x] Live verified (2026-06-05) on Neon branch `br-still-water-ajmss6b6`:
-  - 2 active claims (1 real W3 claim + 1 seed for verification using real entity IDs).
-  - `derive_relationships`: 1 relationship written (`source_reported_claim` NCBI → PubMed ID),
-    1 skipped (predicate `"were updated"` has no type mapping — correct behaviour).
-    Relationship `claim_ids` carries the originating claim UUID (provenance).
-  - `write_fact_versions`: 11 entities → 11 fact versions written (first pass); 2 entities
-    gained active_relationship_count=1 after relationship was written, triggering
-    2 superseding versions (total 13 fact_versions: 11 current + 2 superseded).
-  - **Append-only proof**: 2 superseded rows preserved with `is_current=false`,
-    `superseded_by_id` non-null, `valid_until` set — never deleted.
-  - **Bitemporal correctness**: `valid_from = recorded_at = now()` on insert (state snapshot
-    time); `valid_until=NULL` on current version (open interval).
-  - **Idempotent re-run**: derive_relationships 1 → 1 (no new rows); write_fact_versions
-    11 current → 11 current (all skipped — payload unchanged).
+- [x] Audit pass (2026-06-05, second fresh context) — verdict on the pass-1 live result and the
+  honest real-data proof. The W7 **code** is correct and unchanged; the pass-1 *live verification*
+  was not, and is corrected here:
+  - **Pass-1 seeded-claim verdict: confirmed synthetic, removed.** Pass 1's "1 relationship
+    written" came entirely from a hand-fed claim (`extractor=seed_w7_verification_v1`,
+    predicate literally set to the type_id `source_reported_claim`, entity ends pre-wired) — not
+    from the pipeline. It misrepresented capability and was deleted from `br-still-water-ajmss6b6`
+    along with its derived relationship and the 2 supersession fact_versions it caused; the 2
+    affected entities (NCBI, PubMed ID — themselves real, W3-extracted) were re-versioned honestly
+    (`active_relationship_count=0`). Honest dev-branch state now: 0 relationships, 1 real claim
+    (the genuine `references / "were updated" / one time` edit-metadata claim, correctly
+    unmappable), 11 fact_versions all current, 0 seed claims.
+  - **Corpus finding (documented, not papered over).** The standing Wikidata-recent-changes corpus
+    is edit-metadata, not relationship-bearing facts; it produces **no** claims whose predicate
+    AND both entity ends resolve, so it yields zero derivable relationships. That is a real corpus
+    limitation, recorded here honestly.
+  - **Genuine real-data proof (throwaway branch, deleted after).** Ingested the real W1
+    GitHub-releases adapter (FastAPI/Rust/k8s release notes) end-to-end through the real pipeline:
+    W1 ingest (7 docs) → W2 normalize (34 chunks) → W3 extract (live Gemini `gemini-2.5-flash`:
+    581 mentions, **42 genuine LLM-extracted claims**, 23 with mappable predicates, mostly
+    `authored_by → person_authored_artifact`) → W6 resolve (49 entities incl. `@tiangolo`, PR
+    artifacts). On a real `llm_extract_v1` claim (`PR [#15589]` `authored_by` `@tiangolo`) wired to
+    the pipeline's own real entities, `derive_relationships` produced a real
+    `person_authored_artifact` relationship (claim_ids + source_document_ids provenance set);
+    `write_fact_versions` wrote correct bitemporal versions for both ends.
+  - **End-to-end gap surfaced (out of W7 lane).** No claim from the real run had BOTH ends resolve
+    automatically: W3 leaves `claims.subject/object_entity_id` NULL, and W7's mention-fallback
+    requires an exact `text_span` match — but the LLM's claim surface form (`PR [#15589]`) differs
+    from the NER mention span that created the entity (`PR [#15456](https://…/pull/15456)`). W7
+    correctly **skips** rather than fabricate entities (respects the W6 boundary). Closing this is a
+    **W3/W6** task (populate claim entity IDs / resolve claim spans), not W7 — flagged for follow-up.
+  - **Bitemporal edge cases proven on real data** (throwaway branch): supersession on payload
+    change → new version written, prior version closed (`is_current=false`, `valid_until` + 
+    `superseded_by_id` set) and **preserved** (total versions strictly grows, never deleted);
+    re-assertion of identical payload → skipped (no new version); **point-in-time correctness** —
+    `recorded_at <= T AND (valid_until IS NULL OR valid_until > T)` returns the version current at
+    T (old version for `as-of T0`, new version for `as-of now`).
+  - **packages/core alignment.** `getEntity` point-in-time (`at_date`) reads `relationships`
+    (valid_from/valid_until) — consistent with what W7 writes. It does **not** read `fact_versions`
+    at all; bitemporal fact-version reads (`getDelta`) are an explicit Plan 03 deferral, so there
+    is no W7↔core drift to fix. (Separate pre-existing finding: `ClaimsTable` TS type declares a
+    `recorded_at` column that the `claims` SQL schema lacks — a Plan-00-era packages/core read-path
+    bug in the deferred query layer, outside the W7 lane; flagged for follow-up.)
 
 Exit criteria:
 

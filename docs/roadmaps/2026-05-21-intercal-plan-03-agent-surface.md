@@ -264,9 +264,11 @@ Suggested verification:
 
 Goal: Provide typed client access to the REST API.
 
+Status: [x] Complete (2026-06-05)
+
 Depends on:
 
-- [ ] Workstream 2 REST API.
+- [x] Workstream 2 REST API — live and hardened at `/api/v1/*`.
 
 Enables:
 
@@ -279,22 +281,52 @@ Repo guidance:
 Primary areas:
 
 - `packages/sdk`
-- `packages/shared`
+- `packages/shared` (generated contract — consumed, not modified)
 
 Implementation tasks:
 
-- [ ] Add typed methods for all V1 endpoints.
-- [ ] Add auth, retries, pagination helpers, and error handling.
-- [ ] Add examples that run against local fixture data.
+- [x] Typed methods for all six V1 operations — `getEntity`, `getSources`, `getFreshness`,
+      `searchEvidence`, `getDelta`, `verifyClaim`. Params and response types are **derived** from
+      the generated contract (`operations` / `components` in `@intercal/shared`) via `Query<Op>` /
+      `Ok<Op>` conditional types — no hand-redeclared shapes, single source of truth. Route paths
+      match the TypeSpec contract (`/v1/claims/verify`, not a REST-ism).
+- [x] Typed error model mirroring the REST taxonomy: a base `IntercalApiError` (discriminant
+      `code` + `status` + `details`) and `instanceof`-discriminable subclasses
+      `IntercalInvalidRequestError` (400) · `IntercalNotFoundError` (404) ·
+      `IntercalNotImplementedError` (501) · `IntercalServerError` (500), plus `IntercalNetworkError`
+      (status 0) for transport failures. The two deferred ops (`getDelta` W5, `verifyClaim` W6)
+      compile and surface the live `501 not_implemented` cleanly as `IntercalNotImplementedError` —
+      not faked. `token_budget` is in the delta/verify signatures per the contract (server applies
+      it when the body lands).
+- [x] Request building + config: base URL normalization (trailing slashes trimmed), query/path
+      param assembly (undefined params omitted), injectable `fetch` (testability / non-global-fetch
+      runtimes), bearer `apiKey` (Plan 04 auth seam), extra headers. Safe GET-only retries with
+      exponential backoff for transient network/5xx failures (501 and 4xx are never retried — they
+      are deterministic). No pagination helper: the V1 contract has no cursor/offset surface, so
+      one would be a placeholder — deferred until the contract grows one.
+- [x] Fixture-backed contract tests (`src/index.test.ts`, 14 tests) using **real** responses
+      captured from the live surface (`src/fixtures.ts`, typed against the generated contract so a
+      contract change breaks compilation) — assert URL/query building, header/auth, typed responses
+      unchanged, the full error taxonomy mapping, and retry behavior. Plus an opt-in live smoke test
+      (`src/live.test.ts`, gated on `INTERCAL_LIVE=1`, 5 tests) that runs against
+      `https://lntercal.vercel.app/api/v1/*` with real production data.
 
 Exit criteria:
 
-- [ ] SDK examples run and match REST contract outputs.
+- [x] SDK methods return contract-valid results matching REST outputs — verified live: `getEntity`
+      / `searchEvidence` / `getFreshness` return real production data; `getDelta` / `verifyClaim`
+      surface a typed `IntercalNotImplementedError` (501).
+- [x] `pnpm lint` (biome `check .` — repo-wide clean; the 1 info is the pre-existing biome.json
+      schema-version drift, not a code error).
+- [x] `pnpm typecheck` passes (all 6 TS packages).
+- [x] `pnpm --filter @intercal/sdk test` passes (14 deterministic; 19 incl. 5 live with
+      `INTERCAL_LIVE=1`).
+- [x] `pnpm --filter @intercal/sdk build` passes (emits `dist/`).
 
 Suggested verification:
 
-- `pnpm test -- sdk`
-- `pnpm build --filter @intercal/sdk`
+- `pnpm --filter @intercal/sdk test` (add `INTERCAL_LIVE=1` for the live smoke test)
+- `pnpm --filter @intercal/sdk build`
 
 ## Workstream 5: Digest And Token Budgets
 

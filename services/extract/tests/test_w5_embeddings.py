@@ -106,6 +106,12 @@ def _make_pool(
     pool.fetch = _fetch
     pool.execute = _execute
     pool._execute_calls = _execute_calls
+    # MagicMock auto-creates any attribute, including `acquire`.  hybrid_search
+    # uses pool.acquire() when present (to set hnsw.ef_search on a single
+    # connection); the default fake pool has no real connection, so remove the
+    # auto-mocked attribute to exercise the direct-fetch fallback.  Tests that
+    # specifically cover the acquire path set pool.acquire explicitly.
+    del pool.acquire
     return pool
 
 
@@ -459,6 +465,66 @@ async def test_hybrid_search_no_results_returns_empty() -> None:
     emb = _make_embeddings()
     results = await hybrid_search(query="obscure query", pool=pool, embeddings=emb)
     assert results == []
+
+
+class _FakeConn:
+    """Fake asyncpg connection that records executed statements (for ef_search)."""
+
+    def __init__(self, vector_rows: list[dict[str, Any]]) -> None:
+        self._vector_rows = vector_rows
+        self.executed: list[str] = []
+
+    def transaction(self) -> _FakeConn:
+        return self
+
+    async def __aenter__(self) -> _FakeConn:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        return None
+
+    async def execute(self, query: str, *args: Any) -> str:
+        self.executed.append(query.strip())
+        return "SET"
+
+    async def fetch(self, query: str, *args: Any) -> list[dict[str, Any]]:
+        return self._vector_rows
+
+
+class _AcquireCtx:
+    def __init__(self, conn: _FakeConn) -> None:
+        self._conn = conn
+
+    async def __aenter__(self) -> _FakeConn:
+        return self._conn
+
+    async def __aexit__(self, *exc: Any) -> None:
+        return None
+
+
+@pytest.mark.asyncio
+async def test_hybrid_search_sets_ef_search_on_acquired_conn() -> None:
+    """When the pool supports acquire(), the vector leg sets hnsw.ef_search
+    transaction-locally on that connection before the vector query."""
+    cid = uuid.uuid4()
+    doc_id = uuid.uuid4()
+    vec_row = _make_chunk_row(chunk_id=cid, document_id=doc_id, distance=0.05)
+    conn = _FakeConn([vec_row])
+
+    pool = _make_pool(vector_rows=[], fts_rows=[])  # fts leg via pool.fetch
+    pool.acquire = lambda: _AcquireCtx(conn)
+
+    emb = _make_embeddings()
+    results = await hybrid_search(query="hello world", pool=pool, embeddings=emb, limit=10)
+
+    # ef_search was set on the acquired connection (transaction-local).
+    assert any("hnsw.ef_search" in stmt for stmt in conn.executed), conn.executed
+    # ef_search must comfortably exceed the over-fetch (limit*5 = 50 → >= 100).
+    ef_stmt = next(s for s in conn.executed if "hnsw.ef_search" in s)
+    ef_value = int(ef_stmt.rsplit("=", 1)[1].strip())
+    assert ef_value >= 50
+    # The vector row from the acquired connection made it into the results.
+    assert any(r["chunk_id"] == str(cid) for r in results)
 
 
 @pytest.mark.asyncio

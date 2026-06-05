@@ -584,8 +584,8 @@ Implementation tasks:
   all-skipped), `embed_claims` (no-claims, basic, skip, force, empty-text,
   adapter-failure), `hybrid_search` (empty-query, vector-only, fts-only,
   overlap-boosts-shared, limit-respected, required-fields, positive-rrf-score,
-  no-results, custom-weights), `EMBED_VERSION` type check.
-  All 275 service tests pass; `pnpm py:lint` + `pnpm py:typecheck` clean (0 errors).
+  no-results, custom-weights, ef-search-on-acquired-conn), `EMBED_VERSION` type check.
+  All 276 service tests pass; `pnpm py:lint` + `pnpm py:typecheck` clean (0 errors).
 - [x] `scripts/dev/verify_w5_embeddings.py` integration smoke test.
 - [x] Live verified (2026-06-05) against Neon branch `br-still-water-ajmss6b6`:
   - 5 chunks embedded (all 5 normalised documents, mixed en/ar): 5 `chunk_embeddings`
@@ -597,6 +597,39 @@ Implementation tasks:
   - `hybrid_search` returned 5 ranked results for 3 sample queries; top result
     consistent with document content; RRF scores positive and ordered.
   - Smoke test: PASS.
+
+- [x] Audit pass (2026-06-05, second fresh context) closed one HNSW query-recall gap and
+  confirmed the rest of W5 is sound (no other change). Strictly in the W5 lane:
+  1. **`hnsw.ef_search` was never set (the real gap).** `hybrid_search` over-fetches
+     `limit * 5` candidates for RRF fusion, but pgvector's HNSW `ef_search` defaults to 40
+     (verified against the official pgvector 0.8.x "Query Options" docs). With `limit > 8`
+     the vector leg silently returned fewer candidates than the over-fetch — capped recall,
+     no error. Fixed: the vector leg now acquires a single connection, opens a transaction,
+     and issues `SET LOCAL hnsw.ef_search = max(40, over_fetch * 2)` before the cosine query
+     (ef_search must be set on the *same* connection as the query; a pooled `pool.fetch` may
+     land on a different backend, so a session-level SET would not reliably apply). `SET LOCAL`
+     resets at transaction end — no leakage to the next borrower. Pools without `acquire`
+     (unit-test fakes) keep the direct-fetch fallback. +1 W5 test (276 service tests pass).
+  2. **Verified correct, no change:** opclass↔operator match (`halfvec_cosine_ops` ↔ `<=>`,
+     cosine — bge-small wants cosine ✓); `halfvec(384)` dims ✓; HNSW m=16/ef_construction=64
+     defaults ✓; UNIQUE(chunk_id|claim_id, model) + `ON CONFLICT DO UPDATE` upsert (changed
+     `EMBED_VERSION`/runtime replaces in place; changed model = new row) ✓; model+dim+version
+     persisted per row across all 3 embedding tables ✓.
+  3. **TS query-layer alignment (finding, no change):** `packages/core` `searchEvidence` is the
+     real V1 lexical-only `ILIKE` read; it reads **no** vectors today. Upgrading it to hybrid
+     lexical/vector evidence search is an explicit **Plan 03** task (plan-03 W "Add hybrid
+     lexical/vector evidence search"), not W5. W5's schema additions (`embedding_version`, chunk
+     FTS index) touch no column the TS layer reads, so there is no drift and no operator/index
+     mismatch to fix there. Editing it now would be Plan 03 scope creep — deliberately left alone.
+- [x] Re-verified LIVE (2026-06-05, 2nd pass) on Neon branch `br-still-water-ajmss6b6`
+  (pgvector 0.8.1): smoke test PASS through the new `acquire()`+`SET LOCAL ef_search` path
+  against the PgBouncer pooler endpoint (5 chunk + 1 claim embeddings, model+dim+version
+  consistent, idempotent re-run skips all, hybrid_search returns 5 ranked results). **EXPLAIN
+  proof of index usability:** with `enable_seqscan=off` + `SET LOCAL hnsw.ef_search=100`,
+  the planner uses `Index Scan using idx_chunk_embeddings_hnsw` with
+  `Order By: (embedding <=> ...)` — the `<=>` operator engages the cosine HNSW index (a
+  mismatched op would force a seq scan). At the live 5-row scale the default plan is a seq
+  scan purely on cost (correct planner behaviour, not a defect).
 
 Exit criteria:
 

@@ -1306,6 +1306,26 @@ async def embed_claims(
 # original Cormack et al. paper and is used widely in hybrid search systems).
 _RRF_K = 60
 
+# HNSW query-time recall floor.  pgvector's hnsw.ef_search is the size of the
+# dynamic candidate list scanned per query; it defaults to 40 (pgvector 0.8.x).
+# It MUST be >= the number of rows the query wants back, or the index silently
+# returns fewer than requested and recall degrades.  hybrid_search over-fetches
+# ``limit * 5`` candidates for fusion, so a default-40 ef_search would cap the
+# vector leg below the over-fetch whenever ``limit > 8``.  We raise ef_search per
+# query to comfortably exceed the over-fetch (and never drop below the 40
+# default).  Verified against the official pgvector HNSW "Query Options" docs.
+_HNSW_EF_SEARCH_FLOOR = 40
+_HNSW_EF_SEARCH_CEILING = 1000
+
+
+def _hnsw_ef_search(pool_size_hint: int) -> int:
+    """Pick an ``hnsw.ef_search`` value for an over-fetch of *pool_size_hint* rows.
+
+    ef_search must be >= the requested row count for full recall; a common rule
+    of thumb is ~2x the number of rows wanted.  Clamped to [floor, ceiling].
+    """
+    return max(_HNSW_EF_SEARCH_FLOOR, min(_HNSW_EF_SEARCH_CEILING, pool_size_hint * 2))
+
 
 async def hybrid_search(
     *,
@@ -1369,8 +1389,7 @@ async def hybrid_search(
     query_vector = (await embeddings.embed([query]))[0]
     vec_literal = "[" + ",".join(f"{v:.8f}" for v in query_vector) + "]"
 
-    vector_rows = await pool.fetch(
-        """
+    vector_sql = """
         SELECT
             dc.id          AS chunk_id,
             dc.document_id,
@@ -1382,11 +1401,32 @@ async def hybrid_search(
         WHERE ce.model = $2
         ORDER BY ce.embedding <=> $1::halfvec
         LIMIT $3
-        """,
-        vec_literal,
-        embeddings.model,
-        pool_size_hint,
-    )
+        """
+
+    # hnsw.ef_search must be set on the SAME connection that runs the vector
+    # query.  On a pooled DSN each top-level ``pool.fetch`` may land on a
+    # different connection, so a session-level SET would not reliably apply.  We
+    # acquire one connection, set ef_search transaction-locally, and run the
+    # query on it.  ``SET LOCAL`` resets at transaction end — no leakage to the
+    # next borrower of the connection.  Pools without ``acquire`` (the unit-test
+    # fakes) fall back to a direct fetch with the default ef_search.
+    ef_search = _hnsw_ef_search(pool_size_hint)
+    acquire: Any = getattr(pool, "acquire", None)
+    if callable(acquire):
+        conn_ctx: Any = acquire()
+        async with conn_ctx as conn:
+            txn: Any = conn.transaction()
+            async with txn:
+                # SET LOCAL takes a literal, not a bind parameter — ef_search is
+                # an int we computed, never user input, so interpolation is safe.
+                await conn.execute(f"SET LOCAL hnsw.ef_search = {int(ef_search)}")
+                vector_rows = await conn.fetch(
+                    vector_sql, vec_literal, embeddings.model, pool_size_hint
+                )
+    else:
+        vector_rows = await pool.fetch(
+            vector_sql, vec_literal, embeddings.model, pool_size_hint
+        )
 
     # ── 2. Lexical (FTS) leg ──────────────────────────────────────────────────
     # Convert query to tsquery using plainto_tsquery for natural-language input.

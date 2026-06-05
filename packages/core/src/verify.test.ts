@@ -176,6 +176,38 @@ describe('classify — support strength (false-positive guard)', () => {
     expect(c.stance).toBe('support');
     expect(c.supportStrength).toBe('weak');
   });
+
+  it('an exact verbatim restatement is STRONG even when the stored claim ends in punctuation', () => {
+    // Live-verified regression (prod Neon): the stored claim "Buffer.poolSize increased its default
+    // to 64 KiB." tokenized "kib." while the user's "…64 KiB" tokenized "kib" — a trailing-period
+    // mismatch dropped an EXACT restatement to min-coverage 0.8 (< 0.85) → 'weak' → partially_supported
+    // instead of supported. Edge-punctuation trimming makes the token sets identical → strong.
+    // contentTokens (in the classifier) lowercases + drops STOP words, so build the user set the same
+    // way the production path does: the comparison is against the candidate's tokenized normalized_text.
+    const userTokens = new Set(['buffer.poolsize', 'increased', 'default', '64', 'kib']);
+    const ranked: RankedClaim = {
+      claim: claim({
+        id: 'v1',
+        normalized_text: 'Buffer.poolSize increased its default to 64 KiB.',
+      }),
+      relevance: 0.39,
+    };
+    const c = classify(userTokens, false, ranked, false);
+    expect(c.stance).toBe('support');
+    expect(c.supportStrength).toBe('strong');
+  });
+
+  it('a fabricated specific differing only in an interior identifier stays WEAK (guard intact)', () => {
+    // Edge-trimming must not merge distinct identifiers: a wrong CVE id is a different content token,
+    // so the claim does not become strong support off a near-miss.
+    const userTokens = new Set(['cargo', 'fixed', 'cve-2099-0001']);
+    const ranked: RankedClaim = {
+      claim: claim({ id: 'v2', normalized_text: 'Cargo fixed CVE-2026-5222.' }),
+      relevance: 0.39,
+    };
+    const c = classify(userTokens, false, ranked, false);
+    expect(c.supportStrength).toBe('weak');
+  });
 });
 
 // ── assembleVerification — verdicts ─────────────────────────────────────────────────────────────

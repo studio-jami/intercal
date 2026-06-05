@@ -171,11 +171,23 @@ const STOP = new Set([
   'from',
 ]);
 
+// The token charset keeps `. - _ ' \`` so identifier-shaped tokens survive intact
+// (`Buffer.poolSize`, `1.96.0`, `tls.createServer`, `CVE-2026-5222`, `target.'cfg(..)'`). But those
+// same characters as *boundary* punctuation are sentence noise, not part of the token: the stored
+// claim "…default to 64 KiB." tokenizes `kib.` while a user's "…64 KiB" tokenizes `kib`, and a
+// trailing-period mismatch like that wrongly drops a verbatim restatement below the strong-support
+// bar (live-verified: an exact copy of a stored claim graded 'weak' → partially_supported instead of
+// supported). So we strip the boundary-punctuation set from each token's leading/trailing edges only,
+// preserving interior structure. This cannot widen the false-positive guard — it can only make two
+// tokens that differ solely by edge punctuation compare equal, never merge distinct identifiers.
+const trimTokenEdges = (t: string): string => t.replace(/^[.\-_'`]+/, '').replace(/[.\-_'`]+$/, '');
+
 function tokenize(text: string): string[] {
   return text
     .toLowerCase()
     .replace(/[^a-z0-9.\-_'`]+/g, ' ')
     .split(/\s+/)
+    .map(trimTokenEdges)
     .filter((t) => t.length > 0);
 }
 

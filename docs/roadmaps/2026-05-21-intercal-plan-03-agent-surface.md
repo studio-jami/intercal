@@ -514,6 +514,22 @@ Implementation tasks:
       `unverified`; positive-of-a-negated-claim → `contradicted`; true-negated → `supported`;
       point-in-time flips at the transaction-time boundary (pre-record → `unverified`, post-record →
       `partially_supported`). +5 deterministic tests (`verify.test.ts`, 13 → 18).
+- [x] Tokenizer edge-punctuation fix (audit pass 3). The strong-support gate is a token-set
+      comparison, but the tokenizer kept `. - _ ' \`` so identifier-shaped tokens survive
+      (`Buffer.poolSize`, `CVE-2026-5222`). Those same chars as *boundary* punctuation produced
+      spurious mismatches: a stored claim ending "…64 KiB." tokenized `kib.` while a user's "…64 KiB"
+      tokenized `kib`, so an EXACT verbatim restatement of a stored claim scored min-coverage 0.8
+      (< 0.85) → `weak` → `partially_supported` instead of `supported`. Live-proven on production Neon
+      (read-only, no branches): the deployed endpoint returns `partially_supported` for the verbatim
+      claim "Buffer.poolSize increased its default to 64 KiB" (stored verbatim). Fix: `tokenize` now
+      strips the boundary-punctuation set from each token's leading/trailing edges only, preserving
+      interior structure — two tokens that differ solely by edge punctuation compare equal; distinct
+      identifiers never merge (so the false-positive guard cannot widen). Re-verified live: verbatim &
+      verbatim-with-trailing-`.` (e.g. "Cargo fixed CVE-2026-5222") → min-cov/Jaccard 1.0 → `strong` →
+      `supported`; role-swap & fabricated-CVE stay `unverified`; subset-vague stays
+      `partially_supported`; negation stays `contradicted`. +2 deterministic tests
+      (`verify.test.ts`, 18 → 20). Deployed surface still predates W6 (app.ts last touched in W2), so
+      the corrected `supported` verdict lands on the next deploy.
 
 Exit criteria:
 

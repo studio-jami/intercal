@@ -32,10 +32,15 @@ same contract.
 
 ## Transports & auth
 
-- **MCP:** Streamable HTTP (`packages/mcp-server/src/http.ts`) is the primary transport; stdio
-  (`stdio.ts`) for local/embedded. (HTTP+SSE is deprecated upstream and not used.) Spec baseline
+- **MCP:** Streamable HTTP is the transport. On the deployment it is **mounted at `/api/mcp`** on
+  the one Vercel domain (Next.js App Router route `packages/dashboard/app/api/mcp/route.ts`, Node
+  runtime) via `handleMcpRequest` (`packages/mcp-server/src/web.ts`), built on the SDK's
+  `WebStandardStreamableHTTPServerTransport` — **stateless** (`sessionIdGenerator: undefined`,
+  `enableJsonResponse: true`): a fresh server + transport per request, no per-session state, safe
+  on serverless. A standalone Node server (`http.ts`) and stdio (`stdio.ts`) remain for local /
+  Cloud Run / embedded use. (HTTP+SSE is deprecated upstream and not used.) Spec baseline
   **2025-11-25**, official `@modelcontextprotocol/sdk`. OAuth 2.1 resource-server auth is added
-  for the public deployment in the operations plan.
+  for the public deployment in the operations plan (Plan 07 W6) — currently a clean, open seam.
 - **REST:** Hono app (`packages/api`), `/openapi.json` served from the generated document,
   `/health` for probes. API-key auth (hashed, scoped — `api_keys` table) is wired in Plan 04.
 
@@ -43,3 +48,6 @@ same contract.
 
 All errors use the contract `ApiError` (`code`, `message`, `details?`). `@intercal/core` maps
 domain errors to codes: `not_found` → 404, `invalid_request` → 400, `not_implemented` → 501.
+MCP has no HTTP status, so the same codes are surfaced on the tool result: `isError: true` with
+`structuredContent.code` (and the `code: message` text), keeping the deferred `get_delta` /
+`verify_claim` seams (`not_implemented`) clearly distinguishable from real failures.

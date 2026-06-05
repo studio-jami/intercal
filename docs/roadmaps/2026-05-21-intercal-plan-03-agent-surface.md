@@ -206,9 +206,12 @@ Suggested verification:
 
 Goal: Expose the V1 read surface as agent-native MCP tools via the live `/api/mcp` mount.
 
+Status: [~] Server + mount complete (2026-06-05); the two synthesis bodies (`get_delta` W5,
+`verify_claim` W6) remain honest deferred seams.
+
 Depends on:
 
-- [ ] Workstream 1 query services.
+- [x] Workstream 1 query services.
 
 Enables:
 
@@ -224,23 +227,38 @@ Primary areas:
 
 - `packages/mcp-server`
 - `packages/shared`
+- `packages/dashboard` (the `/api/mcp` route)
 - `docs/architecture/mcp-api.md`
 
 Implementation tasks:
 
-- [ ] Implement `get_delta` body (token-budgeted digest over changed claims/entities since a date, via LLM port Vertex primary + Gemini fallback, with citations + freshness preserved).
-- [ ] Implement `verify_claim` body (evidence match + contradiction reasoning, verdict + confidence + evidence + caveats).
-- [ ] Confirm `get_entity`, `search_evidence`, `get_sources`, `get_freshness` are wired and contract-valid (already implemented; verify and update snapshot).
-- [ ] Add MCP schema snapshots for full V1 tool surface.
+- [~] `get_delta` body — deferred to W5 (digest synthesis). The tool is registered; calling it
+      returns a clear `not_implemented` MCP tool error (structuredContent `code:not_implemented`),
+      not a fake result. Body is the W5 deliverable.
+- [~] `verify_claim` body — deferred to W6 (contradiction reasoning). Same honest-seam treatment.
+- [x] Confirmed `get_entity`, `search_evidence`, `get_sources`, `get_freshness` are wired and
+      contract-valid — verified by a live MCP client against production Neon (real entity + facts
+      + evidence returned). One query layer; identical semantics to REST.
+- [x] MCP server hardened: official SDK (`@modelcontextprotocol/sdk@1.29.0`, protocol ≤
+      `2025-11-25`); `IntercalError` taxonomy (`not_found`/`invalid_request`/`not_implemented`)
+      mapped into the tool result's `structuredContent.code`; stateless by construction (no
+      per-session state); tool input schemas are the generated contract JSON Schemas (single
+      source). Server `instructions` added.
+- [x] V1 tool surface covered by real-client tests (`server.test.ts` via in-process transport,
+      `web.test.ts` via Web `Request`/`Response`) — these are the executable schema check in lieu
+      of a separate snapshot file. (The plan's suggested `pnpm mcp:snapshot:check` script does not
+      exist; the tests assert the registered tool set + per-tool input-schema shape instead.)
 
 Exit criteria:
 
-- [ ] MCP tools return the same semantic results as REST for fixture queries.
+- [x] MCP tools return the same semantic results as REST for live queries (verified: `get_entity`
+      / `search_evidence` return the same production data the REST surface returns).
 
 Suggested verification:
 
-- `pnpm test -- mcp-server`
-- `pnpm mcp:snapshot:check`
+- `pnpm --filter @intercal/mcp-server test`
+- Live MCP client (`scripts/dev/verify-mcp.mjs`) against `/api/mcp` (local `next dev` or the
+  deployed domain) — initialize + tools/list + a real tool call.
 
 ## Workstream 4: TypeScript SDK
 

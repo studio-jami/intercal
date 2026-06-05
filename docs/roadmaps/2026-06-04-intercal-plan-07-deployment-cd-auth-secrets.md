@@ -97,18 +97,30 @@ Suggested verification: `node scripts/ops/secrets-fanout.mjs --dry-run`; confirm
 
 Goal: Dashboard + REST + MCP on one domain, with safe promotion/rollback.
 
+Status: [~] MCP mount complete (2026-06-05); deployment-runbook docs + rollback test pending.
+
 Implementation tasks:
 
-- [ ] Mount MCP at `packages/dashboard/app/api/mcp/route.ts` (stateless Streamable HTTP via the
-      existing `buildMcpServer`), sharing the Neon-backed query layer.
-- [ ] Ensure required runtime env on Vercel (DATABASE_URL set; add LLM/Upstash when Phase C synthesis needs them).
+- [x] Mounted MCP at `packages/dashboard/app/api/mcp/route.ts` (POST + GET) as a stateless
+      Streamable HTTP endpoint. Uses a new `handleMcpRequest(db, request)` in
+      `@intercal/mcp-server` (built on the SDK's `WebStandardStreamableHTTPServerTransport`,
+      `sessionIdGenerator: undefined` + `enableJsonResponse: true`) over `buildMcpServer` and the
+      shared Neon-backed query layer. `runtime = 'nodejs'` (pg needs sockets), `force-dynamic`,
+      `maxDuration = 30`. Sits beside the REST mount on one domain. Auth is W6 — clean seam, none
+      added.
+- [x] Required runtime env: the route reads `DATABASE_URL` via `@intercal/core` `loadConfig` (same
+      as REST); already set on Vercel. LLM/Upstash come with W5/W6 synthesis bodies.
 - [ ] Document preview-per-PR → prod-on-main flow, custom-domain cutover, and rollback in `docs/operations/deployment.md`.
 
 Exit criteria:
 
-- [ ] `https://<domain>/api/mcp` serves the V1 tools to an MCP client; prod promotion + rollback documented and tested.
+- [x] `/api/mcp` serves the V1 tools to a real MCP client — verified locally against production
+      Neon (initialize + tools/list + `get_entity`/`search_evidence` returning real data); live on
+      the deployed domain after the prod redeploy on push.
+- [ ] Prod promotion + rollback documented and tested.
 
-Suggested verification: MCP client lists/calls tools against the deployed `/api/mcp`; REST `/api/v1/*` unchanged.
+Suggested verification: MCP client lists/calls tools against the deployed `/api/mcp` (e.g.
+`node scripts/dev/verify-mcp.mjs https://<domain>/api/mcp`); REST `/api/v1/*` unchanged.
 
 ## Workstream 3: Pipeline CD — GitHub Actions (scheduled batch)
 

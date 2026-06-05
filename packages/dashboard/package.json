@@ -13,6 +13,7 @@
   "dependencies": {
     "@intercal/api": "workspace:*",
     "@intercal/core": "workspace:*",
+    "@intercal/mcp-server": "workspace:*",
     "@intercal/sdk": "workspace:*",
     "@intercal/shared": "workspace:*",
     "hono": "catalog:",

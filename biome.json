@@ -9,7 +9,9 @@
       "!**/node_modules",
       "!packages/shared/generated",
       "!**/*.gen.ts",
-      "!**/*.css"
+      "!**/*.css",
+      "!**/next-env.d.ts",
+      "!packages/dashboard/tsconfig.json"
     ]
   },
   "formatter": {

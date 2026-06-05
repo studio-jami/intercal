@@ -7,31 +7,24 @@
  *
  * Do not hand-edit `src/generated/*` or `generated/*` — run `pnpm contracts:build`.
  */
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { jsonSchemas, openapiDocument } from './generated/artifacts.gen.js';
 
 // Generated OpenAPI 3.1 path/operation/component types.
 export type * from './generated/types.gen.js';
 
-/** Directory holding generated data artifacts (relative to the compiled module). */
-const generatedDir = new URL('../generated/', import.meta.url);
-
-function readJson(relativePath: string): unknown {
-  const url = new URL(relativePath, generatedDir);
-  return JSON.parse(readFileSync(fileURLToPath(url), 'utf8'));
-}
-
-/** The full generated OpenAPI 3.1 document. */
+/** The full generated OpenAPI 3.1 document (embedded — no filesystem, edge-safe). */
 export function getOpenApiDocument(): Record<string, unknown> {
-  return readJson('openapi/openapi.json') as Record<string, unknown>;
+  return openapiDocument as unknown as Record<string, unknown>;
 }
 
 /**
  * Load a generated JSON Schema by its TypeSpec model name (e.g. `"DeltaQuery"`).
- * The JSON Schema emitter writes one file per model under `generated/json-schema/`.
+ * Backs both MCP tool input schemas and REST request validation.
  */
 export function getJsonSchema(modelName: string): Record<string, unknown> {
-  return readJson(`json-schema/${modelName}.json`) as Record<string, unknown>;
+  const schema = jsonSchemas[modelName];
+  if (!schema) throw new Error(`Unknown contract schema: ${modelName}`);
+  return schema;
 }
 
 /**

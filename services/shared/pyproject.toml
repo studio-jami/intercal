@@ -13,6 +13,8 @@ dependencies = [
 [project.optional-dependencies]
 # Storage adapter (S3-compatible: MinIO, Cloudflare R2, AWS S3)
 storage-s3 = ["aioboto3>=13.0.0"]
+# Source adapters (HTTP-based: Wikidata, GitHub releases, …)
+source-http = ["httpx>=0.27.0"]
 # Embeddings adapters
 embeddings-local = ["fastembed>=0.4.0"]
 embeddings-openai = ["openai>=1.35.0"]
@@ -26,6 +28,7 @@ queue-redis = ["redis>=5.0.0"]
 # All adapters (for CI / dev installs)
 all = [
     "intercal-shared[storage-s3]",
+    "intercal-shared[source-http]",
     "intercal-shared[embeddings-local]",
     "intercal-shared[embeddings-openai]",
     "intercal-shared[llm-gemini]",

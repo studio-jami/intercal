@@ -939,6 +939,7 @@ all = [
     { name = "fastembed" },
     { name = "google-genai" },
     { name = "groq" },
+    { name = "httpx" },
     { name = "openai" },
     { name = "redis" },
 ]
@@ -963,6 +964,9 @@ llm-openai = [
 queue-redis = [
     { name = "redis" },
 ]
+source-http = [
+    { name = "httpx" },
+]
 storage-s3 = [
     { name = "aioboto3" },
 ]
@@ -975,6 +979,7 @@ requires-dist = [
     { name = "fastembed", marker = "extra == 'embeddings-local'", specifier = ">=0.4.0" },
     { name = "google-genai", marker = "extra == 'llm-gemini'", specifier = ">=1.0.0" },
     { name = "groq", marker = "extra == 'llm-groq'", specifier = ">=0.11.0" },
+    { name = "httpx", marker = "extra == 'source-http'", specifier = ">=0.27.0" },
     { name = "intercal-shared", extras = ["embeddings-local"], marker = "extra == 'all'", editable = "services/shared" },
     { name = "intercal-shared", extras = ["embeddings-openai"], marker = "extra == 'all'", editable = "services/shared" },
     { name = "intercal-shared", extras = ["llm-anthropic"], marker = "extra == 'all'", editable = "services/shared" },
@@ -982,6 +987,7 @@ requires-dist = [
     { name = "intercal-shared", extras = ["llm-groq"], marker = "extra == 'all'", editable = "services/shared" },
     { name = "intercal-shared", extras = ["llm-openai"], marker = "extra == 'all'", editable = "services/shared" },
     { name = "intercal-shared", extras = ["queue-redis"], marker = "extra == 'all'", editable = "services/shared" },
+    { name = "intercal-shared", extras = ["source-http"], marker = "extra == 'all'", editable = "services/shared" },
     { name = "intercal-shared", extras = ["storage-s3"], marker = "extra == 'all'", editable = "services/shared" },
     { name = "openai", marker = "extra == 'embeddings-openai'", specifier = ">=1.35.0" },
     { name = "openai", marker = "extra == 'llm-openai'", specifier = ">=1.35.0" },
@@ -989,7 +995,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.3.0" },
     { name = "redis", marker = "extra == 'queue-redis'", specifier = ">=5.0.0" },
 ]
-provides-extras = ["storage-s3", "embeddings-local", "embeddings-openai", "llm-gemini", "llm-groq", "llm-anthropic", "llm-openai", "queue-redis", "all"]
+provides-extras = ["storage-s3", "source-http", "embeddings-local", "embeddings-openai", "llm-gemini", "llm-groq", "llm-anthropic", "llm-openai", "queue-redis", "all"]
 
 [[package]]
 name = "intercal-synthesize"

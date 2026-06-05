@@ -1,0 +1,222 @@
+"""Wikidata/Wikipedia recent-changes source adapter.
+
+Fetches recent changes from the Wikidata MediaWiki API (``action=query``,
+``list=recentchanges``) and optionally the corresponding Wikipedia article
+summaries via the Wikipedia REST Summary API.
+
+``adapter_name``: ``"wikidata_changes_v1"``
+
+adapter_config keys (all optional):
+    wikidata_api_url (str):
+        Base URL for the Wikidata MediaWiki API.
+        Default: ``"https://www.wikidata.org/w/api.php"``
+    wikipedia_summary_url (str):
+        Base URL for Wikipedia REST Summary API.
+        Default: ``"https://en.wikipedia.org/api/rest_v1/page/summary"``
+    namespaces (str):
+        Pipe-separated MediaWiki namespace IDs to include.
+        Default: ``"0"`` (main/item namespace only).
+    rctype (str):
+        Pipe-separated change types: ``"edit|new"``.
+        Default: ``"edit|new"``
+    fetch_wikipedia_summary (bool-string):
+        ``"true"`` to also fetch the Wikipedia article summary for each change.
+        Default: ``"false"`` (keeps traffic minimal; enable for richer text).
+
+Rate limiting: Wikidata requests use a User-Agent header as required by the
+Wikimedia API policy (https://meta.wikimedia.org/wiki/User-Agent_policy).
+The adapter does not self-throttle — the caller (ingest_source) handles
+rate-limit errors and back-off.
+
+License: Wikidata content is CC0; redistribution_allowed = true.
+Wikipedia article text is CC BY-SA 4.0; redistribution_allowed = true,
+citation required.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from collections.abc import AsyncIterator
+from typing import Any
+
+from intercal_shared.ports.source import RawDocument, SourceFetchError, SourceRateLimitError
+
+_log = logging.getLogger(__name__)
+
+_DEFAULT_WIKIDATA_API = "https://www.wikidata.org/w/api.php"
+_DEFAULT_WIKIPEDIA_SUMMARY = "https://en.wikipedia.org/api/rest_v1/page/summary"
+_USER_AGENT = (
+    "intercal/0.1 (https://github.com/JamiStudio/intercal; jamie@yrka.io) "
+    "python-httpx/0.2x"
+)
+
+
+class WikidataChangesAdapter:
+    """SourcePort adapter: Wikidata recent-changes + optional Wikipedia summaries.
+
+    Fetches the most-recent *max_documents* changed Wikidata items in one
+    request window.  For each item a ``RawDocument`` is yielded containing
+    the change record as JSON.  Optionally, a follow-up Wikipedia summary
+    fetch enriches each document.
+
+    The adapter is stateless; ``cursor_state`` is used to carry the
+    ``rccontinue`` pagination token between runs so incremental fetches
+    only retrieve new changes.
+    """
+
+    adapter_name: str = "wikidata_changes_v1"
+
+    async def fetch(
+        self,
+        *,
+        adapter_config: dict[str, object],
+        cursor_state: dict[str, object] | None = None,
+        max_documents: int = 200,
+        http_client: object | None = None,
+    ) -> AsyncIterator[RawDocument]:
+        """Yield raw documents from Wikidata recent changes."""
+        import httpx
+
+        client: httpx.AsyncClient | None = None
+        owns_client = False
+
+        try:
+            if http_client is not None and isinstance(http_client, httpx.AsyncClient):
+                client = http_client
+            else:
+                client = httpx.AsyncClient(
+                    headers={"User-Agent": _USER_AGENT},
+                    timeout=30.0,
+                    follow_redirects=True,
+                )
+                owns_client = True
+
+            api_url = str(adapter_config.get("wikidata_api_url", _DEFAULT_WIKIDATA_API))
+            namespaces = str(adapter_config.get("namespaces", "0"))
+            rctype = str(adapter_config.get("rctype", "edit|new"))
+            fetch_wp = (
+                str(adapter_config.get("fetch_wikipedia_summary", "false")).lower() == "true"
+            )
+            wp_summary_url = str(
+                adapter_config.get("wikipedia_summary_url", _DEFAULT_WIKIPEDIA_SUMMARY)
+            )
+
+            params: dict[str, str | int] = {
+                "action": "query",
+                "list": "recentchanges",
+                "rcnamespace": namespaces,
+                "rctype": rctype,
+                "rcprop": "ids|title|timestamp|sizes|flags|loginfo|comment",
+                "rclimit": min(max_documents, 500),  # MediaWiki max per page = 500
+                "format": "json",
+                "formatversion": "2",
+            }
+
+            # Resume from previous run cursor if available.
+            if cursor_state and "rccontinue" in cursor_state:
+                params["rccontinue"] = str(cursor_state["rccontinue"])
+
+            yielded = 0
+            while yielded < max_documents:
+                _log.debug("WikidataChanges: GET %s params=%s", api_url, params)
+                try:
+                    response = await client.get(api_url, params=params)
+                except httpx.TimeoutException as exc:
+                    raise SourceFetchError(
+                        f"Wikidata API request timed out: {exc}"
+                    ) from exc
+                except httpx.RequestError as exc:
+                    raise SourceFetchError(
+                        f"Wikidata API network error: {exc}"
+                    ) from exc
+
+                if response.status_code == 429:
+                    raise SourceRateLimitError(
+                        "Wikidata API returned 429 Too Many Requests"
+                    )
+                if response.status_code >= 500:
+                    raise SourceFetchError(
+                        f"Wikidata API server error {response.status_code}: "
+                        f"{response.text[:200]}"
+                    )
+                if response.status_code >= 400:
+                    raise SourceFetchError(
+                        f"Wikidata API client error {response.status_code}: "
+                        f"{response.text[:200]}"
+                    )
+
+                try:
+                    data: dict[str, Any] = response.json()
+                except Exception as exc:
+                    raise SourceFetchError(
+                        f"Wikidata API returned non-JSON response: {response.text[:200]}"
+                    ) from exc
+
+                changes: list[dict[str, Any]] = (
+                    data.get("query", {}).get("recentchanges", [])
+                )
+                if not changes:
+                    _log.debug("WikidataChanges: no more changes in window")
+                    break
+
+                for change in changes:
+                    if yielded >= max_documents:
+                        break
+
+                    doc_payload: dict[str, Any] = {"change": change}
+
+                    # Optionally enrich with Wikipedia article summary.
+                    if fetch_wp and change.get("title"):
+                        title = change["title"].replace(" ", "_")
+                        try:
+                            wp_resp = await client.get(
+                                f"{wp_summary_url.rstrip('/')}/{title}"
+                            )
+                            if wp_resp.status_code == 200:
+                                doc_payload["wikipedia_summary"] = wp_resp.json()
+                        except Exception as wp_exc:
+                            _log.debug(
+                                "WikidataChanges: Wikipedia summary fetch failed for %r: %s",
+                                title,
+                                wp_exc,
+                            )
+
+                    content_bytes = json.dumps(doc_payload, ensure_ascii=False).encode()
+                    external_id = str(
+                        change.get("revid") or change.get("rcid") or ""
+                    )
+                    title_str: str = change.get("title", "")
+                    timestamp: str = change.get("timestamp", "")
+
+                    yield RawDocument(
+                        content=content_bytes,
+                        external_id=external_id or None,
+                        url=(
+                            f"https://www.wikidata.org/wiki/{title_str}"
+                            if title_str
+                            else None
+                        ),
+                        title=title_str or None,
+                        published_at=timestamp or None,
+                        language="en",
+                        content_type="application/json",
+                        metadata={
+                            "adapter": self.adapter_name,
+                            "rcid": str(change.get("rcid", "")),
+                            "revid": str(change.get("revid", "")),
+                            "ns": str(change.get("ns", "")),
+                            "type": str(change.get("type", "")),
+                        },
+                    )
+                    yielded += 1
+
+                # Handle pagination via rccontinue.
+                continue_token = data.get("continue", {}).get("rccontinue")
+                if not continue_token or yielded >= max_documents:
+                    break
+                params["rccontinue"] = continue_token
+
+        finally:
+            if owns_client and client is not None:
+                await client.aclose()

@@ -101,6 +101,42 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── Ingestion throttle knobs (resource-budget.md) ─────────────────────────
+    ingest_cron: str = Field(
+        default="0 */6 * * *",
+        description=(
+            "Default ingestion cron expression (6-hourly). "
+            "Informational - GitHub Actions reads this."
+        ),
+    )
+    ingest_max_docs_per_run: int = Field(
+        default=200,
+        description=(
+            "Hard upper bound on documents ingested per scheduled run "
+            "(INGEST_MAX_DOCS_PER_RUN)."
+        ),
+    )
+    extract_only_changed: bool = Field(
+        default=True,
+        description="Skip extraction for documents whose content_hash has not changed.",
+    )
+    llm_daily_request_budget: int = Field(
+        default=2000,
+        description="Hard daily cap on LLM API calls across all providers.",
+    )
+    llm_max_output_tokens: int = Field(
+        default=2048,
+        description="Per-call output token cap forwarded to LLM adapters.",
+    )
+    llm_primary: str = Field(
+        default="vertex",
+        description="Primary LLM provider name (vertex → gemini fallback order).",
+    )
+    embeddings_batch_size: int = Field(
+        default=64,
+        description="Batch size for local fastembed embedding calls.",
+    )
+
     # ── API / MCP ─────────────────────────────────────────────────────────────
     api_port: int = Field(default=8787)
     mcp_port: int = Field(default=8788)

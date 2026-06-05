@@ -33,28 +33,20 @@ def test_jobs_are_async() -> None:
     assert inspect.iscoroutinefunction(cleanup_expired_cache)
 
 
-@pytest.mark.asyncio
-async def test_ingest_source_raises_not_implemented() -> None:
-    """ingest_source raises NotImplementedError until Plan-02 adapters are wired."""
-    with pytest.raises(NotImplementedError, match="Plan 02"):
-        await ingest_source(source_id="test-id", pool=None, storage=None)
+# ── W2/later stubs: still raise NotImplementedError ─────────────────────────
 
 
 @pytest.mark.asyncio
 async def test_normalize_document_raises_not_implemented() -> None:
+    """normalize_document is Plan-02 W2; must still raise NotImplementedError."""
     with pytest.raises(NotImplementedError, match="Plan 02"):
         await normalize_document(document_id="test-id", pool=None, storage=None)
 
 
 @pytest.mark.asyncio
-async def test_score_source_health_raises_not_implemented() -> None:
-    with pytest.raises(NotImplementedError, match="Plan 02"):
-        await score_source_health(source_id="test-id", pool=None)
-
-
-@pytest.mark.asyncio
 async def test_cleanup_expired_cache_raises_not_implemented() -> None:
-    with pytest.raises(NotImplementedError, match="Plan 02"):
+    """cleanup_expired_cache is Plan-02/03; must still raise NotImplementedError."""
+    with pytest.raises(NotImplementedError):
         await cleanup_expired_cache(pool=None, storage=None)
 
 

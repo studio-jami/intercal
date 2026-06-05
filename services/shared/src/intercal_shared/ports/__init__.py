@@ -9,4 +9,5 @@ Import the port you need:
     from intercal_shared.ports.llm import LlmPort
     from intercal_shared.ports.queue import QueuePort
     from intercal_shared.ports.scheduler import SchedulerPort
+    from intercal_shared.ports.source import SourcePort, RawDocument
 """

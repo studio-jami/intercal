@@ -42,6 +42,14 @@ def _get_settings() -> Settings:
 @app.command("ingest-source")
 def ingest_source_cmd(
     source_id: str = typer.Option(..., "--source-id", help="UUID of the source to ingest."),
+    max_documents: int = typer.Option(
+        0,
+        "--max-documents",
+        help=(
+            "Hard cap on documents per run.  0 = use INGEST_MAX_DOCS_PER_RUN from settings "
+            "(default 200)."
+        ),
+    ),
 ) -> None:
     """Fetch and persist raw documents for a configured source.
 
@@ -49,6 +57,7 @@ def ingest_source_cmd(
     """
     cfg = _get_settings()
     _setup_logging(cfg.log_level)
+    effective_max = max_documents if max_documents > 0 else cfg.ingest_max_docs_per_run
 
     async def _run() -> None:
         from intercal_shared.db import get_pool
@@ -58,7 +67,18 @@ def ingest_source_cmd(
 
         pool = await get_pool(cfg.database_url)
         storage = make_storage(cfg)
-        await ingest_source(source_id=source_id, pool=pool, storage=storage)
+        counters = await ingest_source(
+            source_id=source_id,
+            pool=pool,
+            storage=storage,
+            max_documents=effective_max,
+        )
+        import sys
+        print(
+            f"Done: fetched={counters['fetched']} new={counters['new']} "
+            f"skipped={counters['skipped']} errors={counters['errors']}",
+            file=sys.stderr,
+        )
 
     asyncio.run(_run())
 

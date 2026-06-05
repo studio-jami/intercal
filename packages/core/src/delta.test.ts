@@ -7,11 +7,37 @@
  * the live Neon integration verification, not here.
  */
 import { describe, expect, it } from 'vitest';
-import type { ClaimsTable, EntitiesTable, RelationshipsTable } from './db/types.js';
+import type {
+  ClaimsTable,
+  EntitiesTable,
+  FactVersionsTable,
+  RelationshipsTable,
+} from './db/types.js';
 import { type AssembleInput, assembleDigest, type DocMeta } from './delta.js';
 
 const DOC_RUST = 'aaaaaaaa-0000-0000-0000-000000000001';
+const DOC_FV = 'aaaaaaaa-0000-0000-0000-000000000002';
 const ENT_RUST = 'bbbbbbbb-0000-0000-0000-000000000001';
+
+function factVersion(
+  overrides: Partial<FactVersionsTable> & { id: string; recorded_at: Date },
+): FactVersionsTable {
+  return {
+    fact_subject_type: 'entity',
+    fact_subject_id: ENT_RUST,
+    payload: { canonical_name: 'rust', type_id: 'product' },
+    valid_from: overrides.recorded_at,
+    valid_until: null,
+    source_document_ids: [DOC_FV],
+    claim_ids: [],
+    confidence: '0.90',
+    is_current: true,
+    superseded_by_id: null,
+    superseded_at: null,
+    produced_by: 'pipeline',
+    ...overrides,
+  };
+}
 
 function claim(overrides: Partial<ClaimsTable> & { id: string; created_at: Date }): ClaimsTable {
   return {
@@ -39,6 +65,11 @@ const docMeta: DocMeta[] = [
     id: DOC_RUST,
     url: 'https://github.com/rust-lang/rust/releases/tag/1.96.0',
     published_at: new Date('2026-05-28T17:50:42.000Z'),
+  },
+  {
+    id: DOC_FV,
+    url: 'https://blog.rust-lang.org/2026/06/05/state-change',
+    published_at: new Date('2026-06-04T12:00:00.000Z'),
   },
 ];
 
@@ -206,5 +237,71 @@ describe('assembleDigest — changed entities & relationships', () => {
     expect(res.summary.content).toMatch(/relationship change/);
     // The relationship's source doc is rolled into the digest citations.
     expect(res.summary.citations.some((c) => c.sourceDocumentId === DOC_RUST)).toBe(true);
+  });
+});
+
+describe('assembleDigest — fact-version changes (the canonical change unit)', () => {
+  it('surfaces a new fact version recorded in the window even when no claim/relationship changed', () => {
+    // The bitemporal core case: an entity had a fact version recorded since the cutoff, but no
+    // claim row moved. The delta MUST still report a change and cite its provenance.
+    const fv = factVersion({ id: 'fv1', recorded_at: new Date('2026-06-05T18:59:11.000Z') });
+    const res = assembleDigest(input({ claimRows: [], factVersionRows: [fv] }));
+
+    expect(res.summary.content).not.toMatch(/No recorded changes/);
+    expect(res.summary.content).toMatch(/new fact version/);
+    // Its backing source document is cited at the digest level.
+    expect(res.summary.citations.some((c) => c.sourceDocumentId === DOC_FV)).toBe(true);
+    expect(res.summary.citations.find((c) => c.sourceDocumentId === DOC_FV)?.url).toBe(
+      'https://blog.rust-lang.org/2026/06/05/state-change',
+    );
+    // Freshness reflects the fact-version recorded_at (the newest transaction time).
+    expect(res.freshness.lastUpdated).toBe('2026-06-05T18:59:11.000Z');
+  });
+
+  it('reports a supersession when an in-window version was closed (is_current=false)', () => {
+    // write_fact_versions closes the old row (is_current=false, superseded_by_id=new) and inserts a
+    // new current row. Both land in the window; we count the closing as one supersession event.
+    const oldRow = factVersion({
+      id: 'fv_old',
+      recorded_at: new Date('2026-06-02T00:00:00.000Z'),
+      is_current: false,
+      superseded_by_id: 'fv_new',
+      superseded_at: new Date('2026-06-05T00:00:00.000Z'),
+    });
+    const newRow = factVersion({ id: 'fv_new', recorded_at: new Date('2026-06-05T00:00:00.000Z') });
+    const res = assembleDigest(input({ claimRows: [], factVersionRows: [oldRow, newRow] }));
+
+    expect(res.summary.content).toMatch(/superseded/);
+    // The same subject is not also double-counted as a new assertion.
+    expect(res.summary.content).not.toMatch(/new fact version/);
+  });
+
+  it('fact-version subject entity appears in changedEntities even when last_updated_at is older', () => {
+    // buildDelta unions fact-version subjects into the entity fetch; here we model that the entity
+    // row is provided (its last_updated_at predates the cutoff) alongside its in-window fact version.
+    const ent: EntitiesTable = {
+      id: ENT_RUST,
+      type_id: 'product',
+      canonical_name: 'rust',
+      description: null,
+      current_state: {},
+      importance_score: '0.0',
+      first_seen_at: new Date('2026-05-01T00:00:00.000Z'),
+      last_updated_at: new Date('2026-05-30T00:00:00.000Z'), // BEFORE the 2026-06-01 cutoff
+      is_deprecated: false,
+      merged_into_id: null,
+      deprecated_at: null,
+      deprecation_reason: null,
+    };
+    const fv = factVersion({ id: 'fv1', recorded_at: new Date('2026-06-05T18:59:11.000Z') });
+    const res = assembleDigest(input({ entityRows: [ent], factVersionRows: [fv] }));
+
+    expect(res.changedEntities).toEqual([{ id: ENT_RUST, type: 'product', displayName: 'rust' }]);
+  });
+
+  it('empty window with no fact versions still reports no changes (no fabrication)', () => {
+    const res = assembleDigest(input({ claimRows: [], factVersionRows: [] }));
+    expect(res.summary.content).toMatch(/No recorded changes/);
+    expect(res.summary.citations).toEqual([]);
   });
 });

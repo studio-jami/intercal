@@ -81,6 +81,28 @@ export interface ClaimsTable {
   updated_at: Date;
 }
 
+export interface FactVersionsTable {
+  id: string;
+  // 'entity' | 'relationship' | 'claim' — what the version describes (polymorphic FK).
+  fact_subject_type: string;
+  fact_subject_id: string;
+  // JSON snapshot of the subject's state at this version.
+  payload: Json;
+  valid_from: Date | null;
+  valid_until: Date | null;
+  // recorded_at is the transaction-time axis: when Intercal recorded this version. Immutable.
+  recorded_at: Date;
+  source_document_ids: string[];
+  claim_ids: string[];
+  confidence: string | null; // numeric
+  // is_current = false marks a superseded historical version.
+  is_current: boolean;
+  // Set on the OLD row when a newer version supersedes it (append-only correction).
+  superseded_by_id: string | null;
+  superseded_at: Date | null;
+  produced_by: string;
+}
+
 export interface SourceDocumentsTable {
   id: string;
   source_id: string;
@@ -120,6 +142,7 @@ export interface Database {
   entity_external_ids: EntityExternalIdsTable;
   relationships: RelationshipsTable;
   claims: ClaimsTable;
+  fact_versions: FactVersionsTable;
   source_documents: SourceDocumentsTable;
   sources: SourcesTable;
   ingestion_runs: IngestionRunsTable;

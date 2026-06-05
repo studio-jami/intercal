@@ -375,10 +375,23 @@ Implementation tasks:
 - [x] Transaction-time windowing `(since, until]`: claims via `created_at`, relationships via
       `recorded_at`, changed entities via `last_updated_at`. Topic scope = resolved entity (name/
       alias) OR text match over claim columns, so unresolved topics still surface their changes.
+- [x] Fact-version changes surfaced (audit pass 2). The canonical change unit is the append-only
+      `fact_versions` table (Plan 02 W7); pass 1 windowed changed entities only on
+      `entities.last_updated_at`, which is written EARLIER than the fact version's `recorded_at`
+      (verified: all 155 prod entities have `fv.recorded_at > last_updated_at`), so a cutoff
+      between the two missed fact-version changes and supersessions entirely. `buildDelta` now
+      windows `fact_versions` on `recorded_at`, unions their subject entities into `changedEntities`
+      (deduped by id, no double-count), reports supersession/new-assertion counts in the digest
+      lede, and rolls their source docs into the citations. The `DeltaResponse` contract was
+      sufficient (no field added). Token budget hardened: the lede's measured cost is reserved
+      before trimming, so content provably never exceeds `token_budget`.
 - [x] Citations enriched with `url`+`publishedAt`; confidence = mean extraction confidence labelled
       `aggregate_extraction`; freshness = newest transaction time + coverage.
-- [x] Deterministic unit tests (`delta.test.ts`, 10) over the pure assembler: citations, budget
-      bound + omission reporting, ranking, confidence/freshness, changed entities/relationships.
+- [x] Deterministic unit tests (`delta.test.ts`, 14) over the pure assembler: citations, budget
+      bound + omission reporting, ranking, confidence/freshness, changed entities/relationships,
+      and (audit pass 2) fact-version changes — new version surfaced + cited with no claim change,
+      supersession reported without double-counting, fact-version subject in `changedEntities`
+      despite older `last_updated_at`, empty window = no fabrication.
 - [~] Digest cache + invalidation — deferred (Plan 04 / cache port); the response is a pure
       function of the bitemporal data, so caching is a transparent later optimisation, not faked.
 - [~] Provider-backed synthesis — deferred behind `LlmPort` (see decision above).
@@ -387,8 +400,13 @@ Exit criteria:
 
 - [x] Token-budget tests prove responses fit budget and preserve evidence references
       (`delta.test.ts`); confirmed live: `topic=rust since=2026-06-01 budget=120→200` trims 12→4
-      changes (143 est tokens ≤ 200), coverage 0.33, "8 omitted"; `budget=600` fits all 12 cited
+      changes (159 est tokens ≤ 200), coverage 0.33, "8 omitted"; `budget=600` fits all 12 cited
       changes; `since` after ingest → empty, no fabrication.
+- [x] Fact-version supersession-across-cutoff proven live (audit pass 2) on a throwaway fork of
+      production Neon (deleted after): an append-only supersession of `rust` recorded at 20:00Z with
+      a cutoff `since=19:00Z` (after `last_updated_at` 18:55:39) — the old `last_updated_at`-only
+      path returned 0 changes; the fixed path returns `changedEntities: 1`, "1 new fact version
+      recorded", `freshness.lastUpdated=20:00Z`, cited.
 
 Suggested verification:
 

@@ -16,8 +16,18 @@
  *
  * TEMPORAL AXIS: "what changed since the cutoff" means TRANSACTION time — when Intercal *recorded*
  * the change — not world/valid time. Claims use `created_at` (their transaction-time column;
- * `claims` has no `recorded_at`), relationships and fact_versions use `recorded_at`, and changed
- * entities are detected via `last_updated_at`. The window is `(since, until]`.
+ * `claims` has no `recorded_at`); relationships and fact_versions use `recorded_at`. The window is
+ * `(since, until]`.
+ *
+ * CHANGE UNITS: the substrate's canonical change record is the append-only `fact_versions` table
+ * (Plan 02 W7) — a new version (or a supersession of an older one) recorded in the window is a real
+ * change even when the underlying entity row is older. The contract's `DeltaResponse` has no
+ * fact-version field, so we map fact-version changes into the shape it does carry: the version's
+ * subject entity joins `changedEntities` (windowed on the version's `recorded_at`, NOT only on the
+ * entity's `last_updated_at`, which is written earlier in the pipeline and would miss the version),
+ * its supersession/new-assertion counts are reported in the digest lede, and its backing source
+ * documents are rolled into the digest citations. Changed entities are also still detected via
+ * `last_updated_at`; the two signals are unioned and deduped by id so a change is never double-counted.
  *
  * TOKEN BUDGET: the response is bounded to `token_budget` (default from resource-budget profiles).
  * Items are ranked most-important first — recency (newer transaction time), then confidence, then
@@ -26,7 +36,12 @@
  */
 import type { components } from '@intercal/shared';
 import type { Db } from './db/client.js';
-import type { ClaimsTable, EntitiesTable, RelationshipsTable } from './db/types.js';
+import type {
+  ClaimsTable,
+  EntitiesTable,
+  FactVersionsTable,
+  RelationshipsTable,
+} from './db/types.js';
 import { mapClaim, mapEntity, mapRelationship } from './mappers.js';
 
 type S = components['schemas'];
@@ -176,23 +191,54 @@ export async function buildDelta(db: Db, params: DeltaParams): Promise<S['DeltaR
     relRows = await relQuery.orderBy('recorded_at', 'desc').limit(50).execute();
   }
 
-  // ── Changed entities: last_updated_at in (since, until], within the topic scope ──
-  // Resolved topic entities that were touched in the window, plus entities referenced by the
-  // changed claims (so an agent sees which canonical things moved). EntitySummary is compact by
-  // contract (id/type/displayName), so these are cheap and we include all of them.
-  const entityIdsInPlay = new Set<string>(topicEntityIds);
+  // ── Fact-version changes: the canonical "change" unit (Plan 02 W7). ──────────────────────────
+  // fact_versions is the append-only bitemporal record of what Intercal believes; a NEW version
+  // recorded in (since, until] is a real change even when the underlying entity row's
+  // last_updated_at predates the cutoff (the version is written as the FINAL pipeline stage, so its
+  // recorded_at is reliably >= the entity's last_updated_at — confirmed in production). Scoping
+  // changed entities ONLY on last_updated_at therefore silently drops fact-version-level changes,
+  // including supersessions. We window on the version's transaction time (recorded_at) instead.
+  const factSubjectScope = new Set<string>(topicEntityIds);
   for (const c of claimRows) {
-    if (c.subject_entity_id) entityIdsInPlay.add(c.subject_entity_id);
-    if (c.object_entity_id) entityIdsInPlay.add(c.object_entity_id);
+    if (c.subject_entity_id) factSubjectScope.add(c.subject_entity_id);
+    if (c.object_entity_id) factSubjectScope.add(c.object_entity_id);
   }
+  let factVersionRows: FactVersionsTable[] = [];
+  if (factSubjectScope.size > 0) {
+    let fvQuery = db
+      .selectFrom('fact_versions')
+      .selectAll()
+      .where('fact_subject_type', '=', 'entity')
+      .where('fact_subject_id', 'in', [...factSubjectScope])
+      .where('recorded_at', '>', since);
+    if (until) fvQuery = fvQuery.where('recorded_at', '<=', until);
+    factVersionRows = await fvQuery.orderBy('recorded_at', 'desc').limit(200).execute();
+  }
+
+  // ── Changed entities: union of (a) entities whose last_updated_at moved in the window and
+  // (b) entities that had a fact version recorded in the window (the authoritative change record).
+  // Deduped by id in the assembler so a change is never double-counted. EntitySummary is compact by
+  // contract (id/type/displayName), so these are cheap and we include all of them.
+  const entityIdsInPlay = new Set<string>(factSubjectScope);
+  for (const fv of factVersionRows) entityIdsInPlay.add(fv.fact_subject_id);
   let entityRows: EntitiesTable[] = [];
   if (entityIdsInPlay.size > 0) {
+    // Pull every in-scope live entity touched in the window by EITHER signal. We filter to the
+    // window-or-fact-version set in the assembler; fetching the candidates here keeps one round-trip.
+    const fvSubjectIds = new Set(factVersionRows.map((fv) => fv.fact_subject_id));
     let entQuery = db
       .selectFrom('entities')
       .selectAll()
       .where('is_deprecated', '=', false)
       .where('id', 'in', [...entityIdsInPlay])
-      .where('last_updated_at', '>', since);
+      .where((eb) => {
+        const touched = eb('last_updated_at', '>', since);
+        // An entity with a fact version in the window is changed even if last_updated_at is older.
+        if (fvSubjectIds.size > 0) {
+          return eb.or([touched, eb('id', 'in', [...fvSubjectIds])]);
+        }
+        return touched;
+      });
     if (until) entQuery = entQuery.where('last_updated_at', '<=', until);
     entityRows = await entQuery.orderBy('last_updated_at', 'desc').limit(100).execute();
   }
@@ -202,6 +248,7 @@ export async function buildDelta(db: Db, params: DeltaParams): Promise<S['DeltaR
   const allDocIds = new Set<string>();
   for (const c of claimRows) for (const id of c.source_document_ids) allDocIds.add(id);
   for (const r of relRows) for (const id of r.source_document_ids) allDocIds.add(id);
+  for (const fv of factVersionRows) for (const id of fv.source_document_ids) allDocIds.add(id);
   const docMeta =
     allDocIds.size > 0
       ? await db
@@ -220,6 +267,7 @@ export async function buildDelta(db: Db, params: DeltaParams): Promise<S['DeltaR
     claimRows,
     relRows,
     entityRows,
+    factVersionRows,
     docMeta,
   });
 }
@@ -241,6 +289,8 @@ export interface AssembleInput {
   claimRows: ClaimsTable[];
   relRows: RelationshipsTable[];
   entityRows: EntitiesTable[];
+  /** Fact-version rows recorded in the window (the canonical change unit; may be empty). */
+  factVersionRows?: FactVersionsTable[];
   docMeta: DocMeta[];
 }
 
@@ -254,12 +304,76 @@ export function assembleDigest(input: AssembleInput): S['DeltaResponse'] {
   const { params, since, until, budget, topicEntityIds, entityRows, docMeta } = input;
   const claimRows = [...input.claimRows].sort(rankClaims);
   const relRows = input.relRows;
+  const factVersionRows = input.factVersionRows ?? [];
+
+  // ── Fact-version changes (the canonical bitemporal change unit). ──────────────────────────────
+  // A row recorded in the window that is NO LONGER current (is_current = false) was CLOSED in the
+  // window — i.e. a supersession event happened: a newer version replaced it. A current row in the
+  // window for a subject WITHOUT such a closed predecessor is a freshly recorded assertion. We
+  // classify from the in-window rows alone (no extra query) and never double-count a subject.
+  const supersededSubjectIds = new Set<string>();
+  for (const fv of factVersionRows) {
+    if (!fv.is_current || fv.superseded_by_id) supersededSubjectIds.add(fv.fact_subject_id);
+  }
+  const supersessionCount = factVersionRows.filter(
+    (fv) => !fv.is_current || fv.superseded_by_id,
+  ).length;
+  // New assertions: current rows whose subject was not also superseded in-window.
+  const newAssertionSubjectIds = new Set<string>();
+  for (const fv of factVersionRows) {
+    if (fv.is_current && !fv.superseded_by_id && !supersededSubjectIds.has(fv.fact_subject_id)) {
+      newAssertionSubjectIds.add(fv.fact_subject_id);
+    }
+  }
+  const newAssertionCount = newAssertionSubjectIds.size;
+
+  // ── Lede (built before trimming so its real token cost can be reserved exactly). ─────────────
+  // The lede uses only window-fixed totals (claimRows.length, relationship + fact-version counts),
+  // so it does not depend on how many lines survive the budget trim.
+  const sinceLabel = params.since_date.slice(0, 10);
+  const scopeNote =
+    topicEntityIds.length > 0
+      ? `${topicEntityIds.length} resolved entit${topicEntityIds.length === 1 ? 'y' : 'ies'}`
+      : 'text match (topic not a resolved entity)';
+  const factVersionNote = (() => {
+    const parts: string[] = [];
+    if (supersessionCount > 0) {
+      parts.push(`${supersessionCount} fact${supersessionCount === 1 ? '' : 's'} superseded`);
+    }
+    if (newAssertionCount > 0) {
+      parts.push(
+        `${newAssertionCount} new fact version${newAssertionCount === 1 ? '' : 's'} recorded`,
+      );
+    }
+    return parts.join(', ');
+  })();
+  const changedRelationships = relRows.map(mapRelationship);
+  const hasAnyChange =
+    claimRows.length > 0 || changedRelationships.length > 0 || factVersionRows.length > 0;
+  let lede: string;
+  if (!hasAnyChange) {
+    lede = `No recorded changes about "${params.topic}" since ${sinceLabel}.`;
+  } else {
+    const extras: string[] = [];
+    if (changedRelationships.length > 0) {
+      extras.push(
+        `${changedRelationships.length} relationship change${changedRelationships.length === 1 ? '' : 's'}`,
+      );
+    }
+    if (factVersionNote) extras.push(factVersionNote);
+    lede =
+      `${claimRows.length} claim change${claimRows.length === 1 ? '' : 's'} recorded about "${params.topic}" since ${sinceLabel}` +
+      (extras.length > 0 ? ` (plus ${extras.join(', ')})` : '') +
+      `; scope: ${scopeNote}.`;
+  }
 
   // ── Token-budget trimming ──────────────────────────────────────────────────────────────────
-  // Reserve a slice of the budget for the lede + freshness footer; spend the rest on ranked claim
-  // lines. Each accepted claim contributes its mapped Claim (with evidence) to changedClaims and
-  // its line to the digest content; we stop when the next line would exceed the budget.
-  const leadReserve = 80; // tokens reserved for the prose lede + freshness/coverage footer
+  // Reserve the lede's MEASURED cost plus a small footer allowance; spend the rest on ranked claim
+  // lines. Each accepted claim contributes its mapped Claim (with evidence) to changedClaims and its
+  // line to the digest content; we stop when the next line would exceed the budget. Reserving the
+  // real lede cost (not a fixed guess) guarantees the rendered content never exceeds the budget.
+  const FOOTER_RESERVE = 40; // tokens for the included/omitted footer line
+  const leadReserve = estimateTokens(lede) + FOOTER_RESERVE;
   let spent = leadReserve;
   const includedClaims: ClaimsTable[] = [];
   const lines: string[] = [];
@@ -274,7 +388,6 @@ export function assembleDigest(input: AssembleInput): S['DeltaResponse'] {
   const omittedClaims = claimRows.length - includedClaims.length;
 
   const changedClaims: Claim[] = includedClaims.map(mapClaim);
-  const changedRelationships = relRows.map(mapRelationship);
   const changedEntities: EntitySummary[] = entityRows.map((e) => {
     const summary = mapEntity(e, [], []);
     return { id: summary.id, type: summary.type, displayName: summary.displayName };
@@ -286,6 +399,9 @@ export function assembleDigest(input: AssembleInput): S['DeltaResponse'] {
   const citedDocIds = new Set<string>();
   for (const c of includedClaims) for (const id of c.source_document_ids) citedDocIds.add(id);
   for (const r of relRows) for (const id of r.source_document_ids) citedDocIds.add(id);
+  // Fact-version provenance is real change-evidence: roll its backing docs into the digest citations
+  // so the supersession/new-assertion note in the lede is itself traceable, never an un-cited claim.
+  for (const fv of factVersionRows) for (const id of fv.source_document_ids) citedDocIds.add(id);
   const docById = new Map(docMeta.map((d) => [d.id, d]));
   const citations: Citation[] = [...citedDocIds].map((id) => {
     const d = docById.get(id);
@@ -307,10 +423,14 @@ export function assembleDigest(input: AssembleInput): S['DeltaResponse'] {
 
   // ── Freshness: newest transaction time across the changed set; coverage = fraction of changed
   // claims we could fit in the budget. ────────────────────────────────────────────────────────
-  const latestChange = claimRows.reduce<Date | null>(
+  let latestChange = claimRows.reduce<Date | null>(
     (max, c) => (max === null || c.created_at > max ? c.created_at : max),
     null,
   );
+  // A fact-version recorded after the newest claim is the freshest transaction-time change.
+  for (const fv of factVersionRows) {
+    if (latestChange === null || fv.recorded_at > latestChange) latestChange = fv.recorded_at;
+  }
   const coverage = claimRows.length === 0 ? 1 : includedClaims.length / claimRows.length;
   const freshness: S['FreshnessReport'] = {
     target: params.topic,
@@ -319,25 +439,8 @@ export function assembleDigest(input: AssembleInput): S['DeltaResponse'] {
     staleness: staleness(latestChange),
   };
 
-  // ── Digest content: a deterministic prose lede + the citation-numbered change lines + a footer
-  // that reports exactly what was included vs trimmed. Nothing here is un-cited. ────────────────
-  const sinceLabel = params.since_date.slice(0, 10);
-  const scopeNote =
-    topicEntityIds.length > 0
-      ? `${topicEntityIds.length} resolved entit${topicEntityIds.length === 1 ? 'y' : 'ies'}`
-      : 'text match (topic not a resolved entity)';
-  const ledeParts: string[] = [];
-  if (includedClaims.length === 0 && changedRelationships.length === 0) {
-    ledeParts.push(`No recorded changes about "${params.topic}" since ${sinceLabel}.`);
-  } else {
-    ledeParts.push(
-      `${claimRows.length} change${claimRows.length === 1 ? '' : 's'} recorded about "${params.topic}" since ${sinceLabel}` +
-        (changedRelationships.length > 0
-          ? ` (plus ${changedRelationships.length} relationship change${changedRelationships.length === 1 ? '' : 's'})`
-          : '') +
-        `; scope: ${scopeNote}.`,
-    );
-  }
+  // ── Digest content: the pre-built deterministic prose lede + the citation-numbered change lines +
+  // a footer that reports exactly what was included vs trimmed. Nothing here is un-cited. ─────────
   const footerParts: string[] = [];
   if (omittedClaims > 0) {
     footerParts.push(
@@ -346,9 +449,7 @@ export function assembleDigest(input: AssembleInput): S['DeltaResponse'] {
   } else if (includedClaims.length > 0) {
     footerParts.push(`All ${includedClaims.length} changes fit within the ${budget}-token budget.`);
   }
-  const content = [ledeParts.join(' '), ...lines, footerParts.join(' ')]
-    .filter((s) => s.length > 0)
-    .join('\n');
+  const content = [lede, ...lines, footerParts.join(' ')].filter((s) => s.length > 0).join('\n');
 
   return {
     topic: params.topic,

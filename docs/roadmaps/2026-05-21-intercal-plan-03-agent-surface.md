@@ -400,6 +400,20 @@ Implementation tasks:
       both superseded and new. The deterministic path is unchanged: change detection, citations,
       freshness, and token budget were already correct; only the lede's supersession/new label is
       fixed. No contract field added.
+- [x] Bounded-window `changedEntities` axis fix (audit pass 4). The `changedEntities` fetch in
+      `buildDelta` unions two independent bitemporal signals: (a) `entities.last_updated_at` moved in
+      `(since, until]`, and (b) the entity had a fact version recorded in the same window (fetched on
+      `fact_versions.recorded_at`). The `until` clamp on `last_updated_at` had been ANDed OUTSIDE the
+      `OR`, so it also constrained branch (b): an entity whose `last_updated_at` advanced PAST `until`
+      (a normal later pipeline run — e.g. an identical-payload write that `write_fact_versions` skips,
+      so no new fact version, while another stage still bumps `last_updated_at`) was dropped from
+      `changedEntities` even though its in-window fact version was real, reported in the lede, and
+      cited — an axis-conflation inconsistency in the `until`-bounded case. Fixed by moving the `until`
+      clamp INSIDE branch (a) only; branch (b) is governed purely by its own `recorded_at` window.
+      Proven on a throwaway prod fork (deleted after): entity with fv `recorded_at=18:59:11Z` and
+      `last_updated_at` bumped to `20:00Z`, window `(18:58Z, 19:30Z]` — old query → 0 rows (dropped),
+      fixed query → 1 row; control (last_updated_at-only entity past `until`) still correctly excluded.
+      The `since` lower bound was already correct (inside the `OR`). No contract field added.
 - [x] Deterministic unit tests (`delta.test.ts`, 16) over the pure assembler: citations, budget
       bound + omission reporting, ranking, confidence/freshness, changed entities/relationships,
       fact-version changes (new version surfaced + cited with no claim change, supersession reported

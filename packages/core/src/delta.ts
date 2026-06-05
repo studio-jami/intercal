@@ -250,20 +250,31 @@ export async function buildDelta(db: Db, params: DeltaParams): Promise<S['DeltaR
     // Pull every in-scope live entity touched in the window by EITHER signal. We filter to the
     // window-or-fact-version set in the assembler; fetching the candidates here keeps one round-trip.
     const fvSubjectIds = new Set(factVersionRows.map((fv) => fv.fact_subject_id));
-    let entQuery = db
+    const entQuery = db
       .selectFrom('entities')
       .selectAll()
       .where('is_deprecated', '=', false)
       .where('id', 'in', [...entityIdsInPlay])
       .where((eb) => {
-        const touched = eb('last_updated_at', '>', since);
-        // An entity with a fact version in the window is changed even if last_updated_at is older.
+        // (a) last_updated_at moved within the SAME (since, until] window we use everywhere else.
+        // The `until` clamp belongs INSIDE this branch: it bounds the last_updated_at axis only.
+        const touched = until
+          ? eb.and([eb('last_updated_at', '>', since), eb('last_updated_at', '<=', until)])
+          : eb('last_updated_at', '>', since);
+        // (b) An entity with a fact version in the window is changed even if last_updated_at is older
+        // OR LATER than `until`. fact_versions is windowed on its own recorded_at axis (above), so a
+        // subject in fvSubjectIds is already proven in-window — it must not be re-filtered by the
+        // last_updated_at clamp. last_updated_at and recorded_at are independent bitemporal axes:
+        // a later pipeline run can bump last_updated_at past `until` (e.g. an identical-payload write
+        // that skips the fact version) while the in-window fact version remains a real change. ANDing
+        // the `until` clamp across both branches (the prior code) silently dropped exactly those
+        // subjects from changedEntities even though the digest lede still reports their fact-version
+        // change — an axis-conflation inconsistency. Keeping (b) independent fixes it.
         if (fvSubjectIds.size > 0) {
           return eb.or([touched, eb('id', 'in', [...fvSubjectIds])]);
         }
         return touched;
       });
-    if (until) entQuery = entQuery.where('last_updated_at', '<=', until);
     entityRows = await entQuery.orderBy('last_updated_at', 'desc').limit(100).execute();
   }
 

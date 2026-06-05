@@ -22,18 +22,41 @@
  *   2. CLASSIFY each candidate as SUPPORTING or CONTRADICTING the user's claim, structurally:
  *      - polarity: the user's claim and the candidate are compared for negation. If one asserts X and
  *        the other asserts not-X (negation markers differ) for overlapping content, that candidate
- *        CONTRADICTS; otherwise a strong lexical overlap SUPPORTS.
+ *        CONTRADICTS; otherwise a lexical overlap SUPPORTS.
+ *      - support STRENGTH: lexical overlap alone is NOT proof of claim-level agreement. Bag-of-words
+ *        retrieval is order- and role-blind: "McCready authored the toolchain config" and "the config
+ *        authored McCready" share identical tokens, and a short user claim can be a token-subset of a
+ *        verbose stored claim that asserts something different. So a SUPPORTING candidate is graded:
+ *          • 'strong' — near-verbatim agreement: high SYMMETRIC content-token coverage (both the user
+ *            claim and the candidate cover most of each other's content tokens) AND high Jaccard. This
+ *            is essentially the same claim restated; only this can yield the strongest verdict.
+ *          • 'weak'   — on-topic and same-polarity but lexical-only (one is a token-subset of the
+ *            other, or tokens merely co-occur). On-topic and consistent, but NOT proof of the user's
+ *            exact proposition. This can never on its own produce "supported".
  *      - substrate-recorded contradictions: a candidate flagged `contradiction_status =
  *        'has_contradiction'`, or one that is the losing side of an OPEN row in `claim_contradictions`
  *        against another retrieved candidate, contributes to the contradicting set. This is the
  *        substrate's own, human/rule/model-detected contradiction signal — authoritative, not guessed.
  *   3. SCORE + VERDICT: confidence is built from evidence strength (retrieval rank × the candidate's
  *      own extraction confidence) and the AGREEMENT between supporting and contradicting mass:
- *        - strong support, no contradiction      → "supported"
+ *        - STRONG support, no contradiction       → "supported"
+ *        - only WEAK (lexical-only) support, no contradiction → "partially_supported" (on-topic &
+ *          consistent, but not proof of the exact proposition — never over-claimed as "supported")
  *        - support AND contradiction both present → "contradicted" when contradiction dominates,
  *          else "partially_supported" (contested but net-supported)
  *        - contradiction only                     → "contradicted"
  *        - no evidence either way                 → "unverified" (NEVER invented support)
+ *
+ * FALSE-POSITIVE GUARD (the central correctness risk): lexical FTS overlap ≠ semantic support. A
+ * claim that shares vocabulary with stored claims but asserts a DIFFERENT subject/object/value/role
+ * must NOT be reported "supported". Two independent defenses hold the line:
+ *   (a) `plainto_tsquery` ANDs every content lexeme, so a fabricated specific (a wrong version, an
+ *       invented CVE id, a predicate word absent from the corpus) yields NO candidate at all → the
+ *       claim is "unverified", never falsely supported.
+ *   (b) The support-strength gate above: a candidate that merely shares vocabulary (token-subset or
+ *       role-reordering) is 'weak' support and caps the verdict at "partially_supported"; "supported"
+ *       requires near-verbatim claim-level agreement. Under-claiming (partially/unverified) is the
+ *       safe failure mode; a false "supported" would be the substrate asserting something untrue.
  *
  * POINT-IN-TIME (`as_of_date`): evaluated against the bitemporal state as of that date. We only
  * consider claims Intercal had ALREADY RECORDED by then (transaction time: `created_at <= as_of`)
@@ -81,6 +104,21 @@ const CANDIDATE_LIMIT = 50;
 // Below it the FTS match is too weak to assert support/contradiction (avoids overclaiming on a
 // stray shared stop-word). Tuned against the live corpus; exposed as a constant for auditability.
 const MIN_RELEVANCE = 0.02;
+
+// ── Support-strength thresholds (the false-positive guard). ────────────────────────────────────
+// A SUPPORTING candidate is 'strong' (can yield the "supported" verdict) only when it is essentially
+// the SAME claim restated, not merely a claim that shares vocabulary. We require BOTH:
+//   • high SYMMETRIC content-token coverage — the smaller of (user tokens covered by candidate) and
+//     (candidate tokens covered by user). A symmetric floor defeats the two lexical false-positive
+//     shapes that a one-sided subset check misses: a short user claim buried in a verbose candidate
+//     (high user-coverage, low candidate-coverage) and a role-reordered restatement of a long claim.
+//   • high Jaccard — overall agreement of the two content-token sets.
+// Calibrated against the live corpus so genuine near-verbatim restatements clear the bar while
+// token-subset / role-swapped claims that share vocabulary do not. Conservative by design: a true
+// claim that lands just under the bar is reported "partially_supported" (safe under-claim), never a
+// false "supported".
+const STRONG_SUPPORT_MIN_COVERAGE = 0.85;
+const STRONG_SUPPORT_MIN_JACCARD = 0.5;
 
 /** Negation markers used for deterministic polarity comparison (whole-word, lowercased). */
 const NEGATIONS = [
@@ -159,6 +197,14 @@ function contentOverlap(a: Set<string>, b: Set<string>): number {
   return union === 0 ? 0 : inter / union;
 }
 
+/** Directional coverage: fraction of `a`'s content tokens that also appear in `b`, in [0,1]. */
+function coverage(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0) return 0;
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter++;
+  return inter / a.size;
+}
+
 /** A scored, classified evidence candidate (one retrieved claim). */
 export interface Candidate {
   claim: ClaimsTable;
@@ -168,6 +214,13 @@ export interface Candidate {
   overlap: number;
   /** 'support' | 'contradict' — the deterministic classification (see module doc step 2). */
   stance: 'support' | 'contradict';
+  /**
+   * For a SUPPORTING candidate, how strong the agreement is (the false-positive guard, module doc
+   * step 2): 'strong' = near-verbatim claim-level agreement (can yield "supported"); 'weak' =
+   * on-topic & same-polarity but lexical-only (caps the verdict at "partially_supported"). Always
+   * 'weak' for a contradicting candidate (the field is only consulted on the support side).
+   */
+  supportStrength: 'strong' | 'weak';
   /** Per-candidate evidence weight = relevance × extraction confidence, in [0,1]. */
   weight: number;
 }
@@ -207,8 +260,21 @@ export function classify(
   const stance: 'support' | 'contradict' =
     substrateContradicted || (polarityDisagrees && overlap >= 0.2) ? 'contradict' : 'support';
 
+  // Support strength (the false-positive guard): a supporting candidate is 'strong' — i.e. allowed
+  // to drive the "supported" verdict — only when it is essentially the SAME claim restated. We
+  // require SYMMETRIC high coverage (the smaller of user→cand and cand→user content-token coverage)
+  // AND high Jaccard. The symmetric floor defeats both lexical false-positive shapes: a short user
+  // claim that is merely a token-subset of a verbose candidate (high one-way coverage, low the other
+  // way), and a role-reordered restatement (same tokens, different proposition). Anything that only
+  // shares vocabulary is 'weak' and can never alone yield "supported".
+  const minCoverage = Math.min(coverage(userTokens, candTokens), coverage(candTokens, userTokens));
+  const supportStrength: 'strong' | 'weak' =
+    minCoverage >= STRONG_SUPPORT_MIN_COVERAGE && overlap >= STRONG_SUPPORT_MIN_JACCARD
+      ? 'strong'
+      : 'weak';
+
   const weight = relevance * Number(claim.extraction_confidence);
-  return { claim, relevance, overlap, stance, weight };
+  return { claim, relevance, overlap, stance, supportStrength, weight };
 }
 
 /** Source-document provenance needed to build citations (url + publishedAt). */
@@ -251,6 +317,10 @@ export function assembleVerification(input: AssembleVerifyInput): S['ClaimVerifi
 
   const supporting = candidates.filter((c) => c.stance === 'support');
   const contradicting = candidates.filter((c) => c.stance === 'contradict');
+  // Strong support = at least one supporting candidate with near-verbatim claim-level agreement.
+  // Only strong support can yield the "supported" verdict; lexical-only ('weak') support, however
+  // much of it there is, caps at "partially_supported" (the false-positive guard, module doc step 2).
+  const hasStrongSupport = supporting.some((c) => c.supportStrength === 'strong');
 
   // ── Evidence mass: summed weights (relevance × extraction confidence) per side. ───────────────
   const supportMass = supporting.reduce((s, c) => s + c.weight, 0);
@@ -265,7 +335,10 @@ export function assembleVerification(input: AssembleVerifyInput): S['ClaimVerifi
     verdict = 'unverified';
     confidence = 0;
   } else if (contradictMass === 0) {
-    verdict = 'supported';
+    // Support only. "supported" requires genuine claim-level agreement (a strong supporter); if every
+    // supporter merely shares vocabulary (all 'weak'), the evidence is on-topic and consistent but
+    // does NOT prove the user's exact proposition — report "partially_supported", never "supported".
+    verdict = hasStrongSupport ? 'supported' : 'partially_supported';
     // Confidence scales with the strongest supporting weight (a single strong, fully-cited claim is
     // high-confidence; many weak ones are not summed past 1). Bounded to [0,1].
     confidence = Math.min(1, Math.max(...supporting.map((c) => c.weight)));

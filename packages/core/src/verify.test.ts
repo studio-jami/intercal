@@ -72,6 +72,9 @@ function candidate(overrides: Partial<Candidate> & { claim: ClaimsTable }): Cand
     relevance: 0.5,
     overlap: 0.5,
     stance: 'support',
+    // Default to 'strong' so existing verdict tests exercise the "supported" path unless a test
+    // explicitly models lexical-only ('weak') support.
+    supportStrength: 'strong',
     weight: 0.45,
     ...overrides,
   };
@@ -113,6 +116,68 @@ describe('classify — deterministic stance', () => {
   });
 });
 
+// ── classify — support STRENGTH (the false-positive guard) ──────────────────────────────────────
+// Lexical FTS overlap is order- and role-blind. A supporting candidate is graded 'strong' (may yield
+// "supported") only when it is essentially the same claim restated; vocabulary-sharing token-subsets
+// and role-reorderings are 'weak' (cap the verdict at "partially_supported").
+describe('classify — support strength (false-positive guard)', () => {
+  it('a near-verbatim restatement is STRONG support', () => {
+    // User and candidate are essentially the same claim → high symmetric coverage + Jaccard.
+    // Multi-token claim so a single boundary token does not dominate the coverage ratio.
+    const userTokens = new Set([
+      'rustdoc',
+      'does',
+      'emit',
+      'missing_doc_code_examples',
+      'lint',
+      'impl',
+    ]);
+    const ranked: RankedClaim = {
+      claim: claim({
+        id: 's1',
+        normalized_text: 'Rustdoc does emit missing_doc_code_examples lint on impl',
+      }),
+      relevance: 0.9,
+    };
+    const c = classify(userTokens, false, ranked, false);
+    expect(c.stance).toBe('support');
+    expect(c.supportStrength).toBe('strong');
+  });
+
+  it('a role-reordered claim that merely SHARES vocabulary is WEAK support (not strong)', () => {
+    // Real-corpus false-positive shape: "config authored McCready" vs the stored "McCready authored
+    // the toolchain config". Same tokens, reversed roles — must NOT be strong (would over-claim).
+    const userTokens = new Set(['windows', 'configuration', 'authored', 'rust', 'toolchain']);
+    const ranked: RankedClaim = {
+      claim: claim({
+        id: 'fp1',
+        normalized_text:
+          'Mike McCready authored the add Rust toolchain automated configuration Windows.',
+      }),
+      relevance: 0.46,
+    };
+    const c = classify(userTokens, false, ranked, false);
+    expect(c.stance).toBe('support');
+    // The verbose candidate carries content tokens (mike, mccready, add, automated) the user claim
+    // never asserts → candidate→user coverage is low → not strong. Lexical-only → weak.
+    expect(c.supportStrength).toBe('weak');
+  });
+
+  it('a short user claim buried in a verbose candidate is WEAK support', () => {
+    const userTokens = new Set(['rust', 'toolchain', 'install', 'instructions']);
+    const ranked: RankedClaim = {
+      claim: claim({
+        id: 'fp2',
+        normalized_text: '05a7b0a301 adds Rust toolchain general install instructions.',
+      }),
+      relevance: 0.46,
+    };
+    const c = classify(userTokens, false, ranked, false);
+    expect(c.stance).toBe('support');
+    expect(c.supportStrength).toBe('weak');
+  });
+});
+
 // ── assembleVerification — verdicts ─────────────────────────────────────────────────────────────
 describe('assembleVerification — verdict', () => {
   it('no evidence → unverified, zero confidence, no fabricated citations', () => {
@@ -124,15 +189,49 @@ describe('assembleVerification — verdict', () => {
     expect(res.confidence.method).toBe('evidence_match');
   });
 
-  it('support only → supported, cited', () => {
+  it('STRONG support only → supported, cited', () => {
     const res = assembleVerification(
-      input({ candidates: [candidate({ claim: claim({ id: 'c1' }), weight: 0.8 })] }),
+      input({
+        candidates: [
+          candidate({ claim: claim({ id: 'c1' }), supportStrength: 'strong', weight: 0.8 }),
+        ],
+      }),
     );
     expect(res.verdict).toBe('supported');
     expect(res.confidence.score).toBeCloseTo(0.8);
     expect(res.supportingEvidence[0]?.sourceDocumentId).toBe(DOC_A);
     expect(res.supportingEvidence[0]?.url).toBe('https://blog.rust-lang.org/1.96.0');
     expect(res.contradictingEvidence).toEqual([]);
+  });
+
+  it('WEAK (lexical-only) support → partially_supported, NEVER supported (false-positive guard)', () => {
+    // The central correctness case: a candidate that only shares vocabulary (no contradiction) must
+    // NOT be reported "supported". On-topic + consistent but lexical-only → partially_supported.
+    const res = assembleVerification(
+      input({
+        candidates: [
+          candidate({ claim: claim({ id: 'w1' }), supportStrength: 'weak', weight: 0.8 }),
+          candidate({ claim: claim({ id: 'w2' }), supportStrength: 'weak', weight: 0.6 }),
+        ],
+      }),
+    );
+    expect(res.verdict).toBe('partially_supported');
+    expect(res.verdict).not.toBe('supported');
+    // Still cited (the evidence is real and on-topic) and confidence stays honest (highest weight).
+    expect(res.supportingEvidence.length).toBeGreaterThan(0);
+    expect(res.confidence.score).toBeCloseTo(0.8);
+  });
+
+  it('mixed strength (≥1 strong) support only → supported', () => {
+    const res = assembleVerification(
+      input({
+        candidates: [
+          candidate({ claim: claim({ id: 'w1' }), supportStrength: 'weak', weight: 0.5 }),
+          candidate({ claim: claim({ id: 's1' }), supportStrength: 'strong', weight: 0.7 }),
+        ],
+      }),
+    );
+    expect(res.verdict).toBe('supported');
   });
 
   it('contradiction only → contradicted, cited on the contradicting side', () => {

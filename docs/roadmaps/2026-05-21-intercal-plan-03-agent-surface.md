@@ -493,6 +493,27 @@ Implementation tasks:
 - [x] Return verdict, confidence, evidence, contradictions — `ClaimVerificationResponse` with
       `verdict` (supported / partially_supported / contradicted / unverified), `confidence`, and
       `supportingEvidence` + `contradictingEvidence` citation lists; token-budgeted.
+- [x] False-positive-support guard (audit pass 2). Lexical FTS overlap ≠ semantic support, and
+      bag-of-words retrieval is order/role-blind: the pre-fix verdict path classified ANY on-topic,
+      same-polarity, non-substrate-contradicted candidate as full `support`, so the strongest verdict
+      (`supported`) fired on mere vocabulary sharing. Proven against the deployed surface: the
+      role-reordered nonsense claim "Windows configuration authored the Rust toolchain for Mike
+      McCready" returned `verdict: supported` (the stored claim is "Mike McCready authored the add
+      Rust toolchain automated configuration Windows" — subject/object reversed, different
+      proposition, identical tokens). Fix: `classify` now grades supporting candidates by a
+      `supportStrength` — `strong` (near-verbatim claim-level agreement: high SYMMETRIC content-token
+      coverage ≥0.85 AND Jaccard ≥0.5) vs `weak` (lexical-only). `assembleVerification` reserves
+      `supported` for ≥1 strong supporter; weak-only support caps at `partially_supported`. No
+      contract field added; contradiction sensitivity unchanged. Calibration finding: no symmetric
+      overlap metric can separate a role-swap from true support (token-identical), so `supported` is
+      deliberately reserved for near-verbatim agreement — under-claiming (`partially`/`unverified`) is
+      the safe failure mode; a false `supported` is corruption-adjacent. Defense-in-depth: the FTS
+      `plainto_tsquery` AND already sends fabricated specifics (wrong version, invented CVE) to
+      `unverified`. Verified live on production Neon (deleted no branches; read-only): role-reorder &
+      subset-vague → `partially_supported` (was `supported`); fabricated-CVE / wrong-version →
+      `unverified`; positive-of-a-negated-claim → `contradicted`; true-negated → `supported`;
+      point-in-time flips at the transaction-time boundary (pre-record → `unverified`, post-record →
+      `partially_supported`). +5 deterministic tests (`verify.test.ts`, 13 → 18).
 
 Exit criteria:
 

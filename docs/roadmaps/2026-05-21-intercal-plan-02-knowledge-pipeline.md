@@ -375,6 +375,22 @@ Implementation tasks:
   - Error taxonomy exercised live: Vertex 429 → `LlmRateLimitError` (retried, graceful per-chunk
     degrade); Gemini 503 → transient, non-fatal. Verification branch deleted after the run.
 
+- [x] Audit pass (2026-06-05, third fresh context) closed one residual provenance defect the
+  prior passes missed, staying strictly in the W3 lane:
+  - **Repeated-span offset collapse.** When the same span text appeared more than once in a
+    chunk (e.g. an entity named twice), `anchor_span()` returned the *first* occurrence for
+    every copy, so the second-plus mentions were persisted with a fabricated offset pointing at
+    the first hit. Fixed by threading an `occupied` accumulator through `anchor_span()` (exact
+    and whitespace-flexible matchers now skip already-claimed ranges) and having
+    `extract_mentions` claim successive occurrences left-to-right per distinct span text. The
+    claims path was already immune (it slices each evidence quote by the LLM's reported offsets
+    before anchoring). +2 regression tests pin the anchor-advances-to-next-occurrence behaviour
+    and the distinct-offset persistence (247 service tests pass; lint + typecheck clean).
+  - Re-verified LIVE on a throwaway Neon branch (forked from the W2-seeded verification branch)
+    through the real LLM port (Gemini `gemini-2.5-flash`, live HTTP 200): 10 mentions persisted
+    across 2 docs, **10/10 span-reconstruction OK, 0 failures**; idempotent re-run held the
+    per-doc count at 5 (delete+replace, no accumulation). Throwaway branch deleted after the run.
+
 Exit criteria:
 
 - [x] Fixture documents produce expected mentions and claims with source evidence.

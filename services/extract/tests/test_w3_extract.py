@@ -1009,6 +1009,68 @@ def test_anchor_span_picks_occurrence_in_region() -> None:
     assert start >= region_start
 
 
+def test_anchor_span_occupied_advances_to_next_occurrence() -> None:
+    # A span repeated in the region must anchor to successive occurrences when the
+    # caller records each claimed range — never collapse onto the first hit.
+    cleaned = "Sam Altman met Sam Altman."
+    taken: list[tuple[int, int]] = []
+    first = anchor_span(
+        "Sam Altman", cleaned_text=cleaned, region_start=0, region_end=len(cleaned),
+        occupied=taken,
+    )
+    assert first is not None
+    assert first == (0, 10)
+    taken.append(first)
+    second = anchor_span(
+        "Sam Altman", cleaned_text=cleaned, region_start=0, region_end=len(cleaned),
+        occupied=taken,
+    )
+    assert second is not None
+    assert second == (15, 25)
+    assert cleaned[second[0] : second[1]] == "Sam Altman"
+
+
+@pytest.mark.asyncio
+async def test_extract_mentions_repeated_span_distinct_offsets() -> None:
+    """A mention repeated in one chunk persists at distinct, correct offsets.
+
+    Regression: anchor_span used to return the first occurrence for every copy,
+    so two rule matches of the same name collapsed onto identical offsets — the
+    second row carried a fabricated provenance pointer.  Each persisted row must
+    reconstruct its own occurrence from cleaned_text.
+    """
+    cleaned = "Sam Altman met Sam Altman."
+    chunk_id = uuid.uuid4()
+    inserted: list[tuple[str, int, int]] = []
+
+    async def _execute(query: str, *args: Any) -> str:
+        if "INSERT INTO mentions" in query and len(args) >= 5:
+            inserted.append((str(args[2]), int(args[3]), int(args[4])))
+        return "OK"
+
+    pool = _make_pool(
+        doc_row={"id": uuid.UUID(DOC_ID), "cleaned_text": cleaned, "citation_only": False},
+        chunks=[
+            {
+                "id": chunk_id,
+                "chunk_index": 0,
+                "chunk_text": cleaned,
+                "char_offset_start": 0,
+                "char_offset_end": len(cleaned),
+            }
+        ],
+    )
+    pool.execute = _execute
+    await extract_mentions(document_id=DOC_ID, pool=pool, llm=None)
+
+    person_rows = [(s, a, b) for (s, a, b) in inserted if s == "Sam Altman"]
+    assert len(person_rows) == 2, f"expected two distinct mentions, got {person_rows}"
+    offsets = {(a, b) for _s, a, b in person_rows}
+    assert len(offsets) == 2, f"offsets collapsed onto one occurrence: {person_rows}"
+    for s, a, b in person_rows:
+        assert cleaned[a:b] == s
+
+
 @pytest.mark.asyncio
 async def test_extract_mentions_anchors_offsets_across_whitespace_drift() -> None:
     """Document offsets must index cleaned_text even when chunk_text whitespace differs.

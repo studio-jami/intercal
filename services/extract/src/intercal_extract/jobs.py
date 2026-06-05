@@ -233,6 +233,7 @@ def anchor_span(
     cleaned_text: str,
     region_start: int,
     region_end: int,
+    occupied: list[tuple[int, int]] | None = None,
 ) -> tuple[int, int] | None:
     """Locate *span_text* inside ``cleaned_text`` and return its document offsets.
 
@@ -256,6 +257,13 @@ def anchor_span(
     3. Exact, then whitespace-flexible, over the whole document (covers a span the
        LLM lifted across a chunk boundary or lightly paraphrased the spacing of).
 
+    *occupied* — ranges already claimed by earlier candidates *with the same span
+    text*.  When a chunk mentions the same entity twice (``"Sam Altman met Sam
+    Altman"``), each candidate must anchor to a *distinct* occurrence; otherwise
+    both collapse onto the first hit and the second carries a fabricated offset.
+    A match overlapping any occupied range is skipped in favour of the next
+    occurrence.  Callers pass a per-span accumulator and append the returned range.
+
     Returns ``None`` when the span cannot be located.  Callers drop such spans
     rather than persist a fabricated offset — a false provenance pointer is
     corruption, a dropped one is merely a missed candidate.
@@ -267,22 +275,33 @@ def anchor_span(
     text_len = len(cleaned_text)
     lo = max(0, min(region_start, text_len))
     hi = max(lo, min(region_end, text_len))
+    taken = occupied or []
+
+    def _overlaps(start: int, end: int) -> bool:
+        return any(start < o_end and o_start < end for o_start, o_end in taken)
 
     def _verbatim(start: int, end: int) -> tuple[int, int] | None:
         idx = cleaned_text.find(span_text, start, end)
-        if idx == -1:
-            return None
-        return idx, idx + len(span_text)
+        while idx != -1:
+            cand = (idx, idx + len(span_text))
+            if not _overlaps(*cand):
+                return cand
+            idx = cleaned_text.find(span_text, idx + 1, end)
+        return None
 
     def _ws_flexible(start: int, end: int) -> tuple[int, int] | None:
         tokens = [re.escape(t) for t in span_text.split()]
         if not tokens:
             return None
         pattern = re.compile(r"\s+".join(tokens))
-        m = pattern.search(cleaned_text, start, end)
-        if m is None:
-            return None
-        return m.start(), m.end()
+        pos = start
+        while True:
+            m = pattern.search(cleaned_text, pos, end)
+            if m is None:
+                return None
+            if not _overlaps(m.start(), m.end()):
+                return m.start(), m.end()
+            pos = m.start() + 1
 
     # 1 + 2: within the chunk's region (preferred — keeps the span local to its chunk).
     return (
@@ -454,23 +473,38 @@ async def extract_mentions(
             key = (cand["char_offset_start"], cand["char_offset_end"])
             merged[key] = cand  # LLM overwrites rule for the same span
 
-        for cand in merged.values():
+        # Track ranges already claimed per distinct span text within this chunk,
+        # so a mention repeated in the chunk anchors to successive occurrences
+        # rather than collapsing every copy onto the first hit (which would store
+        # a fabricated offset for the later copies).  Sort by reported chunk-local
+        # offset so occurrences are claimed left-to-right, matching their order.
+        anchored_by_text: dict[str, list[tuple[int, int]]] = {}
+        ordered = sorted(
+            merged.values(),
+            key=lambda c: (
+                c["char_offset_start"] if c["char_offset_start"] is not None else 1 << 30
+            ),
+        )
+        for cand in ordered:
             # Anchor the mention's verbatim text within this chunk's region of
             # cleaned_text to obtain document-level offsets.  Naive offset
             # addition drifts because chunk_text whitespace differs from the
             # cleaned_text region (see anchor_span).  The reported char offsets
             # (especially from the LLM) are only used as a fallback locator.
             span_text = str(cand["text_span"]).strip()
+            taken = anchored_by_text.setdefault(span_text, [])
             anchored = anchor_span(
                 span_text,
                 cleaned_text=cleaned_text,
                 region_start=chunk_region_start,
                 region_end=chunk_region_end,
+                occupied=taken,
             )
             if anchored is None:
                 # Could not locate the span verbatim — drop it rather than
                 # persist a fabricated provenance offset.
                 continue
+            taken.append(anchored)
             doc_start, doc_end = anchored
 
             all_candidates.append(

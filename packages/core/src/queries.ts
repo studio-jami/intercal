@@ -2,14 +2,14 @@
  * The shared query-service layer. The REST API and the MCP server both call these — there is
  * one set of query semantics, never two.
  *
- * V1 status: `getEntity`, `getSources`, `getFreshness`, and `searchEvidence` are real reads
- * against the canonical schema. `getDelta` and `verifyClaim` require digest synthesis and
- * contradiction reasoning owned by Plan 03 and raise `NotImplementedError` until then — an
- * honest deferral, not a mock.
+ * V1 status: `getEntity`, `getSources`, `getFreshness`, `searchEvidence`, and `getDelta` are real
+ * reads against the canonical schema. `verifyClaim` requires contradiction reasoning owned by
+ * Plan 03 W6 and raises `NotImplementedError` until then — an honest deferral, not a mock.
  */
 import type { components } from '@intercal/shared';
 import type { Db } from './db/client.js';
 import type { EntitiesTable } from './db/types.js';
+import { buildDelta, type DeltaParams } from './delta.js';
 import { NotFoundError, NotImplementedError } from './errors.js';
 import { mapClaim, mapEntity, mapRelationship, mapSourceDocument } from './mappers.js';
 
@@ -272,17 +272,19 @@ export async function searchEvidence(
   return { hits, total: hits.length };
 }
 
-export interface DeltaParams {
-  topic: string;
-  since_date: string;
-  token_budget?: number;
-  until_date?: string;
-}
+export type { DeltaParams };
 
-export function getDelta(_db: Db, _params: DeltaParams): Promise<S['DeltaResponse']> {
-  throw new NotImplementedError(
-    'Plan 03 — get_delta: token-budgeted digest synthesis over changed claims/entities since a date.',
-  );
+/**
+ * "What changed since my cutoff." Returns a compact, token-bounded, fully-cited digest over the
+ * claims/entities/relationships whose TRANSACTION time (the bitemporal "when Intercal recorded
+ * it" axis) falls in `(since_date, until_date]`, scoped to `topic`.
+ *
+ * The body lives in `delta.ts`; this stays a thin dispatch like the other query functions so the
+ * REST and MCP surfaces call one set of semantics. See `delta.ts` for the design rationale
+ * (deterministic assembly, ranking, token-budget trimming, citation/confidence/freshness).
+ */
+export function getDelta(db: Db, params: DeltaParams): Promise<S['DeltaResponse']> {
+  return buildDelta(db, params);
 }
 
 export interface VerifyClaimParams {

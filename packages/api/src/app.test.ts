@@ -6,8 +6,11 @@
  *
  * These tests use `null as unknown as Db` because every covered path either:
  *   a) fails Ajv validation before reaching the DB, or
- *   b) throws `NotImplementedError` before touching the DB (delta, verify_claim), or
+ *   b) throws `NotImplementedError` before touching the DB (verify_claim, a Plan 03 W6 seam), or
  *   c) is served directly from the app without a DB call (/health, /openapi.json, notFound).
+ *
+ * get_delta is now DB-backed (Plan 03 W5); its success path is covered by the live Neon
+ * integration verification, so only its validation (400) cases live here.
  *
  * Integration tests against a live DB belong in a separate fixture; do not add them here.
  */
@@ -141,19 +144,8 @@ describe('GET /v1/delta', () => {
     expect(body.code).toBe('invalid_request');
   });
 
-  it('501 when params are valid (body deferred to Plan 03 W5)', async () => {
-    const { status, body } = await get('/v1/delta?topic=rust&since_date=2026-01-01T00:00:00Z');
-    expect(status).toBe(501);
-    expect(body.code).toBe('not_implemented');
-  });
-
-  it('501 with optional token_budget param', async () => {
-    const { status, body } = await get(
-      '/v1/delta?topic=rust&since_date=2026-01-01T00:00:00Z&token_budget=500',
-    );
-    expect(status).toBe(501);
-    expect(body.code).toBe('not_implemented');
-  });
+  // The success path (valid params → 200 token-budgeted digest) is DB-backed (Plan 03 W5) and is
+  // covered by the live Neon integration verification, not this validation-only suite (null DB).
 
   it('400 when token_budget is not an integer', async () => {
     const { status, body } = await get(
@@ -396,7 +388,9 @@ describe('error shape', () => {
   });
 
   it('501 errors include code and message', async () => {
-    const { body } = await get('/v1/delta?topic=rust&since_date=2026-01-01T00:00:00Z');
+    // verify_claim is still the W6 deferred seam (raises NotImplementedError before the DB);
+    // get_delta is now DB-backed (W5), so it is no longer a null-DB 501 path.
+    const { body } = await get('/v1/claims/verify?claim_text=Rust+has+version+1.96.0');
     expect(body).toHaveProperty('code', 'not_implemented');
     expect(body).toHaveProperty('message');
     expect(typeof body.message).toBe('string');

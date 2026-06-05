@@ -19,12 +19,20 @@ tool input schemas. No hand-written, drift-prone duplicate.
 | `get_sources` | `GET /v1/sources` | `SourcesQuery` | implemented (read) |
 | `get_freshness` | `GET /v1/freshness` | `FreshnessQuery` | implemented (read) |
 | `search_evidence` | `GET /v1/evidence` | `EvidenceQuery` | implemented (read) |
-| `get_delta` | `GET /v1/delta` | `DeltaQuery` | Plan 03 (digest synthesis) |
-| `verify_claim` | `GET /v1/claims/verify` | `VerifyClaimQuery` | Plan 03 (evidence + contradiction reasoning) |
+| `get_delta` | `GET /v1/delta` | `DeltaQuery` | implemented (token-budgeted cited digest, Plan 03 W5) |
+| `verify_claim` | `GET /v1/claims/verify` | `VerifyClaimQuery` | Plan 03 W6 (evidence + contradiction reasoning) |
 
-The two deferred tools return a `not_implemented` error today (HTTP 501 / MCP `isError`) with a
+`verify_claim` still returns a `not_implemented` error today (HTTP 501 / MCP `isError`) with a
 message naming the owning plan — an honest deferral, not a stub returning fake data. Responses
 carry citations, confidence, and freshness per the foundation report.
+
+`get_delta` returns a deterministic, fully-cited, token-bounded digest of what changed about a
+topic since a cutoff: changes are found by **transaction time** (claims `created_at`, relationships
+`recorded_at`, entities `last_updated_at`) in `(since, until]`, scoped by resolved entity or claim
+text, ranked most-recent/most-confident first, and trimmed to `token_budget` with an
+included/omitted + coverage report. Every digest line traces to a source document; no LLM is in the
+path (a provider-backed prose-polish seam behind `LlmPort` is deferred and may only rephrase
+already-cited content).
 
 Later tools (`get_relationships`, `get_timeline`, `get_briefing`, `subscribe`, `submit_source`,
 `submit_correction`, `propose_merge`, `export_subgraph`) are added in later plans against the
@@ -49,5 +57,5 @@ same contract.
 All errors use the contract `ApiError` (`code`, `message`, `details?`). `@intercal/core` maps
 domain errors to codes: `not_found` → 404, `invalid_request` → 400, `not_implemented` → 501.
 MCP has no HTTP status, so the same codes are surfaced on the tool result: `isError: true` with
-`structuredContent.code` (and the `code: message` text), keeping the deferred `get_delta` /
-`verify_claim` seams (`not_implemented`) clearly distinguishable from real failures.
+`structuredContent.code` (and the `code: message` text), keeping the deferred `verify_claim` seam
+(`not_implemented`) clearly distinguishable from real failures.

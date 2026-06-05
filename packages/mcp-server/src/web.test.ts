@@ -3,8 +3,8 @@
  * returned Web `Response` is a valid JSON-RPC MCP response. This is the exact path the Vercel
  * `/api/mcp` route handler uses, so it proves the serverless mount works without a live server.
  *
- * Null DB: `initialize` and `tools/list` never query the DB, and `get_delta` raises
- * `NotImplementedError` before touching it.
+ * Null DB: `initialize` and `tools/list` never query the DB, and `verify_claim` (a Plan 03 W6
+ * deferred seam) raises `NotImplementedError` before touching it.
  */
 
 import type { Db } from '@intercal/core';
@@ -83,7 +83,7 @@ describe('handleMcpRequest — tools/list', () => {
 });
 
 describe('handleMcpRequest — tools/call deferred seam', () => {
-  it('get_delta call yields a not_implemented tool error result', async () => {
+  it('verify_claim call yields a not_implemented tool error result', async () => {
     const res = await handleMcpRequest(
       nullDb,
       mcpRequest({
@@ -91,8 +91,8 @@ describe('handleMcpRequest — tools/call deferred seam', () => {
         id: 3,
         method: 'tools/call',
         params: {
-          name: 'get_delta',
-          arguments: { topic: 'rust', since_date: '2026-01-01T00:00:00Z' },
+          name: 'verify_claim',
+          arguments: { claim_text: 'Rust has version 1.96.0' },
         },
       }),
     );

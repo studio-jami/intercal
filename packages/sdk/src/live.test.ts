@@ -34,12 +34,21 @@ describe.skipIf(!LIVE)('IntercalClient — live V1 surface', () => {
     expect(res.target).toBeTruthy();
   });
 
-  it('getDelta surfaces the deferred 501 as a typed error', async () => {
-    const err = await client
-      .getDelta({ topic: 'rust', since_date: '2024-01-01T00:00:00Z' })
-      .catch((e) => e);
-    expect(err).toBeInstanceOf(IntercalNotImplementedError);
-    expect(err.status).toBe(501);
+  it('getDelta returns a token-budgeted, cited change digest (Plan 03 W5, live)', async () => {
+    const res = await client.getDelta({
+      topic: 'rust',
+      since_date: '2026-06-01T00:00:00Z',
+      token_budget: 600,
+    });
+    expect(res.topic).toBe('rust');
+    expect(res.summary.tokenBudget).toBe(600);
+    // Token-bound: the digest content fits the requested budget (~4 chars/token heuristic).
+    expect(Math.ceil(res.summary.content.length / 4)).toBeLessThanOrEqual(600);
+    // Cited: every changed claim carries evidence, and the digest rolls up source citations.
+    expect(res.changedClaims.length).toBeGreaterThan(0);
+    expect(res.changedClaims.every((c) => c.evidence.length > 0)).toBe(true);
+    expect(res.summary.citations.length).toBeGreaterThan(0);
+    expect(res.confidence.method).toBe('aggregate_extraction');
   });
 
   it('verifyClaim surfaces the deferred 501 as a typed error', async () => {

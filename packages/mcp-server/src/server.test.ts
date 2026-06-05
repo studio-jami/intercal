@@ -3,10 +3,10 @@
  * transport pair. This exercises the actual JSON-RPC wire path (initialize → tools/list →
  * tools/call), not the handlers in isolation.
  *
- * A null DB is used: the covered tool calls (`get_delta`, `verify_claim`) raise
- * `NotImplementedError` before touching the DB, and `tools/list` never queries. Live DB-backed
- * tool calls (`get_entity`, `search_evidence`, …) are covered by the integration verification
- * against Neon, not here.
+ * A null DB is used: the covered tool call (`verify_claim`, still a Plan 03 W6 deferred seam)
+ * raises `NotImplementedError` before touching the DB, and `tools/list` never queries. DB-backed
+ * tool calls (`get_entity`, `search_evidence`, `get_delta`, …) are covered by the integration
+ * verification against Neon, not here.
  */
 
 import type { Db } from '@intercal/core';
@@ -61,20 +61,7 @@ describe('tools/list', () => {
   });
 });
 
-describe('tools/call — deferred seams (Plan 03 W5/W6)', () => {
-  it('get_delta returns an isError result carrying the not_implemented code', async () => {
-    const client = await connectClient();
-    const res = await client.callTool({
-      name: 'get_delta',
-      arguments: { topic: 'rust', since_date: '2026-01-01T00:00:00Z' },
-    });
-    expect(res.isError).toBe(true);
-    expect(res.structuredContent).toMatchObject({ code: 'not_implemented' });
-    const text = (res.content as Array<{ type: string; text: string }>)[0]?.text ?? '';
-    expect(text).toMatch(/not_implemented/);
-    await client.close();
-  });
-
+describe('tools/call — deferred seam (Plan 03 W6)', () => {
   it('verify_claim returns an isError result carrying the not_implemented code', async () => {
     const client = await connectClient();
     const res = await client.callTool({

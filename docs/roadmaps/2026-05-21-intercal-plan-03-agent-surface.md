@@ -2,7 +2,7 @@
 
 Date: 2026-05-21
 Aligned: 2026-06-05 to live stack (W1 complete)
-Status: [~] Active — W1–W2 complete (REST surface hardened), W3–W8 pending
+Status: [~] Active — W1–W5 complete (W5 = get_delta digest, live on Neon), W6–W8 pending
 Source reports: `docs/research/2026-05-21-intercal-foundation-report.md`, `docs/research/2026-06-04-intercal-revisit-audit-and-dev-environment.md`, `docs/architecture/mcp-api.md`, `docs/architecture/provider-boundaries.md`; decisions `docs/decisions/0001-foundation-stack.md`, `docs/decisions/0002-final-hosting-topology.md`
 Owner: Main orchestration agent
 Surface: query services, REST API, MCP server, SDK, token-budgeted digests, evidence search, claim verification, freshness
@@ -232,9 +232,8 @@ Primary areas:
 
 Implementation tasks:
 
-- [~] `get_delta` body — deferred to W5 (digest synthesis). The tool is registered; calling it
-      returns a clear `not_implemented` MCP tool error (structuredContent `code:not_implemented`),
-      not a fake result. Body is the W5 deliverable.
+- [x] `get_delta` body — implemented in W5. The tool now returns a real token-budgeted, cited
+      digest (the `getDelta` core query); verified against production Neon.
 - [~] `verify_claim` body — deferred to W6 (contradiction reasoning). Same honest-seam treatment.
 - [x] Confirmed `get_entity`, `search_evidence`, `get_sources`, `get_freshness` are wired and
       contract-valid — verified by a live MCP client against production Neon (real entity + facts
@@ -332,10 +331,13 @@ Suggested verification:
 
 Goal: Assemble budgeted responses without losing citations or confidence.
 
+Status: [x] Complete (2026-06-05) — `getDelta` implemented as a deterministic, fully-cited,
+token-bounded digest in `packages/core`; verified live against production Neon.
+
 Depends on:
 
-- [ ] Workstream 1 query services.
-- [ ] Plan 02 provider abstraction.
+- [x] Workstream 1 query services.
+- [x] Plan 02 provider abstraction — N/A for the deterministic path (see decision below).
 
 Enables:
 
@@ -348,26 +350,51 @@ Repo guidance:
 
 Primary areas:
 
-- `services/synthesize`
-- `packages/api`
-- `packages/mcp-server`
+- `packages/core` (`delta.ts` — digest assembly; `queries.ts` — dispatch)
+- `packages/api`, `packages/mcp-server` (already wired to `getDelta`; now return real data)
+
+Decision — deterministic, not LLM-synthesised:
+
+- The contract's `DeltaResponse` carries the change set **structurally** (`changedClaims: Claim[]`
+  each with `evidence`+`confidence`, `changedEntities: EntitySummary[]`, and a `summary: Digest`
+  whose `content` is a deterministic prose lede + citation-numbered change lines). Every asserted
+  line is built from a real row and is traceable to a source document — nothing to fabricate.
+- No LLM client exists in `packages/core`; adding provider logic there would cross the port
+  boundary (AGENTS.md hard rule). Per the W5 steering, a correct deterministic fully-cited digest
+  is preferred over an uncited LLM blob. Optional provider-backed prose polishing remains a clean
+  later seam behind `LlmPort` that may only rephrase already-cited content — explicitly deferred.
 
 Implementation tasks:
 
-- [ ] Add compact, standard, expanded, and full/evidence-rich budget profiles.
-- [ ] Add digest cache and invalidation rules.
-- [ ] Add provenance-preserving summary assembly.
-- [ ] Add deterministic fixture digest outputs.
-- [ ] Add provider-backed synthesis when configured.
+- [x] Provenance-preserving summary assembly (`assembleDigest`, pure/DB-free): rank → token-budget
+      trim → cite → score → render. Lives in `packages/core/src/delta.ts`.
+- [x] Token-budget honouring: `token_budget` (clamped to [200, 8000], default 1500) bounds the
+      digest; ranked most-recent → most-confident → most-evidence first; reports included/omitted
+      and a coverage fraction so a trimmed answer is never silently lossy. (~4 chars/token estimate,
+      deterministic, provider-free — replaces the static "profiles" idea with a continuous budget.)
+- [x] Transaction-time windowing `(since, until]`: claims via `created_at`, relationships via
+      `recorded_at`, changed entities via `last_updated_at`. Topic scope = resolved entity (name/
+      alias) OR text match over claim columns, so unresolved topics still surface their changes.
+- [x] Citations enriched with `url`+`publishedAt`; confidence = mean extraction confidence labelled
+      `aggregate_extraction`; freshness = newest transaction time + coverage.
+- [x] Deterministic unit tests (`delta.test.ts`, 10) over the pure assembler: citations, budget
+      bound + omission reporting, ranking, confidence/freshness, changed entities/relationships.
+- [~] Digest cache + invalidation — deferred (Plan 04 / cache port); the response is a pure
+      function of the bitemporal data, so caching is a transparent later optimisation, not faked.
+- [~] Provider-backed synthesis — deferred behind `LlmPort` (see decision above).
 
 Exit criteria:
 
-- [ ] Token-budget tests prove responses fit budget and preserve evidence references.
+- [x] Token-budget tests prove responses fit budget and preserve evidence references
+      (`delta.test.ts`); confirmed live: `topic=rust since=2026-06-01 budget=120→200` trims 12→4
+      changes (143 est tokens ≤ 200), coverage 0.33, "8 omitted"; `budget=600` fits all 12 cited
+      changes; `since` after ingest → empty, no fabrication.
 
 Suggested verification:
 
-- `pnpm test -- digest`
-- `uv run pytest services/synthesize/tests`
+- `pnpm --filter @intercal/core test`
+- Live REST `/api/v1/delta?topic=rust&since_date=2026-06-01T00:00:00Z` / MCP `get_delta`
+  (post-deploy; pre-deploy the same `getDelta` is verified against production Neon directly).
 
 ## Workstream 6: Claim Verification
 
@@ -506,7 +533,7 @@ Suggested verification:
 
 - [ ] REST and MCP expose all V1 tools/endpoints.
 - [ ] SDK examples run.
-- [ ] Digests are budgeted and cited.
+- [x] Digests are budgeted and cited (W5 `getDelta`; live on Neon).
 - [ ] Claim verification handles support, contradiction, and uncertainty.
 - [ ] Freshness/coverage is visible in responses.
 - [ ] Agent fixture passes through REST and MCP.

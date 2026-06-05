@@ -72,8 +72,9 @@ export function buildMcpServer(db: Db): Server {
       capabilities: { tools: {} },
       instructions:
         'Intercal is a provenance-backed temporal knowledge substrate. Tools return cited, ' +
-        'freshness-aware facts traced to source evidence. get_delta and verify_claim are ' +
-        'deferred (return a not_implemented error) until their synthesis bodies ship.',
+        'freshness-aware facts traced to source evidence. get_delta returns a token-budgeted, ' +
+        'cited digest of what changed about a topic since a date. verify_claim is deferred ' +
+        '(returns a not_implemented error) until its contradiction-reasoning body ships.',
     },
   );
 

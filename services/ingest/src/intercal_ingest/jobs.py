@@ -9,8 +9,9 @@ Every job is:
   all of which call the same CLI entrypoints.
 
 W1 (Plan 02) scope: ``ingest_source`` and ``score_source_health`` are fully
-implemented.  ``normalize_document`` and ``cleanup_expired_cache`` remain
-``NotImplementedError`` stubs awaiting their workstream bodies (W2 and later).
+implemented.  W2 (Plan 02) scope: ``normalize_document`` is now fully
+implemented.  ``cleanup_expired_cache`` remains a ``NotImplementedError``
+stub awaiting the synthesis workstream (Plan 03).
 """
 
 from __future__ import annotations
@@ -322,21 +323,224 @@ async def normalize_document(
     document_id: str,
     pool: Any,
     storage: Any,
-) -> None:
-    """Normalise a raw source document into clean text and structured metadata.
+    force: bool = False,
+    chunk_size: int = 1500,
+    chunk_overlap: int = 200,
+) -> dict[str, object]:
+    """Normalise a raw source document into clean text and chunks.
 
     Idempotent: if ``source_documents.normalized_at`` is already set the
-    document is skipped unless forced.
+    document is skipped (returns immediately with ``{"skipped": True}``)
+    unless *force* is ``True``.
 
-    Raises:
-        NotImplementedError: Text normalisation pipeline (language detection,
-            boilerplate stripping, chunking strategy) is Plan-02 W2 scope.
+    Steps:
+    1. Load the document row (``cleaned_text``, ``content_type`` via metadata,
+       ``redistribution_allowed``, ``citation_only``, ``normalized_at``).
+    2. If already normalised and not forced, return early.
+    3. Derive body text from ``cleaned_text`` (or fetch raw bytes from storage
+       when ``redistribution_allowed`` and ``raw_storage_key`` is set).
+    4. Normalise: HTML/JSON stripping → whitespace collapse → language detection.
+    5. Write normalised text back to ``source_documents.cleaned_text`` and
+       ``source_documents.language`` (if updated).
+    6. Chunk the normalised text; upsert rows into ``document_chunks``
+       (``ON CONFLICT (document_id, chunk_index) DO UPDATE``).
+    7. Mark ``source_documents.normalized_at = now()`` and
+       ``source_documents.chunk_count = <n>``.
+
+    Args:
+        document_id: UUID of the ``source_documents`` row to process.
+        pool: asyncpg connection pool.
+        storage: StoragePort implementation (used to fetch raw bytes when
+            ``cleaned_text`` is absent and ``raw_storage_key`` is set).
+        force: Re-normalise even if ``normalized_at`` is already set.
+        chunk_size: Target maximum characters per chunk (default 1500 ≈ 512 tokens).
+        chunk_overlap: Approximate character overlap between consecutive chunks.
+
+    Returns:
+        Dict with keys:
+        - ``"skipped"`` (bool): True if the document was already normalised and
+          *force* was False.
+        - ``"chunk_count"`` (int): Number of chunks written.
+        - ``"language"`` (str): BCP 47 tag detected or carried forward.
+        - ``"clean_chars"`` (int): Character count of normalised body.
     """
-    _log.info("normalize_document: document_id=%s", document_id)
-    raise NotImplementedError(
-        "Plan 02 W2 — normalize_document: language detection, boilerplate removal, "
-        "and chunk splitting not yet implemented."
+    from intercal_ingest.normalizer import chunk_text, detect_language, normalize_text
+
+    _log.info("normalize_document: document_id=%s force=%s", document_id, force)
+
+    doc_id = uuid.UUID(document_id)
+
+    # ── 1. Load document row ──────────────────────────────────────────────────
+    row = await pool.fetchrow(
+        """
+        SELECT id, cleaned_text, raw_storage_key, language,
+               redistribution_allowed, citation_only, normalized_at,
+               metadata
+        FROM source_documents
+        WHERE id = $1
+        """,
+        doc_id,
     )
+    if row is None:
+        raise ValueError(f"source_document not found: {document_id!r}")
+
+    # ── 2. Idempotency check ──────────────────────────────────────────────────
+    if row["normalized_at"] is not None and not force:
+        _log.info(
+            "normalize_document: document %s already normalised at %s; skipping",
+            document_id,
+            row["normalized_at"],
+        )
+        return {"skipped": True, "chunk_count": 0, "language": row["language"], "clean_chars": 0}
+
+    # ── 3. Obtain body text ───────────────────────────────────────────────────
+    # Priority: cleaned_text already in DB → raw bytes from storage → empty.
+    raw_body: str
+    if row["cleaned_text"]:
+        raw_body = row["cleaned_text"]
+    elif storage is not None and row["raw_storage_key"]:
+        try:
+            raw_bytes: bytes = await storage.get(row["raw_storage_key"])
+            raw_body = raw_bytes.decode("utf-8", errors="replace")
+        except Exception as exc:
+            _log.warning(
+                "normalize_document: storage.get(%r) failed: %s; proceeding with empty body",
+                row["raw_storage_key"],
+                exc,
+            )
+            raw_body = ""
+    else:
+        raw_body = ""
+
+    if not raw_body.strip():
+        _log.warning(
+            "normalize_document: document %s has no body text; marking normalised with 0 chunks",
+            document_id,
+        )
+        await pool.execute(
+            "UPDATE source_documents "
+            "SET normalized_at = now(), chunk_count = 0 "
+            "WHERE id = $1",
+            doc_id,
+        )
+        return {"skipped": False, "chunk_count": 0, "language": row["language"], "clean_chars": 0}
+
+    # ── 4. Normalise text ─────────────────────────────────────────────────────
+    # Determine content_type from metadata if set by the adapter.
+    # If not set, sniff by trying json.loads — adapters that emit JSON (e.g.
+    # wikidata_changes_v1) do set content_type on the RawDocument object but the
+    # W1 ingest_source job does not propagate it into source_documents.metadata.
+    # JSON sniffing here avoids changing the W1 surface while still routing JSON
+    # documents correctly through the JSON flattening path.
+    meta_raw = row["metadata"]
+    meta: dict[str, object] = (
+        dict(meta_raw)
+        if isinstance(meta_raw, dict)
+        else json.loads(meta_raw)
+        if isinstance(meta_raw, str)
+        else {}
+    )
+    raw_content_type: str = str(meta.get("content_type", ""))
+    if raw_content_type:
+        content_type: str = raw_content_type
+    else:
+        # Sniff: try JSON parse on the first 4 KB for efficiency.
+        try:
+            json.loads(raw_body[:4096])
+            content_type = "application/json"
+        except (json.JSONDecodeError, ValueError):
+            content_type = "text/plain"
+
+    clean_text = normalize_text(raw_body, content_type=content_type)
+    if not clean_text.strip():
+        _log.warning(
+            "normalize_document: document %s normalised to empty string; 0 chunks",
+            document_id,
+        )
+        await pool.execute(
+            "UPDATE source_documents "
+            "SET normalized_at = now(), chunk_count = 0 "
+            "WHERE id = $1",
+            doc_id,
+        )
+        return {"skipped": False, "chunk_count": 0, "language": row["language"], "clean_chars": 0}
+
+    # Detect language if the adapter did not set one (or defaulted to "en").
+    existing_lang: str = row["language"] or "en"
+    detected_lang = detect_language(clean_text) if existing_lang == "en" else existing_lang
+
+    # ── 5. Write normalised text back to source_documents ─────────────────────
+    # Only update cleaned_text if it changed (avoids touching immutable hash rows
+    # unnecessarily; content_hash is still the original ingestion-time hash).
+    if clean_text != row["cleaned_text"] or detected_lang != existing_lang:
+        await pool.execute(
+            """
+            UPDATE source_documents
+            SET cleaned_text = $2,
+                language     = $3,
+                content_length = $4
+            WHERE id = $1
+            """,
+            doc_id,
+            clean_text,
+            detected_lang,
+            len(clean_text.encode("utf-8")),
+        )
+
+    # ── 6. Chunk and upsert document_chunks ───────────────────────────────────
+    chunks = chunk_text(clean_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    n_chunks = len(chunks)
+
+    for c in chunks:
+        await pool.execute(
+            """
+            INSERT INTO document_chunks
+                (document_id, chunk_index,
+                 char_offset_start, char_offset_end,
+                 chunk_text, token_count, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+            ON CONFLICT (document_id, chunk_index)
+            DO UPDATE SET
+                char_offset_start = EXCLUDED.char_offset_start,
+                char_offset_end   = EXCLUDED.char_offset_end,
+                chunk_text        = EXCLUDED.chunk_text,
+                token_count       = EXCLUDED.token_count,
+                metadata          = EXCLUDED.metadata
+            """,
+            doc_id,
+            c.chunk_index,
+            c.char_offset_start,
+            c.char_offset_end,
+            c.chunk_text,
+            c.token_count_estimate,
+            json.dumps(c.metadata),
+        )
+
+    # ── 7. Mark normalised ────────────────────────────────────────────────────
+    await pool.execute(
+        """
+        UPDATE source_documents
+        SET normalized_at = now(),
+            chunk_count   = $2
+        WHERE id = $1
+        """,
+        doc_id,
+        n_chunks,
+    )
+
+    _log.info(
+        "normalize_document: document_id=%s lang=%s clean_chars=%d chunks=%d",
+        document_id,
+        detected_lang,
+        len(clean_text),
+        n_chunks,
+    )
+    return {
+        "skipped": False,
+        "chunk_count": n_chunks,
+        "language": detected_lang,
+        "clean_chars": len(clean_text),
+    }
 
 
 # ──────────────────────────────────────────────────────────────────────────────

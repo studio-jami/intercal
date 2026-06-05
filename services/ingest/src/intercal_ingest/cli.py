@@ -88,15 +88,32 @@ def normalize_document_cmd(
     document_id: str = typer.Option(
         ..., "--document-id", help="UUID of the document to normalise."
     ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Re-normalise even if the document already has a normalized_at timestamp.",
+    ),
+    chunk_size: int = typer.Option(
+        1500,
+        "--chunk-size",
+        help="Target maximum characters per chunk (default 1500 ≈ 512 tokens).",
+    ),
+    chunk_overlap: int = typer.Option(
+        200,
+        "--chunk-overlap",
+        help="Approximate character overlap between consecutive chunks.",
+    ),
 ) -> None:
     """Normalise a raw source document into clean text and chunks.
 
-    Idempotent — already-normalised documents are skipped.
+    Idempotent — already-normalised documents are skipped unless --force is set.
     """
     cfg = _get_settings()
     _setup_logging(cfg.log_level)
 
     async def _run() -> None:
+        import sys
+
         from intercal_shared.db import get_pool
         from intercal_shared.factory import make_storage
 
@@ -104,7 +121,22 @@ def normalize_document_cmd(
 
         pool = await get_pool(cfg.database_url)
         storage = make_storage(cfg)
-        await normalize_document(document_id=document_id, pool=pool, storage=storage)
+        result = await normalize_document(
+            document_id=document_id,
+            pool=pool,
+            storage=storage,
+            force=force,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
+        if result.get("skipped"):
+            print(f"Skipped (already normalised): document_id={document_id}", file=sys.stderr)
+        else:
+            print(
+                f"Done: chunks={result['chunk_count']} lang={result['language']} "
+                f"clean_chars={result['clean_chars']}",
+                file=sys.stderr,
+            )
 
     asyncio.run(_run())
 

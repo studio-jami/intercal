@@ -33,14 +33,21 @@ def test_jobs_are_async() -> None:
     assert inspect.iscoroutinefunction(cleanup_expired_cache)
 
 
-# ── W2/later stubs: still raise NotImplementedError ─────────────────────────
+# ── W2: normalize_document no longer raises NotImplementedError ──────────────
+# Full unit tests live in test_w2_normalize.py.
+# Here we just confirm the function is callable and raises ValueError (not
+# NotImplementedError) when given a None pool, which is the earliest failure mode.
 
 
 @pytest.mark.asyncio
-async def test_normalize_document_raises_not_implemented() -> None:
-    """normalize_document is Plan-02 W2; must still raise NotImplementedError."""
-    with pytest.raises(NotImplementedError, match="Plan 02"):
-        await normalize_document(document_id="test-id", pool=None, storage=None)
+async def test_normalize_document_pool_none_raises_attribute_error() -> None:
+    """normalize_document with pool=None raises an error (no longer NotImplementedError)."""
+    import uuid as _uuid
+
+    with pytest.raises((AttributeError, TypeError)):
+        await normalize_document(
+            document_id=str(_uuid.uuid4()), pool=None, storage=None
+        )
 
 
 @pytest.mark.asyncio

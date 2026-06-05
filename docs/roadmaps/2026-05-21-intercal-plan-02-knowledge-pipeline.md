@@ -2,7 +2,7 @@
 
 Date: 2026-05-21
 Aligned: 2026-06-04 to live stack
-Status: [~] Active — W1 complete (2026-06-04)
+Status: [~] Active — W1 complete (2026-06-04); W2 complete (2026-06-05)
 Source reports: `docs/research/2026-05-21-intercal-foundation-report.md`, `docs/research/2026-06-04-intercal-revisit-audit-and-dev-environment.md`, `docs/architecture/pipeline.md`, `docs/architecture/data-model.md`; decisions `docs/decisions/0001-foundation-stack.md`, `docs/decisions/0002-final-hosting-topology.md`
 Owner: Main orchestration agent
 Surface: ingestion, normalization, extraction, providers, embeddings, entity resolution, relationships, fact versions, orchestration
@@ -86,7 +86,7 @@ Depends on:
 
 Enables:
 
-- [ ] Workstream 2 document normalization.
+- [x] Workstream 2 document normalization.
 
 Repo guidance:
 
@@ -155,9 +155,11 @@ Suggested verification:
 
 Goal: Persist clean source documents and chunks with deterministic hashes.
 
+**Status: [x] Complete — 2026-06-05**
+
 Depends on:
 
-- [ ] Workstream 1 source adapter outputs.
+- [x] Workstream 1 source adapter outputs.
 
 Enables:
 
@@ -176,18 +178,56 @@ Primary areas:
 
 Implementation tasks:
 
-- [ ] Add URL, title, content, language, and metadata normalization.
-- [ ] Add hash-based document and chunk dedupe.
-- [ ] Add object storage abstraction for raw content where allowed.
-- [ ] Add source-policy enforcement tests.
+- [x] Add `db/migrations/0023_source_documents_normalized.sql` — adds `normalized_at
+  timestamptz` and `chunk_count integer` columns to `source_documents`; partial index
+  on `normalized_at IS NULL` for efficient queue scans. Idempotent (`ADD COLUMN IF
+  NOT EXISTS`).
+- [x] Add `services/ingest/src/intercal_ingest/normalizer.py` — pure-Python,
+  deterministic, no external service calls:
+  - `normalize_text(raw, content_type)` — routes JSON (stdlib flattener), HTML
+    (stdlib `html.parser` stripper skipping script/style), plain/markdown (entity
+    unescape), or unknown (JSON probe then HTML fallback) through whitespace collapse
+    and Unicode NFC normalisation.
+  - `detect_language(text)` — Unicode-block frequency heuristic (BCP 47); correct
+    for English-dominant W1 seed (Wikidata/GitHub); returns `"en"` as safe default;
+    swappable via port when multi-lingual coverage matters.
+  - `chunk_text(text, chunk_size, chunk_overlap)` — sentence-boundary-aware sliding
+    window; deterministic; merges trailing chunks shorter than `MIN_CHUNK_SIZE`;
+    emits `ChunkResult` with offsets and token estimates.
+- [x] Implement `normalize_document` job body in `services/ingest/src/intercal_ingest/jobs.py`:
+  - Idempotent: skips if `normalized_at IS NOT NULL` (unless `force=True`).
+  - Derives body from `cleaned_text` or falls back to raw storage bytes.
+  - Content-type routing: checks `metadata.content_type` first, then sniffs JSON,
+    falls back to plain text.
+  - Writes normalised text + detected language + byte length back to
+    `source_documents`.
+  - Upserts `document_chunks` rows with `ON CONFLICT (document_id, chunk_index) DO
+    UPDATE` for safe re-runs.
+  - Marks `normalized_at = now()` and `chunk_count = <n>`.
+- [x] Add `normalize-document` CLI command to `services/ingest/src/intercal_ingest/cli.py`
+  with `--document-id`, `--force`, `--chunk-size`, `--chunk-overlap` options.
+- [x] 43 unit tests in `services/ingest/tests/test_w2_normalize.py` covering
+  `normalize_text` (HTML, JSON, plain, markdown, edge cases), `detect_language`
+  (English, Chinese, Arabic, Cyrillic, short/empty text), `chunk_text` (empty,
+  single, multi-chunk, offsets, determinism, index uniqueness, merge of short
+  trailing chunks), and `normalize_document` job (fake pool: missing row, skip,
+  force, empty body, plain text, HTML, JSON, language detection, storage fetch,
+  storage failure graceful, idempotent re-run, JSON sniff without explicit
+  content_type). All 114 service tests pass.
+- [x] Add `scripts/dev/verify_w2_normalize.py` integration helper for live Neon runs.
+- [x] Verified LIVE against Neon branch `br-still-water-ajmss6b6`: normalized all 5
+  W1-ingested Wikidata documents (Arabic and English), language detection (ar/en
+  correct), chunks written to `document_chunks`, `normalized_at` + `chunk_count` set.
+  Idempotent re-run: all 5 skipped, existing chunk rows preserved. Both passes: PASS.
 
 Exit criteria:
 
-- [ ] Fixture and real source documents produce stable document/chunk records.
+- [x] Fixture and real source documents produce stable document/chunk records.
 
 Suggested verification:
 
-- `uv run pytest services/ingest/tests services/extract/tests`
+- `pnpm py:lint && pnpm py:typecheck && pnpm py:test`
+- `DATABASE_URL=<neon-branch> uv run python scripts/dev/verify_w2_normalize.py`
 
 ## Workstream 3: Mention And Claim Extraction
 

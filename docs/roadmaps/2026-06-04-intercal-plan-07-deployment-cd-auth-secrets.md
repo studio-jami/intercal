@@ -50,7 +50,7 @@ and MCP authentication, backups/restore proof, and the budget-enforcement hooks 
 
 - Fan-out + deploy scripts live under `scripts/ops/`; never echo secret values.
 - Auth lives behind the existing ports/middleware in `packages/api` + `packages/mcp-server`.
-- Cloud Run images are the existing `packages/mcp-server/Dockerfile` and `Dockerfile.workers`
+- Cloud Run images are the existing `docker/mcp.Dockerfile` and `docker/workers.Dockerfile`
   (cloud-built via Cloud Build; never required locally).
 
 ## Target Shape
@@ -134,7 +134,7 @@ Goal: Heavy/on-demand pipeline + MCP fallback on Cloud Run via Cloud Build + Art
 Implementation tasks:
 
 - [ ] `scripts/ops/deploy-cloud-run.mjs` + `.github/workflows/deploy-cloud-run.yml`: Cloud Build
-      the `Dockerfile.workers` (and `packages/mcp-server/Dockerfile`) to Artifact Registry; deploy
+      the `docker/workers.Dockerfile` (and `docker/mcp.Dockerfile`) to Artifact Registry; deploy
       as Cloud Run **Jobs** (pipeline) and an optional Cloud Run **Service** (MCP fallback).
 - [ ] Cloud Scheduler triggers for heavier cadences that outgrow Actions; env via Secret Manager.
 - [ ] Wire the SA (already owner) auth in CI via `GCP_SA_KEY`.

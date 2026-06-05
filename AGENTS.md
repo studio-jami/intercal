@@ -56,7 +56,7 @@ Run the narrowest complete set for what you touched; `pnpm verify` runs the full
 - Contracts: `pnpm contracts:check` (regenerate + drift check)
 - Python: `pnpm py:lint` · `pnpm py:typecheck` · `pnpm py:test` (Ruff / Pyright / pytest)
 - Database: `pnpm db:migrate:clean` · `pnpm db:migrate:seeded` · `pnpm db:check`
-  (requires Docker Postgres via `docker compose up -d`)
+  (requires Docker Postgres via `docker compose -f docker/compose.yaml up -d`)
 
 ## Docs & changelog
 

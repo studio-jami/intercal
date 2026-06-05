@@ -1,5 +1,5 @@
 # Cloud Run image for the Intercal Python pipeline workers. Cloud-built — not for local use.
-# Build context = repo root:  docker build -f Dockerfile.workers -t intercal-workers .
+# Build context = repo root:  docker build -f docker/workers.Dockerfile -t intercal-workers .
 # Run a job:  (Cloud Run Job / GitHub Actions)  uv run python -m intercal_ingest ingest_source ...
 FROM python:3.12-slim
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/

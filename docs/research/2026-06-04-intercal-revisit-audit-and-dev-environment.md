@@ -269,7 +269,7 @@ Adopt these as Intercal decision records, replacing every "TBD/abstract" fork. A
 2. **Quarantine Zavi docs** (Q3): move `DECISIONS.md`, `agents/goal.md`, `agents/orchestration-reliability.md` out of Intercal; de-Zavi `planning-style.md` + `docs-standards.md`; keep `report-style.md`.
 3. **Repair references** per §4.3; fix `engineeering/` typo; prune org-template doc dirs; standardize on `docs/roadmaps/`.
 4. Create **`AGENTS.md`** (succinct, enforceable) + **`docs/README.md`** (docs index) + **`docs/decisions/`** with D1–D16 as records.
-5. Scaffold the monorepo: root `package.json`, `pnpm-workspace.yaml` (+ catalog), `pyproject.toml` + `uv.lock`, `docker-compose.yml` (Postgres+pgvector, Redis/Valkey, MinIO), `packages/{api,mcp-server,sdk,shared,dashboard}`, `services/{ingest,extract,resolve,synthesize}`, `db/{migrations,seeds}`, `scripts/{verify,dev,workers}`.
+5. Scaffold the monorepo: root `package.json`, `pnpm-workspace.yaml` (+ catalog), `pyproject.toml` + `uv.lock`, `docker/compose.yaml` (Postgres+pgvector, Redis/Valkey, MinIO), `packages/{api,mcp-server,sdk,shared,dashboard}`, `services/{ingest,extract,resolve,synthesize}`, `db/{migrations,seeds}`, `scripts/{verify,dev,workers}`.
 6. Wire the **verification ladder** (Biome, Ruff, Pyright, contract drift, migration clean/seeded) as `pnpm verify`; add a minimal CI workflow.
 7. Repoint plans 01–06 at the corrected paths and fill the named-provider blanks from D1–D16. Re-pin plan 01 as the active foundation plan.
 

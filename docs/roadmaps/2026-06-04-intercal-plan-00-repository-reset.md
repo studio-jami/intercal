@@ -95,9 +95,9 @@ Goal: Installable, lintable, verifiable workspace shell.
 
 Implementation tasks:
 
-- [x] Root `package.json`, `pnpm-workspace.yaml` (catalog), `tsconfig.base.json`, `biome.json`.
+- [x] Root `package.json`, `pnpm-workspace.yaml` (catalog), `config/tsconfig.base.json`, `biome.json`.
 - [x] Root `pyproject.toml` (uv workspace, Ruff/Pyright/pytest config).
-- [x] `docker-compose.yml` (Postgres+pgvector, Valkey, MinIO), `.env.example`.
+- [x] `docker/compose.yaml` (Postgres+pgvector, Valkey, MinIO), `.env.example`.
 - [x] `scripts/verify/verify.mjs`, `scripts/dev/migrate.mjs`, `.github/workflows/ci.yml`.
 
 Exit criteria:
@@ -182,7 +182,7 @@ Exit criteria:
 
 - `pnpm install` · `uv sync` · `pnpm lint` · `pnpm typecheck` · `pnpm contracts:check`
 - `pnpm py:lint` · `pnpm py:typecheck`
-- `docker compose up -d` then `pnpm db:migrate:seeded` (where Docker is available)
+- `docker compose -f docker/compose.yaml up -d` then `pnpm db:migrate:seeded` (where Docker is available)
 - Update durable docs; add a `.changes/` fragment; stage intentional files; conventional commit.
 
 ## Acceptance Criteria

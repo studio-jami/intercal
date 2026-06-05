@@ -67,7 +67,7 @@ pnpm dev                     # dashboard + mounted REST API on one origin
 pnpm verify                  # full gate: lint, typecheck, tests, contracts, db
 ```
 
-Prefer a fully-offline/self-host setup instead of Neon? `docker compose up -d` brings up local
+Prefer a fully-offline/self-host setup instead of Neon? `docker compose -f docker/compose.yaml up -d` brings up local
 Postgres+pgvector, Valkey, and MinIO — optional, not the maintainers' flow.
 
 ## Command index

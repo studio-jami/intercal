@@ -1,5 +1,5 @@
 # Cloud Run image for the Intercal MCP server (Streamable HTTP). Cloud-built — not for local use.
-# Build context = repo root:  docker build -f packages/mcp-server/Dockerfile -t intercal-mcp .
+# Build context = repo root:  docker build -f docker/mcp.Dockerfile -t intercal-mcp .
 FROM node:24-slim AS build
 RUN corepack enable
 WORKDIR /app

@@ -4,7 +4,8 @@
 #   Redis/Valkey       -> Upstash / managed Redis
 #   MinIO (S3 API)     -> Cloudflare R2 / any S3-compatible store
 #
-# Usage: docker compose up -d   (then `pnpm db:migrate:seeded`)
+# Optional self-host / fully-offline path (maintainers develop directly against a Neon branch).
+# Usage: docker compose -f docker/compose.yaml up -d   (then point DATABASE_URL at it + migrate)
 
 services:
   postgres:
@@ -17,7 +18,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U intercal -d intercal"]
       interval: 5s
@@ -44,9 +45,13 @@ services:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - ./miniodata:/data
+      - miniodata:/data
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 5s
       timeout: 5s
       retries: 10
+
+volumes:
+  pgdata:
+  miniodata:

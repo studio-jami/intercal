@@ -63,7 +63,7 @@ intercal/
   pnpm-workspace.yaml
   pyproject.toml
   uv.lock
-  docker-compose.yml
+  docker/compose.yaml
   docs/
     architecture/
     decisions/
@@ -117,7 +117,7 @@ Primary areas:
 - `package.json`
 - `pnpm-workspace.yaml`
 - `pyproject.toml`
-- `docker-compose.yml`
+- `docker/compose.yaml`
 - `packages/*`
 - `services/*`
 - `db/*`
@@ -142,7 +142,7 @@ Suggested verification:
 - `pnpm install`
 - `uv sync`
 - `docker compose config`
-- `docker compose up -d`
+- `docker compose -f docker/compose.yaml up -d`
 
 ## Workstream 2: Repo Rules And Durable Guidance
 
@@ -362,7 +362,7 @@ Suggested verification:
 
 - `pnpm install`
 - `uv sync`
-- `docker compose up -d`
+- `docker compose -f docker/compose.yaml up -d`
 - `pnpm format:check`
 - `pnpm lint`
 - `pnpm typecheck`

@@ -13,7 +13,7 @@ environment; only adapter configuration (`.env` / platform env) changes. This is
 | Dashboard + REST API + MCP | **Vercel** (one project, one domain) | Next.js UI at `/`; Hono API mounted at `/api/v1/*` + `/api/openapi.json`; MCP at `/api/mcp` (or the Cloud Run service). GitHub-wired with preview deploys. |
 | Object storage (S3 API) | **Cloudflare R2** | zero egress; `STORAGE_PROVIDER=s3`. |
 | Queue / cache | **Upstash** Redis | serverless; `QUEUE_PROVIDER=redis`. |
-| Heavy Python pipeline | **GitHub Actions** (scheduled batch) → **GCloud Cloud Run** (on-demand / scale) | free on the public repo; Cloud Run for scale. Cloud-built Docker (`Dockerfile.workers`). |
+| Heavy Python pipeline | **GitHub Actions** (scheduled batch) → **GCloud Cloud Run** (on-demand / scale) | free on the public repo; Cloud Run for scale. Cloud-built Docker (`docker/workers.Dockerfile`). |
 | Embeddings | local **fastembed** in the worker (default) | hosted optional behind the port. |
 | LLM | free tier (Gemini/Groq) default | paid providers behind the same port. |
 | CI/CD | GitHub → Vercel auto-deploy + Actions verify gate | `pnpm verify` in CI against a Postgres service container. |
@@ -29,7 +29,7 @@ alternative for **other people** — it is not the maintainers' dev flow.
    branch — direct live DB work).
 4. `pnpm dev` (dashboard + mounted API) and/or `pnpm --filter @intercal/mcp-server start`.
 
-`docker compose up -d` remains available for fully-offline/self-host work but is optional.
+`docker compose -f docker/compose.yaml up -d` remains available for fully-offline/self-host work but is optional.
 
 ## Go-live
 

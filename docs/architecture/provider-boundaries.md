@@ -62,6 +62,14 @@ Vertex without duplicating values.
 properties — callers **must** store both alongside every vector row so a model change can be detected
 and re-embedding triggered.  See [data-model.md](data-model.md) for the vector-space safety rule.
 
+Both embeddings adapters **guarantee that the vectors `embed()` returns are exactly `.dim` long** — a
+mismatch raises `EmbeddingsError` rather than silently persisting a wrong-length vector. For hosted
+OpenAI v3 models a custom `EMBEDDINGS_DIM` smaller than the model's native size is forwarded to the API
+as the `dimensions` parameter (Matryoshka truncation); a custom dimension on a model that does not
+support truncation (`text-embedding-ada-002`) or one larger than the native size is rejected at
+construction. This keeps the advertised `.dim`, the actual vector length, and the per-row metadata in
+lockstep — the invariant W5 sizes its pgvector columns against.
+
 ## Rules
 
 - **No provider payloads in canonical records.** Adapters translate to/from the contract and

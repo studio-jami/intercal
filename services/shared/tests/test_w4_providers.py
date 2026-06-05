@@ -430,7 +430,8 @@ class TestLocalEmbeddingsAdapter:
             import intercal_shared.adapters.embeddings_local as mod
 
             importlib.reload(mod)
-            adapter = mod.LocalEmbeddingsAdapter(model_name="BAAI/bge-small-en-v1.5", dim=384)
+            # dim=3 matches the 3-element mock vectors (the dim guard enforces this).
+            adapter = mod.LocalEmbeddingsAdapter(model_name="BAAI/bge-small-en-v1.5", dim=3)
             result = await adapter.embed(["hello", "world"])
             assert len(result) == 2
             assert result[0] == pytest.approx([0.1, 0.2, 0.3])
@@ -497,6 +498,121 @@ class TestEmbeddingsPortCompliance:
         from intercal_shared.adapters.embeddings_openai import OpenAIEmbeddingsAdapter
 
         assert isinstance(OpenAIEmbeddingsAdapter(api_key="fake"), EmbeddingsPort)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# OpenAIEmbeddingsAdapter — dimension / vector-space safety
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _openai_adapter(monkeypatch: Any, *, create_result: Any = None, **kwargs: Any) -> Any:
+    """Build an OpenAIEmbeddingsAdapter with a mocked AsyncOpenAI client.
+
+    ``create_result`` (when given) is the object the mocked ``embeddings.create``
+    awaitable resolves to; capture the call kwargs on ``adapter._client._create_call``.
+    """
+    pytest.importorskip("openai", reason="openai not installed")
+    import openai
+    from intercal_shared.adapters.embeddings_openai import OpenAIEmbeddingsAdapter
+
+    captured: dict[str, Any] = {}
+
+    async def _create(**call_kwargs: Any) -> Any:
+        captured.update(call_kwargs)
+        return create_result
+
+    mock_client = MagicMock()
+    mock_client.embeddings.create = _create
+    with patch.object(openai, "AsyncOpenAI", return_value=mock_client):
+        adapter = OpenAIEmbeddingsAdapter(api_key="fake", **kwargs)
+    adapter._client = mock_client  # type: ignore[attr-defined]
+    adapter._captured = captured  # type: ignore[attr-defined]
+    return adapter
+
+
+class TestOpenAIEmbeddingsDimensions:
+    def test_native_dim_resolved_from_model(self) -> None:
+        pytest.importorskip("openai", reason="openai not installed")
+        from intercal_shared.adapters.embeddings_openai import OpenAIEmbeddingsAdapter
+
+        adapter = OpenAIEmbeddingsAdapter(api_key="fake", model_name="text-embedding-3-small")
+        assert adapter.dim == 1536
+
+    def test_custom_dim_on_v3_is_allowed(self) -> None:
+        pytest.importorskip("openai", reason="openai not installed")
+        from intercal_shared.adapters.embeddings_openai import OpenAIEmbeddingsAdapter
+
+        adapter = OpenAIEmbeddingsAdapter(
+            api_key="fake", model_name="text-embedding-3-small", dim=384
+        )
+        assert adapter.dim == 384
+
+    def test_custom_dim_on_ada_002_rejected(self) -> None:
+        pytest.importorskip("openai", reason="openai not installed")
+        from intercal_shared.adapters.embeddings_openai import OpenAIEmbeddingsAdapter
+
+        with pytest.raises(ValueError, match="does not support a custom embedding dimension"):
+            OpenAIEmbeddingsAdapter(api_key="fake", model_name="text-embedding-ada-002", dim=384)
+
+    def test_custom_dim_larger_than_native_rejected(self) -> None:
+        pytest.importorskip("openai", reason="openai not installed")
+        from intercal_shared.adapters.embeddings_openai import OpenAIEmbeddingsAdapter
+
+        with pytest.raises(ValueError, match="exceeds the native dimension"):
+            OpenAIEmbeddingsAdapter(api_key="fake", model_name="text-embedding-3-small", dim=4096)
+
+    @pytest.mark.asyncio
+    async def test_embed_forwards_dimensions_for_custom_dim(self, monkeypatch: Any) -> None:
+        result = MagicMock()
+        result.data = [MagicMock(embedding=[0.0] * 384)]
+        adapter = _openai_adapter(
+            monkeypatch, create_result=result, model_name="text-embedding-3-small", dim=384
+        )
+        await adapter.embed(["hello"])
+        assert adapter._captured.get("dimensions") == 384  # type: ignore[attr-defined]
+
+    @pytest.mark.asyncio
+    async def test_embed_omits_dimensions_for_native_dim(self, monkeypatch: Any) -> None:
+        result = MagicMock()
+        result.data = [MagicMock(embedding=[0.0] * 1536)]
+        adapter = _openai_adapter(
+            monkeypatch, create_result=result, model_name="text-embedding-3-small"
+        )
+        await adapter.embed(["hello"])
+        assert "dimensions" not in adapter._captured  # type: ignore[attr-defined]
+
+    @pytest.mark.asyncio
+    async def test_embed_rejects_dim_mismatch_from_api(self, monkeypatch: Any) -> None:
+        # API ignores our request and returns native 1536 while we advertise 384.
+        result = MagicMock()
+        result.data = [MagicMock(embedding=[0.0] * 1536)]
+        adapter = _openai_adapter(
+            monkeypatch, create_result=result, model_name="text-embedding-3-small", dim=384
+        )
+        with pytest.raises(EmbeddingsError, match="configured for dim=384"):
+            await adapter.embed(["hello"])
+
+
+class TestLocalEmbeddingsDimGuard:
+    @pytest.mark.asyncio
+    async def test_embed_rejects_dim_mismatch(self) -> None:
+        import numpy as np
+
+        mock_model_instance = MagicMock()
+        # Model yields 768-dim but adapter is configured for 384.
+        mock_model_instance.embed.return_value = [np.zeros(768)]
+        mock_fastembed = MagicMock()
+        mock_fastembed.TextEmbedding.return_value = mock_model_instance
+
+        with patch.dict("sys.modules", {"fastembed": mock_fastembed}):
+            import importlib
+
+            import intercal_shared.adapters.embeddings_local as mod
+
+            importlib.reload(mod)
+            adapter = mod.LocalEmbeddingsAdapter(model_name="BAAI/bge-small-en-v1.5", dim=384)
+            with pytest.raises(EmbeddingsError, match="configured for dim=384"):
+                await adapter.embed(["test"])
 
 
 # ──────────────────────────────────────────────────────────────────────────────

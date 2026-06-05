@@ -375,6 +375,22 @@ Implementation tasks:
   swap = one env var. (Note: the dev `.env` SA-key path is mangled by dotenv backslash-escape
   parsing — a dev-env data issue, not a code defect; flagged separately. Vertex verified by passing
   the path via the process env.)
+- [x] Audit pass (2026-06-05, third fresh context) closed one real vector-space-safety gap the
+  prior passes missed (LLM surface was sound; this was on the embeddings side):
+  1. **OpenAI custom dimension was advertised but never requested.** `make_embeddings` always passes
+     `EMBEDDINGS_DIM` (default 384) to `OpenAIEmbeddingsAdapter`, which reported `.dim=384` but never
+     forwarded `dimensions=` to the API — so the API would have returned native-dim (1536) vectors
+     while every persisted row recorded `dim=384`, silently corrupting the model/dim metadata W5
+     stores and sizes its pgvector column against. The adapter now forwards `dimensions` for v3
+     models (verified against the official OpenAI embeddings guide), and rejects a custom dim on
+     `ada-002` (no truncation support) or one larger than native at construction.
+  2. **No post-call dim verification (both adapters).** Local + OpenAI `embed()` now assert the
+     returned vector length equals the advertised `.dim`, raising `EmbeddingsError` instead of
+     leaking a wrong-length vector downstream.
+- [x] +8 net W4 tests (189 service tests pass); `pnpm py:lint` + `pnpm py:typecheck` clean (0 errors).
+  Re-verified LIVE (2026-06-05, 3rd pass): Vertex `complete()`='OK' (7/1 tok) + schema-validated
+  `extract_structured()`→`{'answer':'yes'}` (16/6 tok); Gemini-API-key fallback `complete()`='OK';
+  fastembed 2×384-dim (dim guard satisfied) — all through the ports, `gemini-2.5-flash`.
 
 Exit criteria:
 

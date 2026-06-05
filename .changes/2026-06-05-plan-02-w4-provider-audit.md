@@ -68,3 +68,22 @@ All through the ports (`gemini-2.5-flash`). Vertex AI: `complete()`='OK' (7/1
 tok) and schema-validated `extract_structured()`→`{'answer':'yes'}` (16/6 tok)
 on `rich-wavelet-496206-h7` / `us-east4` via SA ADC; Gemini-API-key fallback
 `complete()`='OK'; local fastembed 2×384-dim. Provider swap is one env var.
+
+## Third audit pass (2026-06-05) — embeddings vector-space safety
+
+The third fresh-context pass found the LLM surface sound and closed one real gap
+on the embeddings side:
+
+- `OpenAIEmbeddingsAdapter` advertised a custom `EMBEDDINGS_DIM` via `.dim` but
+  never forwarded `dimensions=` to the API, so it would have returned native-dim
+  (1536) vectors while every row recorded the configured dim — silent
+  vector-space corruption. It now forwards `dimensions` for v3 models (verified
+  against the official OpenAI embeddings guide) and rejects a custom dim on
+  `ada-002` (no truncation) or one larger than native, at construction.
+- Both embeddings adapters (`embeddings_local.py`, `embeddings_openai.py`) now
+  verify the returned vector length equals the advertised `.dim`, raising
+  `EmbeddingsError` instead of leaking a wrong-length vector to W5.
+
++8 net W4 tests (189 service tests pass; lint + typecheck clean). Re-verified
+live: Vertex `complete()` + schema-validated `extract_structured()`, Gemini-key
+fallback `complete()`, fastembed 2×384-dim — all through the ports.

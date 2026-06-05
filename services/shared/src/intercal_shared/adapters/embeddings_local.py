@@ -69,9 +69,19 @@ class LocalEmbeddingsAdapter:
             embeddings: list[list[float]] = await loop.run_in_executor(
                 None, self._embed_sync, texts
             )
-            return embeddings
         except Exception as exc:
             raise EmbeddingsError(f"Local embeddings failed: {exc}") from exc
+
+        # Vector-space safety: the model's real output dimension must match the
+        # configured ``dim`` we advertise (and that W5 stores / sizes its pgvector
+        # column against).  A silent mismatch corrupts the per-vector metadata.
+        if embeddings and len(embeddings[0]) != self._dim:
+            raise EmbeddingsError(
+                f"Model {self._model_name!r} produced {len(embeddings[0])}-dim vectors "
+                f"but adapter is configured for dim={self._dim}. "
+                f"Set EMBEDDINGS_DIM to match the model."
+            )
+        return embeddings
 
     def _embed_sync(self, texts: list[str]) -> list[list[float]]:
         return [v.tolist() for v in self._model.embed(texts)]

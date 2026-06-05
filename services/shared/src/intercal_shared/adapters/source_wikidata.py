@@ -47,8 +47,7 @@ _log = logging.getLogger(__name__)
 _DEFAULT_WIKIDATA_API = "https://www.wikidata.org/w/api.php"
 _DEFAULT_WIKIPEDIA_SUMMARY = "https://en.wikipedia.org/api/rest_v1/page/summary"
 _USER_AGENT = (
-    "intercal/0.1 (https://github.com/JamiStudio/intercal; jamie@yrka.io) "
-    "python-httpx/0.2x"
+    "intercal/0.1 (https://github.com/JamiStudio/intercal; jamie@yrka.io) python-httpx/0.2x"
 )
 
 
@@ -74,6 +73,7 @@ class WikidataChangesAdapter:
         cursor_state: dict[str, object] | None = None,
         max_documents: int = 200,
         http_client: object | None = None,
+        cursor_sink: dict[str, object] | None = None,
     ) -> AsyncIterator[RawDocument]:
         """Yield raw documents from Wikidata recent changes."""
         import httpx
@@ -95,9 +95,7 @@ class WikidataChangesAdapter:
             api_url = str(adapter_config.get("wikidata_api_url", _DEFAULT_WIKIDATA_API))
             namespaces = str(adapter_config.get("namespaces", "0"))
             rctype = str(adapter_config.get("rctype", "edit|new"))
-            fetch_wp = (
-                str(adapter_config.get("fetch_wikipedia_summary", "false")).lower() == "true"
-            )
+            fetch_wp = str(adapter_config.get("fetch_wikipedia_summary", "false")).lower() == "true"
             wp_summary_url = str(
                 adapter_config.get("wikipedia_summary_url", _DEFAULT_WIKIPEDIA_SUMMARY)
             )
@@ -109,41 +107,42 @@ class WikidataChangesAdapter:
                 "rctype": rctype,
                 "rcprop": "ids|title|timestamp|sizes|flags|loginfo|comment",
                 "rclimit": min(max_documents, 500),  # MediaWiki max per page = 500
+                "rcdir": "older",  # newest-first (MediaWiki default; explicit for clarity)
                 "format": "json",
                 "formatversion": "2",
             }
 
-            # Resume from previous run cursor if available.
-            if cursor_state and "rccontinue" in cursor_state:
-                params["rccontinue"] = str(cursor_state["rccontinue"])
+            # Incremental resume across runs.  recentchanges enumerates
+            # newest-first; ``rccontinue`` only paginates *within* one query
+            # (walking toward older changes), so replaying it next run would
+            # re-crawl history.  For only-new changes we instead bound the
+            # window with ``rcend`` set to the newest timestamp we saw last
+            # run.  A small overlap plus the content_hash UNIQUE dedup absorbs
+            # the "changes inserted slightly out of timestamp order" caveat
+            # documented at API:RecentChanges.
+            if cursor_state and cursor_state.get("last_timestamp"):
+                params["rcend"] = str(cursor_state["last_timestamp"])
 
+            newest_seen: str | None = None
             yielded = 0
             while yielded < max_documents:
                 _log.debug("WikidataChanges: GET %s params=%s", api_url, params)
                 try:
                     response = await client.get(api_url, params=params)
                 except httpx.TimeoutException as exc:
-                    raise SourceFetchError(
-                        f"Wikidata API request timed out: {exc}"
-                    ) from exc
+                    raise SourceFetchError(f"Wikidata API request timed out: {exc}") from exc
                 except httpx.RequestError as exc:
-                    raise SourceFetchError(
-                        f"Wikidata API network error: {exc}"
-                    ) from exc
+                    raise SourceFetchError(f"Wikidata API network error: {exc}") from exc
 
                 if response.status_code == 429:
-                    raise SourceRateLimitError(
-                        "Wikidata API returned 429 Too Many Requests"
-                    )
+                    raise SourceRateLimitError("Wikidata API returned 429 Too Many Requests")
                 if response.status_code >= 500:
                     raise SourceFetchError(
-                        f"Wikidata API server error {response.status_code}: "
-                        f"{response.text[:200]}"
+                        f"Wikidata API server error {response.status_code}: {response.text[:200]}"
                     )
                 if response.status_code >= 400:
                     raise SourceFetchError(
-                        f"Wikidata API client error {response.status_code}: "
-                        f"{response.text[:200]}"
+                        f"Wikidata API client error {response.status_code}: {response.text[:200]}"
                     )
 
                 try:
@@ -153,9 +152,7 @@ class WikidataChangesAdapter:
                         f"Wikidata API returned non-JSON response: {response.text[:200]}"
                     ) from exc
 
-                changes: list[dict[str, Any]] = (
-                    data.get("query", {}).get("recentchanges", [])
-                )
+                changes: list[dict[str, Any]] = data.get("query", {}).get("recentchanges", [])
                 if not changes:
                     _log.debug("WikidataChanges: no more changes in window")
                     break
@@ -170,9 +167,7 @@ class WikidataChangesAdapter:
                     if fetch_wp and change.get("title"):
                         title = change["title"].replace(" ", "_")
                         try:
-                            wp_resp = await client.get(
-                                f"{wp_summary_url.rstrip('/')}/{title}"
-                            )
+                            wp_resp = await client.get(f"{wp_summary_url.rstrip('/')}/{title}")
                             if wp_resp.status_code == 200:
                                 doc_payload["wikipedia_summary"] = wp_resp.json()
                         except Exception as wp_exc:
@@ -183,20 +178,18 @@ class WikidataChangesAdapter:
                             )
 
                     content_bytes = json.dumps(doc_payload, ensure_ascii=False).encode()
-                    external_id = str(
-                        change.get("revid") or change.get("rcid") or ""
-                    )
+                    external_id = str(change.get("revid") or change.get("rcid") or "")
                     title_str: str = change.get("title", "")
                     timestamp: str = change.get("timestamp", "")
+                    # Newest-first stream: the first timestamp we see is the
+                    # newest; remember it for next run's incremental boundary.
+                    if timestamp and newest_seen is None:
+                        newest_seen = timestamp
 
                     yield RawDocument(
                         content=content_bytes,
                         external_id=external_id or None,
-                        url=(
-                            f"https://www.wikidata.org/wiki/{title_str}"
-                            if title_str
-                            else None
-                        ),
+                        url=(f"https://www.wikidata.org/wiki/{title_str}" if title_str else None),
                         title=title_str or None,
                         published_at=timestamp or None,
                         language="en",
@@ -211,11 +204,19 @@ class WikidataChangesAdapter:
                     )
                     yielded += 1
 
-                # Handle pagination via rccontinue.
+                # Intra-run pagination only: rccontinue walks toward older
+                # changes within this single newest-first query.  It is NOT
+                # persisted across runs (see the rcend note above).
                 continue_token = data.get("continue", {}).get("rccontinue")
                 if not continue_token or yielded >= max_documents:
                     break
                 params["rccontinue"] = continue_token
+
+            # Record the newest timestamp seen so the next run only fetches
+            # changes newer than this (via rcend).  Leave the cursor untouched
+            # if this run saw nothing, so we don't lose the prior boundary.
+            if cursor_sink is not None and newest_seen is not None:
+                cursor_sink["last_timestamp"] = newest_seen
 
         finally:
             if owns_client and client is not None:

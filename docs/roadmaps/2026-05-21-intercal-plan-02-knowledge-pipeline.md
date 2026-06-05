@@ -104,29 +104,47 @@ Implementation tasks:
 - [x] Add source registry (`intercal_shared.source_registry.SourceRegistry`) and adapter
   interface (`intercal_shared.ports.source.SourcePort` / `RawDocument`).
 - [x] Add Wikidata recent-changes adapter (`wikidata_changes_v1`) — fetches via MediaWiki
-  recentchanges API; optionally enriches with Wikipedia REST summary. CC0, redistribution=true.
+  recentchanges API (newest-first, `rcdir=older`); optionally enriches with Wikipedia REST
+  summary. CC0, redistribution=true. Incremental polling uses a **timestamp** cursor
+  (`{"last_timestamp": ...}` → next run's `rcend`), not `rccontinue` (which only paginates
+  within a single query and would re-crawl history if replayed across runs). `rccontinue`
+  is still used for intra-run paging. Verified against the live MediaWiki API:RecentChanges docs.
 - [x] Add GitHub releases adapter (`github_releases_v1`) — fetches release notes for a
-  configurable list of repos; respects pre-release filter, rate-limit signals.
+  configurable list of repos; respects pre-release/draft filters. Rate-limit detection
+  hardened to the documented signals: 429, or 403/429 with `x-ratelimit-remaining: 0` /
+  `retry-after`, or the body marker. A borrowed `http_client`'s headers are no longer mutated
+  (auth/version headers are passed per-request) so a shared client can't leak GitHub auth.
 - [x] Implement `ingest_source` job body: source row lookup, adapter dispatch, SHA-256
-  content hash, `ON CONFLICT DO NOTHING` upsert, raw storage (if redistribution allowed),
+  content hash, `ON CONFLICT DO NOTHING` upsert, raw storage (if redistribution allowed) with
+  the resulting object key written back to `source_documents.raw_storage_key`, `content_length`
+  recorded, `published_at` parsed to an aware datetime (asyncpg rejects a bare string for
+  `timestamptz` even with a `::timestamptz` cast), cross-run cursor persisted via a `cursor_sink`,
   `ingestion_runs` lifecycle (running → succeeded/failed), `consecutive_failures` tracking.
 - [x] Implement `score_source_health` job body: compute reliability_score from run history
   + consecutive failure streak; persist to `sources.reliability_score`.
-- [x] Add ingestion throttle knobs to `Settings` (`INGEST_MAX_DOCS_PER_RUN`, etc.);
-  document in `.env.example` (resource-budget.md compliance).
+- [x] Add ingestion throttle knobs to `Settings` (`INGEST_MAX_DOCS_PER_RUN`, etc.) and
+  document `GITHUB_TOKEN` in `.env.example` (resource-budget.md compliance).
 - [x] Add `source-http` optional dep to `intercal-shared` for httpx-based source adapters.
 - [x] Seed `db/seeds/0003_sources.sql` with `wikidata-recent-changes` and
   `github-releases-featured` starter source rows.
-- [x] Add 23 unit tests covering registry, adapters (mock HTTP), ingest_source (fake pool),
-  and score_source_health. All pass; no live network required.
-- [x] Verified: `pnpm db:migrate:seeded` against `plan-02-w1-test` Neon branch
-  (br-still-water-ajmss6b6) — 22 migrations + 3 seeds applied cleanly; both sources
-  confirmed in DB.
+- [x] 49 unit tests cover registry, adapters (mock HTTP, cursor sink, rate-limit headers,
+  borrowed-client isolation), `ingest_source` (fake pool, raw-key write-back), timestamp
+  parsing, and `score_source_health`. All pass; no live network required.
+- [x] Audit pass (2026-06-04, second fresh context) fixed: cursor never persisted; raw object
+  key + `content_length` never written; `published_at` string rejected by asyncpg (caught only
+  by the live run, not the mocked tests); GitHub primary-rate-limit 403-without-body-marker;
+  borrowed-client header mutation. API usage re-verified against MediaWiki + GitHub docs.
+- [x] Verified LIVE against Neon branch `br-still-water-ajmss6b6`: both adapters ingested real
+  documents (Wikidata 53, GitHub 11) end-to-end — DB insert, R2 raw archival for
+  redistribution-allowed sources, key write-back, incremental cursor advance, and
+  `score_source_health` (1.00). GitHub re-run proved dedup: 12 fetched / 0 new / 12 skipped.
+  GitHub (redistribution=false) correctly stored 0 raw keys; Wikidata (CC0) stored all.
+  Branch reset to clean seed state after verification.
 
 Exit criteria:
 
 - [x] Re-running ingestion does not duplicate source documents (`content_hash` UNIQUE +
-  `ON CONFLICT DO NOTHING`).
+  `ON CONFLICT DO NOTHING`) — proven live (GitHub re-run: 0 new / 12 skipped).
 
 Suggested verification:
 

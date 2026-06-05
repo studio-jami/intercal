@@ -12,7 +12,11 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from intercal_ingest.jobs import ingest_source, score_source_health
+from intercal_ingest.jobs import (
+    _parse_timestamp,  # pyright: ignore[reportPrivateUsage]  # tested directly: load-bearing parse
+    ingest_source,
+    score_source_health,
+)
 from intercal_shared.ports.source import RawDocument, SourceFetchError, SourceRateLimitError
 from intercal_shared.source_registry import SourceRegistry
 
@@ -75,6 +79,25 @@ def test_github_adapter_has_correct_name() -> None:
 
     adapter = GitHubReleasesAdapter()
     assert adapter.adapter_name == "github_releases_v1"
+
+
+# ── _parse_timestamp ─────────────────────────────────────────────────────────
+
+
+def test_parse_timestamp_handles_zulu_and_offsets_and_garbage() -> None:
+    import datetime as dt
+
+    ts = _parse_timestamp("2026-06-05T03:33:12Z")
+    assert ts is not None
+    assert ts.tzinfo is not None
+    assert ts.utcoffset() == dt.timedelta(0)
+
+    off = _parse_timestamp("2026-06-05T03:33:12+02:00")
+    assert off is not None and off.utcoffset() == dt.timedelta(hours=2)
+
+    assert _parse_timestamp(None) is None
+    assert _parse_timestamp("") is None
+    assert _parse_timestamp("not-a-date") is None
 
 
 # ── RawDocument dataclass ────────────────────────────────────────────────────
@@ -225,6 +248,86 @@ async def test_wikidata_adapter_max_documents_respected() -> None:
     assert len(docs) == 5
 
 
+@pytest.mark.asyncio
+async def test_wikidata_adapter_writes_cursor_sink_last_timestamp() -> None:
+    """Adapter records the newest timestamp seen into cursor_sink for next run."""
+    import httpx
+    from intercal_shared.adapters.source_wikidata import WikidataChangesAdapter
+
+    # Newest-first order: first change is the newest.
+    api_response = {
+        "query": {
+            "recentchanges": [
+                {
+                    "rcid": 2,
+                    "revid": 20,
+                    "title": "Q2",
+                    "ns": 0,
+                    "type": "edit",
+                    "timestamp": "2026-06-04T12:00:00Z",
+                },
+                {
+                    "rcid": 1,
+                    "revid": 10,
+                    "title": "Q1",
+                    "ns": 0,
+                    "type": "edit",
+                    "timestamp": "2026-06-04T11:00:00Z",
+                },
+            ]
+        }
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=api_response)
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.AsyncClient(transport=transport)
+
+    adapter = WikidataChangesAdapter()
+    sink: dict[str, object] = {}
+    async for _ in adapter.fetch(
+        adapter_config={},
+        cursor_state=None,
+        max_documents=10,
+        http_client=client,
+        cursor_sink=sink,
+    ):
+        pass
+    await client.aclose()
+
+    assert sink["last_timestamp"] == "2026-06-04T12:00:00Z"
+
+
+@pytest.mark.asyncio
+async def test_wikidata_adapter_resume_sets_rcend() -> None:
+    """A stored last_timestamp is sent as rcend to bound the incremental window."""
+    import httpx
+    from intercal_shared.adapters.source_wikidata import WikidataChangesAdapter
+
+    seen_params: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_params.update(dict(request.url.params))
+        return httpx.Response(200, json={"query": {"recentchanges": []}})
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.AsyncClient(transport=transport)
+
+    adapter = WikidataChangesAdapter()
+    async for _ in adapter.fetch(
+        adapter_config={},
+        cursor_state={"last_timestamp": "2026-06-04T10:00:00Z"},
+        max_documents=10,
+        http_client=client,
+    ):
+        pass
+    await client.aclose()
+
+    assert seen_params.get("rcend") == "2026-06-04T10:00:00Z"
+    assert seen_params.get("rcdir") == "older"
+
+
 # ── GitHubReleasesAdapter.fetch — mock HTTP ──────────────────────────────────
 
 
@@ -356,6 +459,68 @@ async def test_github_adapter_rate_limit_raises() -> None:
             http_client=client,
         ):
             pass
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_github_adapter_primary_rate_limit_403_header_raises() -> None:
+    """A 403 with x-ratelimit-remaining: 0 is treated as rate limiting (no body marker)."""
+    import httpx
+    from intercal_shared.adapters.source_github import GitHubReleasesAdapter
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            403,
+            json={"message": "Forbidden"},
+            headers={"x-ratelimit-remaining": "0", "x-ratelimit-reset": "9999999999"},
+        )
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.AsyncClient(transport=transport)
+
+    adapter = GitHubReleasesAdapter()
+    with pytest.raises(SourceRateLimitError):
+        async for _ in adapter.fetch(
+            adapter_config={"repos": ["x/y"]},
+            cursor_state=None,
+            max_documents=10,
+            http_client=client,
+        ):
+            pass
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_github_adapter_does_not_mutate_borrowed_client_headers() -> None:
+    """A borrowed client's headers must not be permanently mutated with auth."""
+    import os
+
+    import httpx
+    from intercal_shared.adapters.source_github import GitHubReleasesAdapter
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[], headers={"Link": ""})
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.AsyncClient(transport=transport)
+    before = dict(client.headers)
+
+    os.environ["GITHUB_TOKEN"] = "test-token-should-not-leak"
+    try:
+        adapter = GitHubReleasesAdapter()
+        async for _ in adapter.fetch(
+            adapter_config={"repos": ["x/y"]},
+            cursor_state=None,
+            max_documents=5,
+            http_client=client,
+        ):
+            pass
+    finally:
+        os.environ.pop("GITHUB_TOKEN", None)
+
+    # The borrowed client must not carry our Authorization header afterward.
+    assert "authorization" not in {k.lower() for k in client.headers}
+    assert dict(client.headers) == before
     await client.aclose()
 
 
@@ -509,6 +674,97 @@ async def test_ingest_source_success_with_fake_adapter() -> None:
     assert result["new"] == 1
     assert result["skipped"] == 0
     assert result["errors"] == 0
+
+
+@pytest.mark.asyncio
+async def test_ingest_source_stores_raw_and_records_storage_key() -> None:
+    """For new docs with storage + redistribution, raw bytes are stored and the
+    resulting key is written back to source_documents.raw_storage_key."""
+    import httpx
+    from intercal_shared.source_registry import SourceRegistry
+
+    source_id = uuid.uuid4()
+    row = _make_source_row(source_id, adapter_name="wikidata_changes_v1")
+    row["redistribution_allowed"] = True
+    new_doc_id = uuid.uuid4()
+
+    executed: list[tuple[str, tuple[Any, ...]]] = []
+    pool = MagicMock()
+
+    async def fake_fetchrow(query: str, *args: Any) -> Any:
+        if "FROM sources" in query:
+            return row
+        return None
+
+    async def fake_fetchval(query: str, *args: Any) -> Any:
+        if "INSERT INTO ingestion_runs" in query:
+            return uuid.uuid4()
+        if "INSERT INTO source_documents" in query:
+            return new_doc_id
+        return None
+
+    async def fake_execute(query: str, *args: Any) -> str:
+        executed.append((query, args))
+        return "OK"
+
+    async def fake_fetch(query: str, *args: Any) -> list[Any]:
+        return []
+
+    pool.fetchrow = AsyncMock(side_effect=fake_fetchrow)
+    pool.fetchval = AsyncMock(side_effect=fake_fetchval)
+    pool.execute = AsyncMock(side_effect=fake_execute)
+    pool.fetch = AsyncMock(side_effect=fake_fetch)
+
+    # Fake storage capturing put() calls.
+    put_calls: list[tuple[str, bytes]] = []
+
+    class FakeStorage:
+        async def put(self, key: str, data: bytes, **kwargs: Any) -> None:
+            put_calls.append((key, data))
+
+    api_response = {
+        "query": {
+            "recentchanges": [
+                {
+                    "rcid": 7,
+                    "revid": 77,
+                    "title": "Q7",
+                    "ns": 0,
+                    "type": "edit",
+                    "timestamp": "2026-06-04T00:00:00Z",
+                }
+            ]
+        }
+    }
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=api_response)
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.AsyncClient(transport=transport)
+
+    reg = SourceRegistry()
+    reg.register_all_defaults()
+
+    result = await ingest_source(
+        source_id=str(source_id),
+        pool=pool,
+        storage=FakeStorage(),
+        http_client=client,
+        max_documents=5,
+        registry=reg,
+    )
+    await client.aclose()
+
+    assert result["new"] == 1
+    # Raw bytes were stored under the content-hash-addressed key.
+    assert len(put_calls) == 1
+    stored_key = put_calls[0][0]
+    assert stored_key.startswith(f"raw/{source_id}/")
+    # The key was written back to the document row via UPDATE.
+    update_keys = [a for q, a in executed if "UPDATE source_documents SET raw_storage_key" in q]
+    assert update_keys, "expected raw_storage_key UPDATE"
+    assert update_keys[0][1] == stored_key
 
 
 @pytest.mark.asyncio

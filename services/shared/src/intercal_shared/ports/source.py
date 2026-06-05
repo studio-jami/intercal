@@ -89,13 +89,14 @@ class SourcePort:
         cursor_state: dict[str, object] | None = None,
         max_documents: int = 200,
         http_client: object | None = None,
+        cursor_sink: dict[str, object] | None = None,
     ) -> AsyncIterator[RawDocument]:
         """Yield raw documents from the source.
 
         Implementations must be async generator methods:
 
             async def fetch(self, *, adapter_config, cursor_state,
-                            max_documents, http_client):
+                            max_documents, http_client, cursor_sink):
                 ...
                 yield RawDocument(...)
 
@@ -111,6 +112,16 @@ class SourcePort:
         http_client:
             Optional shared ``httpx.AsyncClient``.  Adapters that receive
             one must not close it.
+        cursor_sink:
+            Optional mutable dict the adapter mutates **in place** with the
+            pagination token to resume from on the next run (e.g.
+            ``{"rccontinue": "..."}``).  Because ``fetch`` is an async
+            generator, its ``return`` value is not observable to the caller;
+            this sink is how the adapter reports its final cursor back to
+            ``ingest_source`` so it can be persisted to
+            ``ingestion_runs.cursor_state``.  Adapters that do not paginate
+            across runs leave it untouched.  ``None`` = caller does not want
+            cursor state.
 
         Yields
         ------

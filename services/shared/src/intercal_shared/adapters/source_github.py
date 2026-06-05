@@ -43,8 +43,7 @@ _log = logging.getLogger(__name__)
 
 _DEFAULT_GITHUB_API = "https://api.github.com"
 _USER_AGENT = (
-    "intercal/0.1 (https://github.com/JamiStudio/intercal; jamie@yrka.io) "
-    "python-httpx/0.2x"
+    "intercal/0.1 (https://github.com/JamiStudio/intercal; jamie@yrka.io) python-httpx/0.2x"
 )
 
 
@@ -67,8 +66,14 @@ class GitHubReleasesAdapter:
         cursor_state: dict[str, object] | None = None,
         max_documents: int = 200,
         http_client: object | None = None,
+        cursor_sink: dict[str, object] | None = None,
     ) -> AsyncIterator[RawDocument]:
-        """Yield release documents from GitHub repositories."""
+        """Yield release documents from GitHub repositories.
+
+        Releases are fetched newest-first every run; idempotency is enforced
+        downstream by the ``content_hash`` dedup, so this adapter keeps no
+        cross-run cursor and leaves ``cursor_sink`` untouched.
+        """
         import httpx
 
         client: httpx.AsyncClient | None = None
@@ -88,14 +93,13 @@ class GitHubReleasesAdapter:
                 headers["Authorization"] = f"Bearer {github_token}"
                 _log.debug("GitHubReleases: using authenticated requests")
             else:
-                _log.debug(
-                    "GitHubReleases: using unauthenticated requests (60 req/hr limit)"
-                )
+                _log.debug("GitHubReleases: using unauthenticated requests (60 req/hr limit)")
 
             if http_client is not None and isinstance(http_client, httpx.AsyncClient):
+                # Borrowed client: do NOT mutate its headers (that would leak
+                # our auth/version headers into other adapters sharing it).
+                # GitHub headers are passed per-request instead.
                 client = http_client
-                # Merge auth/version headers into the shared client for this call.
-                client.headers.update(headers)
                 owns_client = False
             else:
                 client = httpx.AsyncClient(
@@ -105,12 +109,8 @@ class GitHubReleasesAdapter:
                 )
                 owns_client = True
 
-            api_url = str(
-                adapter_config.get("github_api_url", _DEFAULT_GITHUB_API)
-            ).rstrip("/")
-            include_pre = (
-                str(adapter_config.get("include_prereleases", "false")).lower() == "true"
-            )
+            api_url = str(adapter_config.get("github_api_url", _DEFAULT_GITHUB_API)).rstrip("/")
+            include_pre = str(adapter_config.get("include_prereleases", "false")).lower() == "true"
             per_page = min(int(str(adapter_config.get("per_page", "30"))), 100)
 
             repos_raw = adapter_config.get("repos", [])
@@ -149,7 +149,7 @@ class GitHubReleasesAdapter:
                     }
                     _log.debug("GitHubReleases: GET %s page=%d", url, page)
                     try:
-                        response = await client.get(url, params=params)
+                        response = await client.get(url, params=params, headers=headers)
                     except httpx.TimeoutException as exc:
                         raise SourceFetchError(
                             f"GitHub API request timed out for {repo}: {exc}"
@@ -159,19 +159,29 @@ class GitHubReleasesAdapter:
                             f"GitHub API network error for {repo}: {exc}"
                         ) from exc
 
-                    if response.status_code == 429 or (
-                        response.status_code == 403
-                        and "rate limit" in response.text.lower()
-                    ):
-                        raise SourceRateLimitError(
-                            f"GitHub API rate limit hit for {repo}: "
-                            f"X-RateLimit-Reset="
-                            f"{response.headers.get('X-RateLimit-Reset')}"
-                        )
+                    # GitHub signals rate limiting with 403 or 429 (per the REST
+                    # rate-limit docs).  Detect via the documented header signals
+                    # first (x-ratelimit-remaining == 0 or a retry-after), then
+                    # fall back to the body marker for older error shapes.
+                    if response.status_code in (403, 429):
+                        remaining = response.headers.get("x-ratelimit-remaining")
+                        retry_after = response.headers.get("retry-after")
+                        if (
+                            response.status_code == 429
+                            or remaining == "0"
+                            or retry_after is not None
+                            or "rate limit" in response.text.lower()
+                        ):
+                            raise SourceRateLimitError(
+                                f"GitHub API rate limit hit for {repo}: "
+                                f"status={response.status_code} "
+                                f"x-ratelimit-remaining={remaining} "
+                                f"x-ratelimit-reset="
+                                f"{response.headers.get('x-ratelimit-reset')} "
+                                f"retry-after={retry_after}"
+                            )
                     if response.status_code == 404:
-                        _log.warning(
-                            "GitHubReleases: repo %r not found (404); skipping", repo
-                        )
+                        _log.warning("GitHubReleases: repo %r not found (404); skipping", repo)
                         break
                     if response.status_code >= 500:
                         raise SourceFetchError(

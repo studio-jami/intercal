@@ -15,6 +15,7 @@ implemented.  ``normalize_document`` and ``cleanup_expired_cache`` remain
 
 from __future__ import annotations
 
+import datetime as _dt
 import hashlib
 import json
 import logging
@@ -144,7 +145,8 @@ async def ingest_source(
     _log.info("ingest_source: run_id=%s adapter=%r", run_id, adapter_name)
 
     counters = {"fetched": 0, "new": 0, "skipped": 0, "errors": 0}
-    final_cursor: dict[str, object] | None = None
+    # Mutable sink the adapter fills with the pagination token to resume from.
+    final_cursor: dict[str, object] = dict(cursor_state) if cursor_state else {}
     run_error: str | None = None
 
     try:
@@ -153,26 +155,36 @@ async def ingest_source(
             cursor_state=cursor_state,
             max_documents=max_documents,
             http_client=http_client,
+            cursor_sink=final_cursor,
         ):
             counters["fetched"] += 1
             content_hash = _sha256(doc.content)
+            cleaned_text = (
+                # For citation_only sources we don't persist full text;
+                # store None and let normalization decide later (W2).
+                None if citation_only else doc.content.decode("utf-8", errors="replace")
+            )
+            content_length = len(cleaned_text.encode("utf-8")) if cleaned_text is not None else None
 
             # ── Upsert source_document row ─────────────────────────────────────
+            # Insert first so ON CONFLICT tells us whether this content is new;
+            # only new content triggers an object-storage write (avoids redundant
+            # R2 puts on every duplicate — see docs/operations/resource-budget.md).
             try:
-                new_row = await pool.fetchval(
+                new_id = await pool.fetchval(
                     """
                     INSERT INTO source_documents (
                         source_id, ingestion_run_id,
                         content_hash, external_id, url, title, language,
-                        published_at, cleaned_text,
+                        published_at, cleaned_text, content_length,
                         document_type, redistribution_allowed, citation_only,
                         metadata
                     ) VALUES (
                         $1, $2,
                         $3, $4, $5, $6, $7,
-                        $8::timestamptz, $9,
-                        $10, $11, $12,
-                        $13::jsonb
+                        $8, $9, $10,
+                        $11, $12, $13,
+                        $14::jsonb
                     )
                     ON CONFLICT (content_hash) DO NOTHING
                     RETURNING id
@@ -184,10 +196,9 @@ async def ingest_source(
                     doc.url,
                     doc.title,
                     doc.language,
-                    doc.published_at or None,
-                    # For citation_only sources we don't persist full text;
-                    # store None and let normalization decide later (W2).
-                    None if citation_only else doc.content.decode("utf-8", errors="replace"),
+                    _parse_timestamp(doc.published_at),
+                    cleaned_text,
+                    content_length,
                     _infer_document_type(doc),
                     redistribution_allowed,
                     citation_only,
@@ -202,7 +213,7 @@ async def ingest_source(
                 counters["errors"] += 1
                 continue
 
-            if new_row is None:
+            if new_id is None:
                 # ON CONFLICT — document already exists.
                 counters["skipped"] += 1
                 _log.debug(
@@ -214,7 +225,8 @@ async def ingest_source(
 
             counters["new"] += 1
 
-            # ── Persist raw bytes to object storage (if storage available + allowed) ──
+            # ── Persist raw bytes for new docs only (if storage + redistribution
+            #    allowed), then record the resulting key on the document row. ──
             if storage is not None and redistribution_allowed:
                 storage_key = f"raw/{source_id}/{content_hash}"
                 try:
@@ -228,6 +240,11 @@ async def ingest_source(
                             "adapter": adapter_name,
                         },
                     )
+                    await pool.execute(
+                        "UPDATE source_documents SET raw_storage_key = $2 WHERE id = $1",
+                        new_id,
+                        storage_key,
+                    )
                     _log.debug("ingest_source: stored raw bytes at %s", storage_key)
                 except Exception as stor_exc:
                     _log.warning(
@@ -235,7 +252,8 @@ async def ingest_source(
                         storage_key,
                         stor_exc,
                     )
-                    # Storage failure is non-fatal: document row is already inserted.
+                    # Storage failure is non-fatal: the document row already exists
+                    # with raw_storage_key NULL, so a later run can backfill it.
 
         # ── Update run: succeeded ─────────────────────────────────────────────
         await pool.execute(
@@ -257,6 +275,7 @@ async def ingest_source(
             counters["errors"],
             json.dumps(final_cursor) if final_cursor else None,
         )
+        _log.debug("ingest_source: persisted cursor_state=%s", final_cursor or None)
 
         # Update source last_run_at + reset consecutive_failures on success.
         await pool.execute(
@@ -387,9 +406,7 @@ async def score_source_health(
         uuid.UUID(source_id),
     )
     streak = (
-        int(consecutive_failures_row["consecutive_failures"])
-        if consecutive_failures_row
-        else 0
+        int(consecutive_failures_row["consecutive_failures"]) if consecutive_failures_row else 0
     )
     penalty = min(streak * 0.10, base_score)  # Don't go negative.
     score = round(max(0.0, base_score - penalty), 2)
@@ -442,6 +459,28 @@ async def cleanup_expired_cache(
 def _sha256(data: bytes) -> str:
     """Return the SHA-256 hex digest of *data* (used for content-hashing documents)."""
     return hashlib.sha256(data).hexdigest()
+
+
+def _parse_timestamp(value: str | None) -> _dt.datetime | None:
+    """Parse an adapter's ISO-8601 ``published_at`` string into an aware datetime.
+
+    asyncpg binds ``timestamptz`` parameters from ``datetime`` objects, not
+    strings (the ``::timestamptz`` cast in the query does not coerce a bound
+    ``str``).  Adapters emit RFC 3339 / ISO-8601 strings, commonly with a
+    trailing ``Z``; we normalise that to ``+00:00`` for ``fromisoformat``.
+    Returns ``None`` for empty/unparseable values so ingestion never fails on a
+    malformed source timestamp.
+    """
+    if not value:
+        return None
+    text = value.strip()
+    if text.endswith(("Z", "z")):
+        text = f"{text[:-1]}+00:00"
+    try:
+        return _dt.datetime.fromisoformat(text)
+    except ValueError:
+        _log.debug("ingest_source: unparseable published_at %r; storing NULL", value)
+        return None
 
 
 def _infer_document_type(doc: Any) -> str:

@@ -276,6 +276,47 @@ describe('assembleDigest — fact-version changes (the canonical change unit)', 
     expect(res.summary.content).not.toMatch(/new fact version/);
   });
 
+  it('classifies a supersession-across-the-cutoff (only the new current row in-window) via priorVersionSubjectIds', () => {
+    // The canonical cross-cutoff case. The real pipeline (write_fact_versions) inserts the new
+    // current row at `now` and closes the OLD row in place WITHOUT changing its recorded_at — so the
+    // closed predecessor's recorded_at predates the cutoff and is filtered out of the window. Only
+    // the new current row (is_current=true, superseded_by_id=null) is visible. Classifying from the
+    // in-window row alone would mislabel this a "new fact version"; the structural signal that the
+    // subject already had a pre-cutoff version (priorVersionSubjectIds) correctly marks it superseded.
+    const newCurrent = factVersion({
+      id: 'fv_new',
+      recorded_at: new Date('2026-06-05T20:00:00.000Z'),
+      is_current: true,
+      superseded_by_id: null,
+    });
+    const res = assembleDigest(
+      input({
+        claimRows: [],
+        factVersionRows: [newCurrent],
+        priorVersionSubjectIds: [ENT_RUST],
+      }),
+    );
+    expect(res.summary.content).toMatch(/superseded/);
+    // It must NOT be double-reported as a new assertion.
+    expect(res.summary.content).not.toMatch(/new fact version/);
+    expect(res.freshness.lastUpdated).toBe('2026-06-05T20:00:00.000Z');
+  });
+
+  it('a genuinely-new subject (no prior version) is a new assertion, not a supersession', () => {
+    const newCurrent = factVersion({
+      id: 'fv_new',
+      recorded_at: new Date('2026-06-05T20:00:00.000Z'),
+      is_current: true,
+      superseded_by_id: null,
+    });
+    // priorVersionSubjectIds empty → the subject is brand new in this window.
+    const res = assembleDigest(
+      input({ claimRows: [], factVersionRows: [newCurrent], priorVersionSubjectIds: [] }),
+    );
+    expect(res.summary.content).toMatch(/new fact version/);
+    expect(res.summary.content).not.toMatch(/superseded/);
+  });
+
   it('fact-version subject entity appears in changedEntities even when last_updated_at is older', () => {
     // buildDelta unions fact-version subjects into the entity fetch; here we model that the entity
     // row is provided (its last_updated_at predates the cutoff) alongside its in-window fact version.

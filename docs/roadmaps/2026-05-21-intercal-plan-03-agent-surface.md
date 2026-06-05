@@ -387,11 +387,26 @@ Implementation tasks:
       before trimming, so content provably never exceeds `token_budget`.
 - [x] Citations enriched with `url`+`publishedAt`; confidence = mean extraction confidence labelled
       `aggregate_extraction`; freshness = newest transaction time + coverage.
-- [x] Deterministic unit tests (`delta.test.ts`, 14) over the pure assembler: citations, budget
+- [x] Supersession-across-the-cutoff classified correctly (audit pass 3). The real pipeline
+      (`write_fact_versions`, `services/resolve`) inserts the new `is_current=true` row at `now` and
+      closes the OLD row IN PLACE without changing its `recorded_at`, so for a supersession recorded
+      AFTER the cutoff the closed predecessor falls outside the `(since, until]` window and ONLY the
+      new current row is visible. Classifying from in-window rows alone (pass-2 logic) therefore
+      mislabelled a genuine supersession as a "new fact version" — proven on a throwaway prod fork
+      (`since=19:00Z`: old in-window logic → "new assertion"; correct answer → supersession).
+      `buildDelta` now fetches the structural signal — subjects with a version recorded at/before
+      `since` (`priorVersionSubjectIds`) — and `assembleDigest` marks an in-window current row for
+      such a subject as a supersession. Per-subject counting (not per-row) keeps a subject from being
+      both superseded and new. The deterministic path is unchanged: change detection, citations,
+      freshness, and token budget were already correct; only the lede's supersession/new label is
+      fixed. No contract field added.
+- [x] Deterministic unit tests (`delta.test.ts`, 16) over the pure assembler: citations, budget
       bound + omission reporting, ranking, confidence/freshness, changed entities/relationships,
-      and (audit pass 2) fact-version changes — new version surfaced + cited with no claim change,
-      supersession reported without double-counting, fact-version subject in `changedEntities`
-      despite older `last_updated_at`, empty window = no fabrication.
+      fact-version changes (new version surfaced + cited with no claim change, supersession reported
+      without double-counting, fact-version subject in `changedEntities` despite older
+      `last_updated_at`, empty window = no fabrication), and (audit pass 3) the two cross-cutoff
+      classification cases — supersession detected via `priorVersionSubjectIds` when only the new
+      current row is in-window, and a genuinely-new subject (no prior version) as a new assertion.
 - [~] Digest cache + invalidation — deferred (Plan 04 / cache port); the response is a pure
       function of the bitemporal data, so caching is a transparent later optimisation, not faked.
 - [~] Provider-backed synthesis — deferred behind `LlmPort` (see decision above).

@@ -215,6 +215,30 @@ export async function buildDelta(db: Db, params: DeltaParams): Promise<S['DeltaR
     factVersionRows = await fvQuery.orderBy('recorded_at', 'desc').limit(200).execute();
   }
 
+  // ── Supersession detection across the cutoff. ────────────────────────────────────────────────
+  // A real supersession recorded AFTER the cutoff appears in the window as ONLY the new current row:
+  // the pipeline (write_fact_versions, services/resolve) inserts the new `is_current=true` row at
+  // `now` and CLOSES the old row IN PLACE (is_current=false, superseded_by_id=new) WITHOUT changing
+  // the old row's `recorded_at` — so the closed predecessor's recorded_at predates `since` and is
+  // filtered out of the window. Classifying from in-window rows alone would therefore mislabel a
+  // genuine supersession as a "new fact version". The robust, label-free signal is structural: an
+  // in-window current row whose subject already had a version recorded at/before the cutoff REPLACED
+  // something — it is a supersession; a subject with no prior version is a genuinely new assertion.
+  // We fetch exactly that set (subjects with a pre-cutoff version) for the in-window subjects.
+  const inWindowSubjectIds = [...new Set(factVersionRows.map((fv) => fv.fact_subject_id))];
+  let priorVersionSubjectIds: string[] = [];
+  if (inWindowSubjectIds.length > 0) {
+    const priorRows = await db
+      .selectFrom('fact_versions')
+      .select('fact_subject_id')
+      .distinct()
+      .where('fact_subject_type', '=', 'entity')
+      .where('fact_subject_id', 'in', inWindowSubjectIds)
+      .where('recorded_at', '<=', since)
+      .execute();
+    priorVersionSubjectIds = priorRows.map((r) => r.fact_subject_id);
+  }
+
   // ── Changed entities: union of (a) entities whose last_updated_at moved in the window and
   // (b) entities that had a fact version recorded in the window (the authoritative change record).
   // Deduped by id in the assembler so a change is never double-counted. EntitySummary is compact by
@@ -268,6 +292,7 @@ export async function buildDelta(db: Db, params: DeltaParams): Promise<S['DeltaR
     relRows,
     entityRows,
     factVersionRows,
+    priorVersionSubjectIds,
     docMeta,
   });
 }
@@ -291,6 +316,13 @@ export interface AssembleInput {
   entityRows: EntitiesTable[];
   /** Fact-version rows recorded in the window (the canonical change unit; may be empty). */
   factVersionRows?: FactVersionsTable[];
+  /**
+   * Subjects (entity ids) that already had a fact version recorded AT/BEFORE `since`. An in-window
+   * current version for such a subject SUPERSEDED a pre-cutoff version (the closed predecessor's
+   * `recorded_at` is out of the window), so it is a supersession, not a new assertion. Optional;
+   * absent in pure-assembler unit tests that model the change set directly.
+   */
+  priorVersionSubjectIds?: string[];
   docMeta: DocMeta[];
 }
 
@@ -307,18 +339,26 @@ export function assembleDigest(input: AssembleInput): S['DeltaResponse'] {
   const factVersionRows = input.factVersionRows ?? [];
 
   // ── Fact-version changes (the canonical bitemporal change unit). ──────────────────────────────
-  // A row recorded in the window that is NO LONGER current (is_current = false) was CLOSED in the
-  // window — i.e. a supersession event happened: a newer version replaced it. A current row in the
-  // window for a subject WITHOUT such a closed predecessor is a freshly recorded assertion. We
-  // classify from the in-window rows alone (no extra query) and never double-count a subject.
+  // A subject was SUPERSEDED in this window if EITHER:
+  //   (a) it has an in-window row that is no longer current (is_current=false / superseded_by_id set)
+  //       — the closing landed in the window because both old+new were recorded after the cutoff; OR
+  //   (b) it has an in-window current row AND already had a version recorded at/before the cutoff
+  //       (`priorVersionSubjectIds`) — the canonical cross-cutoff case: the pipeline closes the old
+  //       row IN PLACE without touching its `recorded_at`, so the closed predecessor falls OUTSIDE
+  //       the window and only the new current row is visible. Without (b) a real supersession-across-
+  //       the-cutoff would be mislabelled a "new fact version". We classify per SUBJECT (not per row)
+  //       so a subject is counted once and never appears as both superseded and new.
+  const priorVersionSubjects = new Set(input.priorVersionSubjectIds ?? []);
   const supersededSubjectIds = new Set<string>();
   for (const fv of factVersionRows) {
     if (!fv.is_current || fv.superseded_by_id) supersededSubjectIds.add(fv.fact_subject_id);
+    if (fv.is_current && priorVersionSubjects.has(fv.fact_subject_id)) {
+      supersededSubjectIds.add(fv.fact_subject_id);
+    }
   }
-  const supersessionCount = factVersionRows.filter(
-    (fv) => !fv.is_current || fv.superseded_by_id,
-  ).length;
-  // New assertions: current rows whose subject was not also superseded in-window.
+  const supersessionCount = supersededSubjectIds.size;
+  // New assertions: subjects with an in-window current row that were NOT superseded (no closed
+  // predecessor in-window and no prior version before the cutoff).
   const newAssertionSubjectIds = new Set<string>();
   for (const fv of factVersionRows) {
     if (fv.is_current && !fv.superseded_by_id && !supersededSubjectIds.has(fv.fact_subject_id)) {

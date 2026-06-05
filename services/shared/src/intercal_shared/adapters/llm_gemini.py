@@ -230,6 +230,14 @@ class GeminiLlmAdapter:
                 else self._default_max_tokens,
                 "temperature": 0.0,
                 "response_mime_type": "application/json",
+                # Disable thinking for structured extraction.  On the 2.5 "thinking"
+                # models, reasoning tokens are drawn from the same output budget; a
+                # thinking spike truncates the JSON mid-object so the whole chunk
+                # parses-fails and yields zero claims (the dominant under-extraction
+                # cause observed in W3 live runs).  thinking_budget=0 spends the full
+                # budget on the answer, making schema-bound extraction deterministic.
+                # (Ignored by non-thinking models.)
+                "thinking_config": self._genai.types.ThinkingConfig(thinking_budget=0),
             }
             # Native server-side JSON-Schema enforcement when a non-empty schema is given.
             if schema:

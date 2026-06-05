@@ -17,6 +17,7 @@ from intercal_extract.jobs import (
     EXTRACTOR_LLM,
     EXTRACTOR_RULE,
     MENTIONS_SCHEMA,
+    anchor_span,
     clamp_confidence,
     extract_claims,
     extract_mentions,
@@ -958,6 +959,271 @@ async def test_extract_claims_source_spans_in_raw_spans() -> None:
     # chunk_id must be present since we have a real chunk
     assert "chunk_id" in span
     assert str(chunk_id) == span["chunk_id"]
+
+
+# ── anchor_span (provenance offset correctness) ──────────────────────────────
+
+
+def test_anchor_span_exact_in_region() -> None:
+    cleaned = "x" * 100 + "Sam Altman leads OpenAI."
+    res = anchor_span(
+        "Sam Altman", cleaned_text=cleaned, region_start=100, region_end=len(cleaned)
+    )
+    assert res is not None
+    start, end = res
+    assert cleaned[start:end] == "Sam Altman"
+
+
+def test_anchor_span_whitespace_flexible() -> None:
+    # chunk_text joined a paragraph break with a single space; cleaned_text has \n\n.
+    cleaned = "First line.\n\nSecond paragraph mentions Anthropic here."
+    # The span as the LLM/chunk saw it (single space) differs from cleaned_text.
+    res = anchor_span(
+        "Second paragraph mentions Anthropic",
+        cleaned_text=cleaned,
+        region_start=0,
+        region_end=len(cleaned),
+    )
+    assert res is not None
+    start, end = res
+    assert cleaned[start:end] == "Second paragraph mentions Anthropic"
+
+
+def test_anchor_span_returns_none_when_absent() -> None:
+    cleaned = "Nothing relevant here at all."
+    assert (
+        anchor_span("Totally Missing", cleaned_text=cleaned, region_start=0, region_end=29)
+        is None
+    )
+
+
+def test_anchor_span_picks_occurrence_in_region() -> None:
+    # Same token appears before and inside the region; anchor must prefer the region.
+    cleaned = "OpenAI ... " + ("y" * 50) + " OpenAI again"
+    region_start = 11
+    res = anchor_span(
+        "OpenAI", cleaned_text=cleaned, region_start=region_start, region_end=len(cleaned)
+    )
+    assert res is not None
+    start, _end = res
+    assert start >= region_start
+
+
+@pytest.mark.asyncio
+async def test_extract_mentions_anchors_offsets_across_whitespace_drift() -> None:
+    """Document offsets must index cleaned_text even when chunk_text whitespace differs.
+
+    Regression for the provenance offset-drift bug: the chunker re-joins sentences
+    with single spaces, so a chunk that spans a newline in cleaned_text has
+    different internal offsets than the document.  Naive (chunk_start + local)
+    math corrupts the persisted span; anchoring must recover the verbatim offset.
+    """
+    cleaned = "Intro line.\n\nSam Altman leads OpenAI Foundation today."
+    # chunk_text as W2 would store it: paragraph break collapsed to a space,
+    # and char_offset_start/end bound the region within cleaned_text.
+    chunk_body = "Intro line. Sam Altman leads OpenAI Foundation today."
+    chunk_id = uuid.uuid4()
+
+    inserted: list[tuple[str, int, int]] = []
+
+    async def _execute(query: str, *args: Any) -> str:
+        if "INSERT INTO mentions" in query and len(args) >= 8:
+            # text_span=$3, char_offset_start=$4, char_offset_end=$5
+            inserted.append((str(args[2]), int(args[3]), int(args[4])))
+        return "OK"
+
+    pool = _make_pool(
+        doc_row={"id": uuid.UUID(DOC_ID), "cleaned_text": cleaned, "citation_only": False},
+        chunks=[
+            {
+                "id": chunk_id,
+                "chunk_index": 0,
+                "chunk_text": chunk_body,
+                "char_offset_start": 0,
+                "char_offset_end": len(cleaned),
+            }
+        ],
+    )
+    pool.execute = _execute
+
+    await extract_mentions(document_id=DOC_ID, pool=pool, llm=None)
+
+    # Every persisted mention's offsets must reconstruct its text from cleaned_text.
+    assert inserted, "expected at least one rule-based mention (Sam Altman)"
+    for text_span, start, end in inserted:
+        assert cleaned[start:end] == text_span, (
+            f"offset drift: cleaned_text[{start}:{end}]="
+            f"{cleaned[start:end]!r} != {text_span!r}"
+        )
+
+
+@pytest.mark.asyncio
+async def test_extract_claims_anchored_quote_matches_offsets() -> None:
+    """Claim raw_quote and raw_spans offsets must agree and index cleaned_text."""
+    cleaned = "Header.\n\nAnthropic developed Claude in San Francisco."
+    chunk_body = "Header. Anthropic developed Claude in San Francisco."
+    chunk_id = uuid.uuid4()
+    # The LLM reports a chunk-local span for the evidence.
+    local_start = chunk_body.index("Anthropic developed Claude")
+    local_end = local_start + len("Anthropic developed Claude")
+    claim_data = {
+        "claims": [
+            {
+                "subject_text": "Anthropic",
+                "predicate": "developed",
+                "object_text": "Claude",
+                "normalized_text": "Anthropic developed Claude.",
+                "qualifiers": {},
+                "valid_from": None,
+                "valid_until": None,
+                "confidence": 0.95,
+                "char_offset_start": local_start,
+                "char_offset_end": local_end,
+            }
+        ]
+    }
+
+    captured: dict[str, Any] = {}
+
+    async def _fetchval(query: str, *args: Any) -> uuid.UUID:
+        if "INSERT INTO claims" in query and len(args) >= 7:
+            captured["raw_quote"] = args[5]  # $6
+            captured["raw_spans"] = json.loads(args[6])  # $7
+        return uuid.uuid4()
+
+    pool = _make_pool(
+        doc_row={
+            "id": uuid.UUID(DOC_ID),
+            "cleaned_text": cleaned,
+            "redistribution_allowed": True,
+        },
+        chunks=[
+            {
+                "id": chunk_id,
+                "chunk_index": 0,
+                "chunk_text": chunk_body,
+                "char_offset_start": 0,
+                "char_offset_end": len(cleaned),
+            }
+        ],
+    )
+    pool.fetchval = _fetchval
+    llm = _make_llm(claims_data=claim_data)
+    await extract_claims(document_id=DOC_ID, pool=pool, llm=llm)
+
+    span = captured["raw_spans"][0]
+    start, end = span["char_start"], span["char_end"]
+    assert start is not None and end is not None
+    # The recorded offsets must index cleaned_text to exactly the stored quote.
+    assert cleaned[start:end] == "Anthropic developed Claude"
+    assert captured["raw_quote"] == "Anthropic developed Claude"
+    assert span["text"] == "Anthropic developed Claude"
+
+
+@pytest.mark.asyncio
+async def test_extract_claims_no_quote_when_span_unanchorable() -> None:
+    """A claim whose evidence span cannot be anchored stores NULL offsets, no quote."""
+    cleaned = "Anthropic developed Claude."
+    chunk_body = cleaned
+    chunk_id = uuid.uuid4()
+    # Offsets point past the chunk text → cannot slice a valid quote.
+    claim_data = {
+        "claims": [
+            {
+                "subject_text": "Anthropic",
+                "predicate": "developed",
+                "object_text": "Claude",
+                "normalized_text": "Anthropic developed Claude.",
+                "qualifiers": {},
+                "valid_from": None,
+                "valid_until": None,
+                "confidence": 0.9,
+                "char_offset_start": 9000,
+                "char_offset_end": 9100,
+            }
+        ]
+    }
+
+    captured: dict[str, Any] = {}
+
+    async def _fetchval(query: str, *args: Any) -> uuid.UUID:
+        if "INSERT INTO claims" in query and len(args) >= 7:
+            captured["raw_quote"] = args[5]
+            captured["raw_spans"] = json.loads(args[6])
+        return uuid.uuid4()
+
+    pool = _make_pool(
+        doc_row={
+            "id": uuid.UUID(DOC_ID),
+            "cleaned_text": cleaned,
+            "redistribution_allowed": True,
+        },
+        chunks=[
+            {
+                "id": chunk_id,
+                "chunk_index": 0,
+                "chunk_text": chunk_body,
+                "char_offset_start": 0,
+                "char_offset_end": len(cleaned),
+            }
+        ],
+    )
+    pool.fetchval = _fetchval
+    llm = _make_llm(claims_data=claim_data)
+    counters = await extract_claims(document_id=DOC_ID, pool=pool, llm=llm)
+
+    # Claim still persists (chunk_id provenance), but with NULL span + no quote.
+    assert counters["claims_persisted"] == 1
+    assert captured["raw_quote"] is None
+    span = captured["raw_spans"][0]
+    assert span["char_start"] is None
+    assert span["char_end"] is None
+    assert "text" not in span
+    assert span["chunk_id"] == str(chunk_id)
+
+
+@pytest.mark.asyncio
+async def test_extract_mentions_unanchorable_llm_span_dropped() -> None:
+    """An LLM mention whose text_span is not in the document is dropped, not faked."""
+    cleaned = "Q5401080 is referenced."
+    chunk_id = uuid.uuid4()
+    llm = _make_llm(
+        mentions_data={
+            "mentions": [
+                {
+                    "text_span": "Nonexistent Entity",
+                    "proposed_type": "ORG",
+                    "char_offset_start": 0,
+                    "char_offset_end": 18,
+                    "confidence": 0.9,
+                }
+            ]
+        }
+    )
+    inserted_spans: list[str] = []
+
+    async def _execute(query: str, *args: Any) -> str:
+        if "INSERT INTO mentions" in query and len(args) >= 3:
+            inserted_spans.append(str(args[2]))
+        return "OK"
+
+    pool = _make_pool(
+        doc_row={"id": uuid.UUID(DOC_ID), "cleaned_text": cleaned, "citation_only": False},
+        chunks=[
+            {
+                "id": chunk_id,
+                "chunk_index": 0,
+                "chunk_text": cleaned,
+                "char_offset_start": 0,
+                "char_offset_end": len(cleaned),
+            }
+        ],
+    )
+    pool.execute = _execute
+    await extract_mentions(document_id=DOC_ID, pool=pool, llm=llm)
+    # The fabricated mention must not be persisted; the real QID rule match is.
+    assert "Nonexistent Entity" not in inserted_spans
+    assert "Q5401080" in inserted_spans
 
 
 # ── CLI wiring ─────────────────────────────────────────────────────────────────

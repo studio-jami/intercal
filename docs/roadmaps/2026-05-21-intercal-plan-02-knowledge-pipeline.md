@@ -335,10 +335,51 @@ Implementation tasks:
   - Provider: `gemini-2.5-flash` (Gemini API key fallback; 326 in / 69 out tokens for 1 claim).
   - Idempotent re-run: delete+replace confirmed by counter parity (DB count == persisted counter).
 
+- [x] Audit pass (2026-06-05, second fresh context) closed two correctness defects and
+  one extraction-quality defect the first pass missed. All within the W3 lane (the
+  embeddings/W4 change is the minimal seam fix that unblocks W3 claim quality):
+  1. **Provenance offset corruption (the critical one).** `extract_mentions` /
+     `extract_claims` computed document-level char offsets as `chunk.char_offset_start +
+     llm_local_offset`. But `document_chunks.chunk_text` is a re-joined, whitespace-collapsed
+     variant of its source region (the chunker strips sentence edges and joins sentences with
+     a single space), so chunk-text offsets do **not** line up with `cleaned_text` wherever the
+     region contained a newline or repeated whitespace. Every persisted span past such a point
+     drifted — `cleaned_text[start:end]` no longer reconstructed the mention/quote. False
+     provenance is corruption. Fixed with `anchor_span()`: the verbatim span text is located
+     within the chunk's known region of `cleaned_text` (exact, then whitespace-flexible, then
+     whole-document fallback), so the persisted offsets satisfy the only invariant that matters
+     — `cleaned_text[start:end]` reconstructs the span. Unanchorable spans are **dropped**, never
+     stored with a fabricated offset. Claim `raw_quote` is now the anchored slice (matches the
+     stored offsets exactly). Live-confirmed on real W2 chunks (whitespace-drift present): 0
+     span-reconstruction failures across 20 mentions + 9 claims on both providers. The first
+     pass's small live run did not surface it because its chunks happened to be single-region.
+  2. **Claim under-extraction from output truncation.** On the 2.5 "thinking" models, reasoning
+     tokens are drawn from the same `max_output_tokens` budget; a thinking spike truncated the
+     structured-extraction JSON mid-object, so the whole chunk parse-failed (after retries) and
+     yielded **zero** claims — the real reason pass 1 got only 1 claim from 2 docs. Fixed by
+     setting `thinking_config.thinking_budget=0` on `extract_structured` in the Gemini/Vertex
+     adapter (verified against google-genai 2.8.0): the full budget goes to the answer, making
+     schema-bound extraction deterministic. Live: 1→9 claims on Vertex for the same content.
+  3. **Claim prompt sharpened** to decompose compound sentences into atomic claims and extract
+     liberally (explicitly factual-only; no fabrication, no inference beyond the text).
+- [x] +8 W3 regression tests (245 service tests pass) pin the anchoring invariant
+  (`cleaned_text[start:end] == text_span` under whitespace drift), unanchorable-span drop,
+  anchored-quote/offset agreement, and NULL-span-on-unanchorable. `pnpm py:lint` +
+  `pnpm py:typecheck` clean (0 errors).
+- [x] Re-verified LIVE (2026-06-05) on a dedicated Neon verification branch using the **real**
+  W2 normalizer to produce real drifted chunks, then the real W3 jobs through the live LLM port:
+  - **Vertex (primary)**: 20 mentions + 9 claims persisted, 0 span-reconstruction failures
+    (2974 in / 1100 out tokens, 5 chunks).
+  - **Gemini-key (fallback)**: 20 mentions + 3 claims, 0 span-reconstruction failures.
+  - Idempotent re-run: DB counts == persisted counts (no duplication).
+  - Error taxonomy exercised live: Vertex 429 → `LlmRateLimitError` (retried, graceful per-chunk
+    degrade); Gemini 503 → transient, non-fatal. Verification branch deleted after the run.
+
 Exit criteria:
 
 - [x] Fixture documents produce expected mentions and claims with source evidence.
-- [x] Source spans (chunk_id + char offsets) trace every claim back to its evidence text.
+- [x] Source spans (chunk_id + char offsets) trace every claim back to its evidence text —
+  offsets reconstruct the verbatim span from `cleaned_text` (anchored, drift-proof).
 - [x] Extraction is idempotent (safe to retry with same inputs).
 
 Suggested verification:

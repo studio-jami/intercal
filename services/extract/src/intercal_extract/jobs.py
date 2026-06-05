@@ -222,6 +222,78 @@ def safe_int_offset(value: Any) -> int | None:
         return None
 
 
+# Whitespace run — used to anchor a span whose internal whitespace differs
+# between the chunk text and the document's cleaned_text.
+_WS_RUN: re.Pattern[str] = re.compile(r"\s+")
+
+
+def anchor_span(
+    span_text: str,
+    *,
+    cleaned_text: str,
+    region_start: int,
+    region_end: int,
+) -> tuple[int, int] | None:
+    """Locate *span_text* inside ``cleaned_text`` and return its document offsets.
+
+    This is the provenance anchor.  Chunk offsets cannot be added naively to a
+    chunk-local offset to obtain a document offset: ``document_chunks.chunk_text``
+    is a re-joined, whitespace-collapsed variant of its source region (the chunker
+    strips sentence edges and joins sentences with a single space), so the same
+    character index points at different content in ``chunk_text`` versus
+    ``cleaned_text``.  Adding offsets therefore drifts wherever the source region
+    contained newlines or repeated whitespace — corrupting every persisted span.
+
+    Instead we find the *verbatim span text* within the chunk's known region of
+    ``cleaned_text`` (``[region_start:region_end]``), so the returned offsets
+    satisfy the only invariant that matters for provenance:
+    ``cleaned_text[start:end] == cleaned_text[start:end]`` reconstructs the span.
+
+    Resolution order (most to least precise):
+    1. Exact substring match within the chunk's region.
+    2. Whitespace-flexible match within the region (handles ``" "`` in chunk_text
+       where cleaned_text has ``"\\n"`` / multiple spaces).
+    3. Exact, then whitespace-flexible, over the whole document (covers a span the
+       LLM lifted across a chunk boundary or lightly paraphrased the spacing of).
+
+    Returns ``None`` when the span cannot be located.  Callers drop such spans
+    rather than persist a fabricated offset — a false provenance pointer is
+    corruption, a dropped one is merely a missed candidate.
+    """
+    span_text = span_text.strip()
+    if not span_text:
+        return None
+
+    text_len = len(cleaned_text)
+    lo = max(0, min(region_start, text_len))
+    hi = max(lo, min(region_end, text_len))
+
+    def _verbatim(start: int, end: int) -> tuple[int, int] | None:
+        idx = cleaned_text.find(span_text, start, end)
+        if idx == -1:
+            return None
+        return idx, idx + len(span_text)
+
+    def _ws_flexible(start: int, end: int) -> tuple[int, int] | None:
+        tokens = [re.escape(t) for t in span_text.split()]
+        if not tokens:
+            return None
+        pattern = re.compile(r"\s+".join(tokens))
+        m = pattern.search(cleaned_text, start, end)
+        if m is None:
+            return None
+        return m.start(), m.end()
+
+    # 1 + 2: within the chunk's region (preferred — keeps the span local to its chunk).
+    return (
+        _verbatim(lo, hi)
+        or _ws_flexible(lo, hi)
+        # 3: widen to the full document as a last resort.
+        or _verbatim(0, text_len)
+        or _ws_flexible(0, text_len)
+    )
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # extract_mentions
 # ──────────────────────────────────────────────────────────────────────────────
@@ -318,7 +390,13 @@ async def extract_mentions(
 
     for chunk in virtual_chunks:
         chunk_text_content: str = str(chunk["chunk_text"] or "")
-        chunk_doc_offset: int = int(chunk["char_offset_start"] or 0)
+        chunk_region_start: int = int(chunk["char_offset_start"] or 0)
+        _region_end_raw = chunk["char_offset_end"]
+        chunk_region_end: int = (
+            int(_region_end_raw)
+            if _region_end_raw is not None
+            else chunk_region_start + len(chunk_text_content)
+        )
         _chunk_id_raw = chunk["id"]
         chunk_db_id: uuid.UUID | None = (
             _chunk_id_raw if isinstance(_chunk_id_raw, uuid.UUID) else None
@@ -377,20 +455,28 @@ async def extract_mentions(
             merged[key] = cand  # LLM overwrites rule for the same span
 
         for cand in merged.values():
-            # Convert chunk-local offsets to document-level offsets
-            doc_start = None
-            doc_end = None
-            raw_start = cand.get("char_offset_start")
-            raw_end = cand.get("char_offset_end")
-            if raw_start is not None:
-                doc_start = chunk_doc_offset + raw_start
-            if raw_end is not None:
-                doc_end = chunk_doc_offset + raw_end
+            # Anchor the mention's verbatim text within this chunk's region of
+            # cleaned_text to obtain document-level offsets.  Naive offset
+            # addition drifts because chunk_text whitespace differs from the
+            # cleaned_text region (see anchor_span).  The reported char offsets
+            # (especially from the LLM) are only used as a fallback locator.
+            span_text = str(cand["text_span"]).strip()
+            anchored = anchor_span(
+                span_text,
+                cleaned_text=cleaned_text,
+                region_start=chunk_region_start,
+                region_end=chunk_region_end,
+            )
+            if anchored is None:
+                # Could not locate the span verbatim — drop it rather than
+                # persist a fabricated provenance offset.
+                continue
+            doc_start, doc_end = anchored
 
             all_candidates.append(
                 {
                     "chunk_db_id": chunk_db_id,
-                    "text_span": cand["text_span"],
+                    "text_span": span_text,
                     "proposed_type": cand["proposed_type"],
                     "char_offset_start": doc_start,
                     "char_offset_end": doc_end,
@@ -513,6 +599,7 @@ async def extract_claims(
         raise ValueError(f"source_document not found: {document_id!r}")
 
     redistribution_allowed: bool = bool(row["redistribution_allowed"])
+    cleaned_text: str = row["cleaned_text"] or ""
 
     chunks = await pool.fetch(
         """
@@ -526,7 +613,6 @@ async def extract_claims(
         max_chunks,
     )
 
-    cleaned_text: str = row["cleaned_text"] or ""
     if not chunks and cleaned_text.strip():
         # No chunks yet — treat cleaned_text as one virtual chunk.
         virtual_chunks = [
@@ -607,17 +693,46 @@ async def extract_claims(
     persisted = 0
     for raw_claim, chunk_meta in all_validated:
         chunk_db_id: uuid.UUID | None = chunk_meta.get("id")
-        chunk_doc_offset: int = chunk_meta.get("char_offset_start") or 0
+        chunk_body: str = str(chunk_meta.get("chunk_text") or "")
+        chunk_region_start: int = int(chunk_meta.get("char_offset_start") or 0)
+        _claim_region_end_raw = chunk_meta.get("char_offset_end")
+        chunk_region_end: int = (
+            int(_claim_region_end_raw)
+            if _claim_region_end_raw is not None
+            else chunk_region_start + len(chunk_body)
+        )
 
-        # Derive document-level character span from chunk-local offsets.
+        # Resolve the evidence span and a reconstructable quote.
+        #
+        # The LLM reports chunk-local offsets for the claim's evidence span.  We
+        # slice the candidate quote from chunk_text using those offsets, then
+        # *anchor* that verbatim quote back into cleaned_text (anchor_span) so the
+        # persisted document offsets actually index the source text.  Naive
+        # offset addition drifts (chunk_text whitespace != cleaned_text region).
+        # If the offsets are missing/invalid, or the quote cannot be anchored, we
+        # store NULL offsets + no quote (chunk_id still records provenance) rather
+        # than a fabricated span.
         raw_start = safe_int_offset(raw_claim.get("char_offset_start"))
         raw_end = safe_int_offset(raw_claim.get("char_offset_end"))
-        doc_char_start: int | None = (
-            (chunk_doc_offset + raw_start) if raw_start is not None else None
-        )
-        doc_char_end: int | None = (
-            (chunk_doc_offset + raw_end) if raw_end is not None else None
-        )
+        doc_char_start: int | None = None
+        doc_char_end: int | None = None
+        anchored_quote: str | None = None
+        if (
+            raw_start is not None
+            and raw_end is not None
+            and raw_end > raw_start
+            and raw_end <= len(chunk_body)
+        ):
+            candidate_quote = chunk_body[raw_start:raw_end].strip()
+            anchored = anchor_span(
+                candidate_quote,
+                cleaned_text=cleaned_text,
+                region_start=chunk_region_start,
+                region_end=chunk_region_end,
+            )
+            if anchored is not None:
+                doc_char_start, doc_char_end = anchored
+                anchored_quote = cleaned_text[doc_char_start:doc_char_end]
 
         # Build raw_spans provenance — carries chunk + character offsets for
         # full traceability from claim back to source evidence text.
@@ -629,9 +744,8 @@ async def extract_claims(
         if chunk_db_id is not None:
             raw_spans_entry["chunk_id"] = str(chunk_db_id)
         # Only include the excerpt when the source allows redistribution.
-        if redistribution_allowed and doc_char_start is not None and doc_char_end is not None:
-            body = chunk_meta.get("chunk_text") or ""
-            raw_spans_entry["text"] = body[raw_start:raw_end]  # type: ignore[index]
+        if redistribution_allowed and anchored_quote is not None:
+            raw_spans_entry["text"] = anchored_quote
 
         qualifiers = raw_claim.get("qualifiers")
         if not isinstance(qualifiers, dict):
@@ -648,11 +762,9 @@ async def extract_claims(
         if not normalized_text:
             normalized_text = f"{subject_text} {predicate} {object_text}"
 
-        # raw_quote only if redistribution allowed
-        raw_quote: str | None = None
-        if redistribution_allowed and doc_char_start is not None and doc_char_end is not None:
-            body = chunk_meta.get("chunk_text") or ""
-            raw_quote = body[raw_start:raw_end]  # type: ignore[index]
+        # raw_quote only if redistribution allowed — use the anchored quote so it
+        # matches the persisted document offsets exactly.
+        raw_quote: str | None = anchored_quote if redistribution_allowed else None
 
         try:
             claim_id: uuid.UUID = await pool.fetchval(
@@ -797,22 +909,35 @@ def _mentions_prompt(chunk_text: str) -> str:
 def _claims_prompt(chunk_text: str) -> str:
     """Build the LLM prompt for claim extraction from *chunk_text*."""
     return (
-        "You are a fact-extraction assistant. "
-        "Extract all atomic factual assertions from the following text.\n\n"
+        "You are a precise fact-extraction assistant building a knowledge base.\n"
+        "Extract EVERY atomic factual assertion the text actually states. Decompose "
+        "compound sentences into separate atomic claims — a sentence asserting three "
+        "facts must yield three claims. Extract liberally, but ONLY facts that are "
+        "explicitly supported by the text. Never invent, infer beyond the text, or "
+        "guess. If a fact is not stated, do not include it.\n\n"
+        "Capture facts such as: who someone/something is (is_a, instance_of), roles and "
+        "positions (holds_role), membership/affiliation (member_of, part_of, works_for), "
+        "founding/creation (founded, created, developed, authored), ownership/acquisition "
+        "(owns, acquired), location (located_in, headquartered_in, born_in), dates and "
+        "events (occurred_on, released, published, updated), identifiers and properties "
+        "(has_property, identified_by), and stated assertions (stated, announced).\n\n"
         "For each claim return:\n"
-        "  subject_text: the subject of the claim (a person, org, entity, or concept)\n"
-        "  predicate: the relationship or assertion (e.g. holds_role, founded, stated, "
-        "acquired, is_a, located_in, published, updated)\n"
-        "  object_text: the object or value of the claim\n"
-        "  normalized_text: a canonical natural-language sentence for the claim\n"
-        "  qualifiers: optional object with additional context (date, location, units, etc.)\n"
-        "  valid_from: ISO 8601 date when this became true, or null\n"
-        "  valid_until: ISO 8601 date when this stopped being true, or null\n"
-        "  confidence: a float from 0.0 to 1.0\n"
-        "  char_offset_start: 0-based character offset where the claim's evidence starts\n"
-        "  char_offset_end: exclusive end character offset\n\n"
+        "  subject_text: the subject exactly as named in the text\n"
+        "  predicate: a concise snake_case relationship verb (see examples above)\n"
+        "  object_text: the object or value of the claim, as stated in the text\n"
+        "  normalized_text: a single canonical natural-language sentence restating the claim\n"
+        "  qualifiers: optional object with extra context (date, location, units, role, etc.)\n"
+        "  valid_from: ISO 8601 date when this became true, or null if not stated\n"
+        "  valid_until: ISO 8601 date when this stopped being true, or null if open/unstated\n"
+        "  confidence: a float 0.0-1.0 reflecting how explicitly the text supports the claim\n"
+        "  char_offset_start: 0-based character offset in the text where the supporting "
+        "evidence span begins (copy the exact substring that states the fact)\n"
+        "  char_offset_end: exclusive end character offset of that evidence span\n\n"
+        "The char offsets must bracket a VERBATIM substring of the text below that supports "
+        "the claim, so the evidence can be traced back to the source.\n"
         "Return ONLY a JSON object with key \"claims\" containing the array.\n"
-        "If no facts can be extracted, return {\"claims\": []}.\n\n"
+        "If the text states no extractable facts (e.g. it is metadata or boilerplate), "
+        "return {\"claims\": []}.\n\n"
         f"Text:\n{chunk_text}"
     )
 

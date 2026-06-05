@@ -1584,38 +1584,45 @@ async def _link_one_end(
                 )
 
     # ── 2. Alias / exact canonical-name match (type-agnostic) ────────────────
-    # Check canonical_name first, then entity_aliases.
-    name_row = await pool.fetchrow(
+    # Match on exact case-folded canonical name OR alias across all live
+    # entities.  This is type-agnostic (claim ends can be any type), so unlike
+    # W6's name match — which is scoped by type_id and therefore unambiguous —
+    # the same surface form can resolve to two genuinely distinct entities
+    # (e.g. "Apple" the company vs. "apple" the concept).  Picking one
+    # arbitrarily would be a false link, which corrupts the relationship graph
+    # exactly as a false entity merge would.  So we fetch the DISTINCT set of
+    # live entity ids that match (capped at 2) and only link when there is
+    # EXACTLY ONE — true ambiguity is left NULL (conservative), never guessed.
+    name_rows = await pool.fetch(
         """
-        SELECT id FROM entities
-        WHERE lower(canonical_name) = $1
-          AND is_deprecated = false
-        LIMIT 1
+        SELECT DISTINCT entity_id FROM (
+            SELECT id AS entity_id
+            FROM entities
+            WHERE lower(canonical_name) = $1
+              AND is_deprecated = false
+            UNION
+            SELECT e.id AS entity_id
+            FROM entity_aliases ea
+            JOIN entities e ON e.id = ea.entity_id
+            WHERE lower(ea.alias) = $1
+              AND e.is_deprecated = false
+        ) matches
+        LIMIT 2
         """,
         norm_text,
     )
-    if name_row:
+    if len(name_rows) == 1:
         return (
-            uuid.UUID(str(name_row["id"])),
+            uuid.UUID(str(name_rows[0]["entity_id"])),
             LINK_EXACT_NAME_CONFIDENCE,
             "exact_name",
         )
-    alias_row = await pool.fetchrow(
-        """
-        SELECT e.id
-        FROM entity_aliases ea
-        JOIN entities e ON e.id = ea.entity_id
-        WHERE lower(ea.alias) = $1
-          AND e.is_deprecated = false
-        LIMIT 1
-        """,
-        norm_text,
-    )
-    if alias_row:
-        return (
-            uuid.UUID(str(alias_row["id"])),
-            LINK_EXACT_NAME_CONFIDENCE,
-            "exact_alias",
+    if len(name_rows) > 1:
+        _log.debug(
+            "_link_one_end: ambiguous exact-name match for %r "
+            "(%d distinct live entities) — leaving NULL",
+            surface_text,
+            len(name_rows),
         )
 
     # ── 3. Embedding cosine similarity ────────────────────────────────────────

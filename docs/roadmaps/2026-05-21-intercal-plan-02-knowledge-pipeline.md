@@ -931,6 +931,52 @@ Implementation tasks:
     derive re-run → 0 new relationships (total stable at 1). Both passes: PASS.
   - Throwaway branch deleted after verification.
 
+- [x] Audit pass (2026-06-05, second fresh context) closed one no-false-link precision gap
+  the first pass missed, staying strictly in the linking lane:
+  1. **Ambiguous exact-name match could mis-link (the corruption-class defect).** Unlike
+     W6's name match — which is scoped by `type_id` and therefore unambiguous — the linking
+     job's exact-name/alias path is intentionally type-agnostic (claim ends can be any type).
+     `canonical_name` is **not** unique (only a non-unique `lower(canonical_name)` index), so
+     the same surface form can match two genuinely distinct live entities (e.g. "Apple" the
+     company vs. the concept). The original `LIMIT 1` with no tie-break picked one arbitrarily
+     at conf 0.85 — a false link, which corrupts the relationship graph exactly as a false
+     entity merge does. Fixed: the canonical-name and alias lookups are now a single unioned
+     `SELECT DISTINCT entity_id … LIMIT 2`; a link is written **only when exactly one** distinct
+     live entity matches. True ambiguity (>1) is left NULL (conservative), never guessed. The
+     mention-span path (doc-scoped, conf 0.90) and embedding-cosine path (nearest neighbour,
+     dist ≤ 0.10) were already safe and are unchanged. The 0.10 cosine floor was reviewed and
+     confirmed principled (cos sim ≥ 0.90, stricter than W6's 0.15 merge / 0.40 review bands),
+     not demo-tuned.
+  2. **`located_in → organization_headquartered_in` reviewed (documented caveat, no change).**
+     The mapping is FK-valid (seeded type) and `is_a → entity_instance_of_concept` is correct.
+     `organization_headquartered_in` semantically presumes an organization subject; W7 does no
+     subject-type validation for ANY of the 20 mappings (pre-existing, out of the linking lane),
+     so the new keyword is no worse than the existing vocabulary — flagged for a future
+     type-aware predicate-mapping pass, not corruption-class.
+- [x] +1 regression test pins the ambiguity-rejection (two distinct same-name live entities →
+  NULL, no UPDATE). 346 service tests pass; `pnpm py:lint` + `pnpm py:typecheck` clean (0 errors).
+- [x] **Re-verified LIVE (2026-06-05)** on a throwaway Neon branch (forked from default,
+  migrations applied, deleted after) using a RELATIONSHIP-RICH real source end-to-end through
+  the real pipeline — no mocks, no synthetic claims:
+  - **W1** real GitHub-releases adapter → **rust-lang/rust** release notes (6 real docs, live
+    api.github.com 200) → **W2** normalize (42 chunks) → **W3** real LLM extraction (Gemini
+    `gemini-2.5-flash`, live HTTP): **151 claims**, ~1013 mentions → **W5** embed (chunks +
+    claims) → **W6** resolve (209 entities, 0 false auto-merges) → **link-claim-entities**:
+    87 claims linked (60 subject + 52 object ends), 25 fully linked; methods exercised:
+    `exact_mention_span` (60), `embedding_cosine` (52), `exact_name` (0 here — correctly, no
+    unambiguous name match). 91+99 ends left NULL (conservative).
+  - **W7 derive_relationships: 4 relationships** from genuinely-linked real claims
+    (`entity_instance_of_concept`: `LazyCell<T,F>`/`assert_matches!`/`AssertUnwindSafe<T>`/
+    `Vec::into_raw_parts` → `Stabilized APIs`), each with claim_ids + source_document_ids
+    provenance (one merged 2 claims). **write_fact_versions** wrote append-only versions;
+    re-run skipped (idempotent).
+  - **Adversarial no-false-link proof:** seeded two distinct live entities both named
+    "Mercury" + an active claim with subject "Mercury" → linking left it **NULL** (ambiguity
+    rejected). Control: deprecating one "Mercury" left exactly one live → the SAME claim then
+    linked to the surviving entity (`exact_name`, conf 0.85), never the deprecated one.
+  - **Idempotency:** link re-run → 0 new links / 0 churn; derive re-run → 0 new relationships;
+    fact-version re-run → skipped. All PASS. Throwaway branch deleted after the run.
+
 Exit criteria:
 
 - [x] `link_claim_entities` correctly populates `claims.subject_entity_id` /

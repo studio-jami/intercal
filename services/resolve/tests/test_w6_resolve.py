@@ -1597,10 +1597,25 @@ def _make_link_pool(
     mention_row: dict[str, Any] | None = None,
     name_row: dict[str, Any] | None = None,
     alias_row: dict[str, Any] | None = None,
+    name_rows: list[dict[str, Any]] | None = None,
     live_entity_row: dict[str, Any] | None = None,
     emb_rows: list[dict[str, Any]] | None = None,
 ) -> FakePool:
-    """Build a FakePool wired for link_claim_entities tests."""
+    """Build a FakePool wired for link_claim_entities tests.
+
+    The exact-name/alias match is a single unioned ``fetch`` returning DISTINCT
+    live entity ids.  ``name_rows`` overrides that result directly (used to test
+    the ambiguity-rejection path); otherwise it is synthesised from the legacy
+    ``name_row`` / ``alias_row`` single-row fixtures so a single match links and
+    no match leaves NULL.
+    """
+    if name_rows is None:
+        synthesized: list[dict[str, Any]] = []
+        if name_row is not None:
+            synthesized.append({"entity_id": name_row["id"]})
+        if alias_row is not None:
+            synthesized.append({"entity_id": alias_row["id"]})
+        name_rows = synthesized
 
     class LinkPool(FakePool):
         async def fetch(self, sql: str, *args: Any) -> list[Any]:
@@ -1609,6 +1624,9 @@ def _make_link_pool(
                 return [_FakeRecord(c) for c in (claims or [])]
             if "FROM ENTITY_EMBEDDINGS EE" in sql_upper:
                 return [_FakeRecord(r) for r in (emb_rows or [])]
+            # Unioned exact-name/alias DISTINCT lookup.
+            if "LOWER(CANONICAL_NAME) = $1" in sql_upper:
+                return [_FakeRecord(r) for r in (name_rows or [])]
             return []
 
         async def fetchrow(self, sql: str, *args: Any) -> Any | None:
@@ -1619,12 +1637,6 @@ def _make_link_pool(
             # Live entity check (after mention lookup)
             if "FROM ENTITIES WHERE ID = $1 AND IS_DEPRECATED = FALSE" in sql_upper:
                 return _FakeRecord(live_entity_row) if live_entity_row else None
-            # Canonical name lookup
-            if "LOWER(CANONICAL_NAME) = $1" in sql_upper and "ENTITY_ALIASES" not in sql_upper:
-                return _FakeRecord(name_row) if name_row else None
-            # Alias lookup
-            if "FROM ENTITY_ALIASES EA" in sql_upper:
-                return _FakeRecord(alias_row) if alias_row else None
             return None
 
     return LinkPool()
@@ -1696,16 +1708,15 @@ async def test_link_claim_entities_exact_name_links_object() -> None:
                     "extraction_confidence": 0.85,
                     "metadata": {},
                 })]
+            # Unioned exact-name/alias DISTINCT lookup → exactly one match.
+            if "LOWER(CANONICAL_NAME) = $1" in sql_upper:
+                return [_FakeRecord({"entity_id": entity_id})]
             return []
 
         async def fetchrow(self, sql: str, *args: Any) -> Any | None:
             sql_upper = " ".join(sql.split()).upper()
             if "FROM MENTIONS M" in sql_upper and "DOCUMENT_ID = ANY" in sql_upper:
                 return None  # no exact mention match
-            if "LOWER(CANONICAL_NAME) = $1" in sql_upper and "ENTITY_ALIASES" not in sql_upper:
-                return _FakeRecord({"id": entity_id})
-            if "FROM ENTITY_ALIASES EA" in sql_upper:
-                return None
             return None
 
     pool = NamePool()
@@ -1747,6 +1758,47 @@ async def test_link_claim_entities_alias_links_entity() -> None:
 
     counters = await link_claim_entities(pool=pool, embeddings=None)
     assert counters["subject_linked"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_link_claim_entities_ambiguous_name_leaves_null() -> None:
+    """Two distinct live entities share the exact name → NO link (no false link).
+
+    The exact-name match is type-agnostic, so the same surface form can resolve
+    to two genuinely distinct entities. Picking one arbitrarily would corrupt the
+    relationship graph; the conservative contract is to leave the end NULL.
+    """
+    claim_id = uuid.uuid4()
+    doc_id = uuid.uuid4()
+    entity_a = uuid.uuid4()
+    entity_b = uuid.uuid4()
+
+    pool = _make_link_pool(
+        claims=[{
+            "id": claim_id,
+            "subject_text": "Apple",
+            "object_text": "Apple",
+            "subject_entity_id": None,
+            "object_entity_id": None,
+            "source_document_ids": [doc_id],
+            "extraction_confidence": 0.80,
+            "metadata": {},
+        }],
+        mention_row=None,
+        live_entity_row=None,
+        # Two distinct live entities match the same name → ambiguous.
+        name_rows=[{"entity_id": entity_a}, {"entity_id": entity_b}],
+    )
+
+    counters = await link_claim_entities(pool=pool, embeddings=None)
+    assert counters["subject_linked"] == 0
+    assert counters["object_linked"] == 0
+    assert counters["claims_updated"] == 0
+    updates = [
+        sql for sql, _ in pool.executed
+        if "UPDATE CLAIMS" in " ".join(sql.split()).upper()
+    ]
+    assert updates == [], "ambiguous exact-name must not write a link"
 
 
 @pytest.mark.asyncio

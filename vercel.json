@@ -1,7 +1,0 @@
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "nextjs",
-  "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm --filter @intercal/shared --filter @intercal/core --filter @intercal/api --filter @intercal/sdk build && pnpm --filter @intercal/dashboard build",
-  "outputDirectory": "packages/dashboard/.next"
-}

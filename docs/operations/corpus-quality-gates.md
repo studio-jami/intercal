@@ -90,6 +90,8 @@ bounded dry run before fetching:
 $env:DATABASE_URL = "<neon branch url>"
 node scripts/dev/backfill-first-proof-corpus.mjs --dry-run
 node scripts/dev/backfill-first-proof-corpus.mjs --apply
+node scripts/dev/backfill-broad-corpus-proof.mjs --dry-run
+node scripts/dev/backfill-broad-corpus-proof.mjs --apply
 
 uv run intercal-pipeline backfill `
   --source-class model_provider `
@@ -106,6 +108,13 @@ source rows, concise reviewed source-document summaries, claims, claim evidence,
 contradiction pair, and fact versions. It is deterministic and idempotent, reads `DATABASE_URL` from
 the environment or local `.env`, and never prints the value.
 
+`db/seeds/0005_broad_corpus_sources.sql` owns the reviewed broad-corpus source catalog.
+`scripts/dev/backfill-broad-corpus-proof.mjs` applies the bounded reviewed broad-corpus proof rows:
+source rows, concise reviewed source-document summaries, classified claims, claim evidence, and fact
+versions across benchmark, developer ecosystem, infrastructure, model-provider, policy/regulatory,
+protocol, release-note, and research classes. It uses the same secret-safe `.env` loading pattern,
+keeps raw redistribution disabled, and is idempotent for reruns against the intended Neon branch.
+
 Repeat the pipeline dry run for the other required source classes, then remove `--dry-run` only on
 the intended Neon branch/account and only within the resource budget. The extraction path carries
 safe corpus classification keys (`source_class`, `topic_cluster`, `corpus_taxonomy`,
@@ -116,6 +125,13 @@ As of the 2026-06-06 Workstream 4 pass 4 proof, `live-first-proof` passes agains
 Neon branch after applying the reviewed first-proof corpus rows. `live-full` remains a truthful
 failure until broad AI-history source rows, backfilled evidence, and classified claims exist for the
 full taxonomy.
+
+As of the 2026-06-06 Workstream 4 pass 5 proof, `live-full` passes against the configured Neon
+branch after applying the reviewed broad-corpus proof rows. The passing full gate includes all
+required source classes, topic clusters, date ranges, first-proof entity citation counts, citation
+depth, contradiction coverage, and review-needed-rate checks. Public coverage language may now cite
+the passing `live-full` gate, but should still describe these rows as a bounded reviewed proof slice,
+not continuous full-web saturation.
 
 ## Live Verification Remaining
 

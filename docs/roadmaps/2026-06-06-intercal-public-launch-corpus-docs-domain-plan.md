@@ -645,14 +645,14 @@ Implementation tasks:
 - [x] Prove GPT, Claude, Gemini, Llama, and MCP timelines from November 2022 onward.
 - [x] Prove `get_delta("frontier LLMs", since=2023-03-01)` returns cited, budget-bounded changes from backfilled evidence.
 - [x] Prove `verify_claim` with `as_of` behavior against historical evidence and contradictions.
-- [~] Expand from first proof into the full corpus taxonomy: model architecture, ML research, development cycles, agent/tooling shifts, benchmarks, regulation, infrastructure, and open-weight ecosystem changes.
+- [x] Expand from first proof into the full corpus taxonomy: model architecture, ML research, development cycles, agent/tooling shifts, benchmarks, regulation, infrastructure, and open-weight ecosystem changes.
 - [x] Add corpus coverage and freshness gates for source class, topic cluster, date range, entity coverage, citation depth, contradiction state, and review-needed rate.
 - [x] Add adversarial and stale-data checks for claims that changed over time.
 
 Exit criteria:
 
-- [ ] Public claims about Intercal's historical coverage are backed by measurable corpus coverage and query evidence.
-- [ ] The corpus supports broad AI-history deltas, not only the initial proof entities.
+- [x] Public claims about Intercal's historical coverage are backed by measurable corpus coverage and query evidence.
+- [x] The corpus supports broad AI-history deltas, not only the initial proof entities.
 
 Suggested verification:
 
@@ -716,6 +716,17 @@ Llama/MCP coverage, cited `get_delta`, point-in-time `verify_claim`, adversarial
 checks, and `search_evidence("MCP protocol")`. `live-full` still fails truthfully on broad taxonomy
 coverage gaps: benchmark, developer-ecosystem, infrastructure, policy/regulatory, most research/
 release-note/protocol coverage, and full-corpus topic clusters are not backfilled yet.
+
+Pass 5 closeout note: the broad live-full coverage gap is closed on the configured Neon branch.
+Added reviewed broad-corpus source catalog rows in `db/seeds/0005_broad_corpus_sources.sql` and an
+idempotent operator script, `scripts/dev/backfill-broad-corpus-proof.mjs`, that applies bounded
+reviewed source-document, claim, evidence, and fact-version rows without printing secrets or storing
+raw source text. The applied broad-proof slice covers benchmark, developer ecosystem,
+infrastructure, model-provider, policy/regulatory, protocol, registry, release-note, and research
+source classes plus all configured full-corpus topic clusters and date ranges. `seeded-proof`,
+`live-first-proof`, and `live-full` all pass against the configured Neon branch after applying the
+reviewed rows. This proves the broad taxonomy quality gate truthfully; it remains a bounded reviewed
+proof slice rather than a claim of continuous full-web saturation.
 
 ## Workstream 5: Public Intercal Knowledge Experience
 

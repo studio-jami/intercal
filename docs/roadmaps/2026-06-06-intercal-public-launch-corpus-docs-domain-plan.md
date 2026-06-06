@@ -315,6 +315,11 @@ The first proof consumes the same adapters, provenance rules, and public query p
   limitation wording, and overclaiming against the live code and tests. No code, workflow, ops
   script, durable-doc, changelog, or test change is required. Workstream 3 is closed as quiet with
   the explicit queue-command accounting limitation documented.
+- 2026-06-06T13:35:23-04:00 — Dispatched Workstream 4 pass 1 to agent
+  `019e9e00-ba5c-71f0-8576-e5e9177979e6` (`Copernicus`). Ownership boundary: shared query layer,
+  API/MCP/SDK quality-gate surfaces, scripts/dev proof tooling, operations docs, related tests,
+  Workstream 4 roadmap status, and changelog. Next coordinator action: poll in short intervals,
+  record result, then dispatch mandatory Workstream 4 pass 2 after pass 1 lands.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 

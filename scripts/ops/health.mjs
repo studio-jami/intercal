@@ -19,6 +19,9 @@ function parseFlags(argv) {
   const flags = { section: 'summary', limit: DEFAULT_LIMIT, json: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
+    if (arg === '--') {
+      continue;
+    }
     if (arg === '--json') {
       flags.json = true;
       continue;

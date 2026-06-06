@@ -27,11 +27,104 @@ describe('subscription target validation', () => {
     await expect(
       enqueueSubscriptionNotifications(dbStub(), {
         actor: { type: 'api_key', id: 'key-1' },
+        dispatchScope: { type: 'api_key', apiKeyId: 'key-1' },
         changeKind: 'topic',
         entityId: '22222222-2222-4222-8222-222222222222',
         sinceDate: '2026-06-01T00:00:00.000Z',
       }),
     ).rejects.toBeInstanceOf(InvalidRequestError);
+  });
+
+  it('rejects dispatch scans without an explicit scope', async () => {
+    await expect(
+      enqueueSubscriptionNotifications(dbStub(), {
+        actor: { type: 'api_key', id: 'key-1' },
+        changeKind: 'topic',
+        topicId: '11111111-1111-4111-8111-111111111111',
+        sinceDate: '2026-06-01T00:00:00.000Z',
+      } as Parameters<typeof enqueueSubscriptionNotifications>[1]),
+    ).rejects.toBeInstanceOf(InvalidRequestError);
+  });
+
+  it('can scope dispatch scans to one owning API key', async () => {
+    const wheres: Array<[string, string, unknown]> = [];
+    const db = dbStub({
+      selectFrom(table: string) {
+        expect(table).toBe('subscriptions');
+        const builder = {
+          selectAll() {
+            return builder;
+          },
+          where(col: string, op: string, val: unknown) {
+            wheres.push([col, op, val]);
+            return builder;
+          },
+          limit() {
+            return builder;
+          },
+          async execute() {
+            return [];
+          },
+        };
+        return builder;
+      },
+    } as unknown as Db);
+
+    await expect(
+      enqueueSubscriptionNotifications(db, {
+        actor: { type: 'api_key', id: 'key-1' },
+        dispatchScope: { type: 'api_key', apiKeyId: 'key-1' },
+        changeKind: 'topic',
+        topicId: '11111111-1111-4111-8111-111111111111',
+        sinceDate: '2026-06-01T00:00:00.000Z',
+      }),
+    ).resolves.toEqual({ enqueued: 0, skipped: 0 });
+
+    expect(wheres).toContainEqual(['is_active', '=', true]);
+    expect(wheres).toContainEqual(['api_key_id', '=', 'key-1']);
+    expect(wheres).toContainEqual(['topic_id', '=', '11111111-1111-4111-8111-111111111111']);
+  });
+
+  it('requires an explicit internal all-active scope for unowned dispatch scans', async () => {
+    const wheres: Array<[string, string, unknown]> = [];
+    const db = dbStub({
+      selectFrom(table: string) {
+        expect(table).toBe('subscriptions');
+        const builder = {
+          selectAll() {
+            return builder;
+          },
+          where(col: string, op: string, val: unknown) {
+            wheres.push([col, op, val]);
+            return builder;
+          },
+          limit() {
+            return builder;
+          },
+          async execute() {
+            return [];
+          },
+        };
+        return builder;
+      },
+    } as unknown as Db);
+
+    await expect(
+      enqueueSubscriptionNotifications(db, {
+        actor: { type: 'system', id: 'pipeline' },
+        dispatchScope: {
+          type: 'internal_all_active',
+          reason: 'knowledge-change fan-out after pipeline commit',
+        },
+        changeKind: 'topic',
+        topicId: '11111111-1111-4111-8111-111111111111',
+        sinceDate: '2026-06-01T00:00:00.000Z',
+      }),
+    ).resolves.toEqual({ enqueued: 0, skipped: 0 });
+
+    expect(wheres).toContainEqual(['is_active', '=', true]);
+    expect(wheres.some(([col]) => col === 'api_key_id')).toBe(false);
+    expect(wheres).toContainEqual(['topic_id', '=', '11111111-1111-4111-8111-111111111111']);
   });
 
   it('does not broadcast a claim-pattern dispatch to non-matching claim-pattern subscribers', async () => {
@@ -80,6 +173,7 @@ describe('subscription target validation', () => {
     await expect(
       enqueueSubscriptionNotifications(db, {
         actor: { type: 'api_key', id: 'key-1' },
+        dispatchScope: { type: 'api_key', apiKeyId: 'key-1' },
         changeKind: 'claim_pattern',
         claimPattern: { predicate: 'holds_role', object: 'CEO' },
         sinceDate: '2026-06-01T00:00:00.000Z',

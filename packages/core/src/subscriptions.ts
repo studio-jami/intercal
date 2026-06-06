@@ -54,6 +54,9 @@ export interface SubscriptionRecord {
 
 export interface EnqueueSubscriptionChangeInput {
   actor: AuditActor;
+  dispatchScope:
+    | { type: 'api_key'; apiKeyId: string }
+    | { type: 'internal_all_active'; reason: string };
   changeKind: SubscriptionTargetKind;
   topicId?: string;
   entityId?: string;
@@ -290,6 +293,18 @@ function validateCreate(input: CreateSubscriptionInput): void {
 }
 
 function validateDispatch(input: EnqueueSubscriptionChangeInput): void {
+  if (!input.dispatchScope) {
+    throw new InvalidRequestError('Subscription dispatch requires an explicit dispatch scope.');
+  }
+  if (input.dispatchScope.type === 'api_key' && !isNonEmptyString(input.dispatchScope.apiKeyId)) {
+    throw new InvalidRequestError('API-key dispatch scope requires a non-empty apiKeyId.');
+  }
+  if (
+    input.dispatchScope.type === 'internal_all_active' &&
+    !isNonEmptyString(input.dispatchScope.reason)
+  ) {
+    throw new InvalidRequestError('Internal all-active dispatch scope requires a reason.');
+  }
   const targetFields = {
     topic: input.topicId,
     entity: input.entityId,
@@ -405,6 +420,9 @@ export async function enqueueSubscriptionNotifications(
 ): Promise<{ enqueued: number; skipped: number }> {
   validateDispatch(input);
   let q = db.selectFrom('subscriptions').selectAll().where('is_active', '=', true);
+  if (input.dispatchScope.type === 'api_key') {
+    q = q.where('api_key_id', '=', input.dispatchScope.apiKeyId);
+  }
   if (input.changeKind === 'topic') q = q.where('topic_id', '=', input.topicId ?? '');
   if (input.changeKind === 'entity') q = q.where('entity_id', '=', input.entityId ?? '');
   if (input.changeKind === 'relationship') {

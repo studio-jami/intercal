@@ -12,8 +12,14 @@ not enough.
 - `GET /v1/subscriptions` lists the caller's active subscriptions.
 - `POST /v1/subscriptions` creates a polling or webhook subscription.
 - `POST /v1/subscriptions/poll` returns pending polling notifications and marks them delivered.
-- `POST /v1/subscriptions/dispatch` enqueues bounded notifications after a known knowledge change.
+- `POST /v1/subscriptions/dispatch` enqueues bounded notifications after a known knowledge change,
+  scoped to subscriptions owned by the caller.
 - `POST /v1/subscriptions/delete` deactivates a subscription owned by the caller.
+
+The core dispatch service requires an explicit dispatch scope. REST always passes the authenticated
+API-key scope, so one subscription manager cannot enqueue notifications for another subscriber. A
+trusted internal pipeline may request `internal_all_active` with a reason when a committed knowledge
+change must fan out across all active subscribers.
 
 ## Targets
 

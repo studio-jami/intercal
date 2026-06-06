@@ -274,6 +274,7 @@ export function createApp(db: Db, options: CreateAppOptions = {}): Hono {
       };
       return enqueueSubscriptionNotifications(database, {
         actor: { type: 'api_key', id: principal.id },
+        dispatchScope: { type: 'api_key', apiKeyId: principal.id },
         ...body,
       });
     }),

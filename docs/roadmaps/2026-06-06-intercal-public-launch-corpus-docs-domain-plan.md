@@ -296,6 +296,12 @@ The first proof consumes the same adapters, provenance rules, and public query p
   ingest cursor/run semantics, ops scripts/workflows, operations docs, resource budget, related
   Python tests, Workstream 3 roadmap status, and changelog. Next coordinator action: poll in short
   intervals, record result, then gate the pass 3 commit.
+- 2026-06-06T13:37:00-04:00 — Workstream 3 pass 3 returned complete. Commit:
+  `5fbdddf6ec476070294ca234297f688aeaf8c990` (`fix(ingest): resume scoped backfill cursors`),
+  pushed to `origin/main`. Gate result: 5 files and 144 LOC passes the numeric gate, but contents
+  are a meaningful cursor-resume fix plus tests. Queue command accounting remains documented as
+  unavailable until real queue telemetry exists. Next coordinator action: dispatch Workstream 3 pass
+  4 quiet confirmation.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 

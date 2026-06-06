@@ -72,6 +72,7 @@ class PipelineRunHealth:
     docs_fetched: int = 0
     docs_new: int = 0
     docs_skipped_ingest: int = 0
+    docs_policy_blocked: int = 0
     docs_normalized: int = 0
     docs_skipped_normalize: int = 0
     mentions_extracted: int = 0
@@ -98,6 +99,11 @@ class PipelineRunHealth:
     errors_version: int = 0
 
     status: str = "running"  # running | succeeded | failed | partial
+    mode: str = "scheduled"
+    source_slug: str | None = None
+    source_class: str | None = None
+    backfill_start_date: str | None = None
+    backfill_end_date: str | None = None
 
     def finish(self, *, status: str = "succeeded") -> None:
         self.finished_at = datetime.datetime.now(tz=datetime.UTC)
@@ -184,6 +190,10 @@ async def run_pipeline(
     use_embeddings_for_resolve: bool = True,
     use_embeddings_for_link: bool = True,
     extract_force: bool = False,
+    ingest_trigger: str = "scheduled",
+    adapter_config_overrides: dict[str, object] | None = None,
+    source_slug: str | None = None,
+    source_class: str | None = None,
 ) -> PipelineRunHealth:
     """Run the full pipeline for a single source, end-to-end.
 
@@ -231,6 +241,19 @@ async def run_pipeline(
         run_id=str(uuid.uuid4()),
         source_id=source_id,
         started_at=datetime.datetime.now(tz=datetime.UTC),
+        mode=ingest_trigger,
+        source_slug=source_slug,
+        source_class=source_class,
+        backfill_start_date=(
+            str(adapter_config_overrides.get("start_date"))
+            if adapter_config_overrides and adapter_config_overrides.get("start_date")
+            else None
+        ),
+        backfill_end_date=(
+            str(adapter_config_overrides.get("end_date"))
+            if adapter_config_overrides and adapter_config_overrides.get("end_date")
+            else None
+        ),
     )
 
     _log.info(
@@ -246,10 +269,13 @@ async def run_pipeline(
             pool=pool,
             storage=storage,
             max_documents=max_documents,
+            adapter_config_overrides=adapter_config_overrides,
+            trigger=ingest_trigger,
         )
         health.docs_fetched = ingest_counters.get("fetched", 0)
         health.docs_new = ingest_counters.get("new", 0)
         health.docs_skipped_ingest = ingest_counters.get("skipped", 0)
+        health.docs_policy_blocked = ingest_counters.get("policy_blocked", 0)
         health.errors_ingest = ingest_counters.get("errors", 0)
         _log.info("pipeline stage=ingest %s", ingest_counters)
     except Exception as exc:

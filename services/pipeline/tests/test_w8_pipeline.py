@@ -29,7 +29,8 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from intercal_pipeline.cli import app
+import typer
+from intercal_pipeline.cli import app, build_backfill_overrides, select_sources
 from intercal_pipeline.run import (
     PipelineRunHealth,
     compute_freshness,
@@ -119,7 +120,16 @@ class _FakePool:
             return self._entity_records()
         # Sources for run-all
         if "FROM SOURCES" in norm and "IS_ACTIVE" in norm:
-            return [_FakeRecord({"id": uuid.UUID(_SOURCE_ID), "slug": "fixture-source"})]
+            return [
+                _FakeRecord(
+                    {
+                        "id": uuid.UUID(_SOURCE_ID),
+                        "slug": "fixture-source",
+                        "adapter_name": "rss_feed_v1",
+                        "metadata": {"source_class": "lab_announcement"},
+                    }
+                )
+            ]
         return []
 
     async def fetchrow(self, sql: str, *args: Any) -> _FakeRecord | None:
@@ -435,6 +445,50 @@ async def test_run_pipeline_full_chain_fixture_gate() -> None:
 
     assert health.status == "succeeded"
     assert health.errors_ingest == 0
+
+
+@pytest.mark.asyncio
+async def test_run_pipeline_passes_backfill_controls_to_ingest() -> None:
+    """Backfill mode still uses the normal pipeline path, with ingest overrides."""
+    pool = _FakePool(doc_ids=[])
+    overrides: dict[str, object] = {"start_date": "2022-11-01", "end_date": "2022-11-30"}
+
+    with (
+        patch(
+            "intercal_pipeline.run.ingest_source",
+            new_callable=AsyncMock,
+            return_value={"fetched": 0, "new": 0, "skipped": 0, "errors": 0},
+        ) as mock_ingest,
+        patch("intercal_pipeline.run.normalize_document", new_callable=AsyncMock),
+        patch("intercal_pipeline.run.extract_mentions", new_callable=AsyncMock),
+        patch("intercal_pipeline.run.extract_claims", new_callable=AsyncMock),
+        patch("intercal_pipeline.run.embed_chunks", new_callable=AsyncMock),
+        patch("intercal_pipeline.run.embed_claims", new_callable=AsyncMock),
+        patch("intercal_pipeline.run.resolve_entities", new_callable=AsyncMock),
+        patch("intercal_pipeline.run.link_claim_entities", new_callable=AsyncMock),
+        patch("intercal_pipeline.run.derive_relationships", new_callable=AsyncMock),
+        patch("intercal_pipeline.run.write_fact_versions", new_callable=AsyncMock),
+    ):
+        health = await run_pipeline(
+            source_id=_SOURCE_ID,
+            pool=pool,
+            storage=_make_fake_storage(),
+            llm=_make_fake_llm(),
+            embeddings=_make_fake_embeddings(),
+            ingest_trigger="backfill",
+            adapter_config_overrides=overrides,
+            source_slug="fixture-source",
+            source_class="lab_announcement",
+        )
+
+    mock_ingest.assert_called_once()
+    assert mock_ingest.call_args.kwargs["trigger"] == "backfill"
+    assert mock_ingest.call_args.kwargs["adapter_config_overrides"] == overrides
+    assert health.mode == "backfill"
+    assert health.source_slug == "fixture-source"
+    assert health.source_class == "lab_announcement"
+    assert health.backfill_start_date == "2022-11-01"
+    assert health.backfill_end_date == "2022-11-30"
 
 
 @pytest.mark.asyncio
@@ -1121,6 +1175,45 @@ def test_cli_run_all_help() -> None:
     result = runner.invoke(app, ["run-all", "--help"])
     assert result.exit_code == 0
     assert "--max-documents" in result.output
+
+
+def test_cli_backfill_help() -> None:
+    runner = CliRunner()
+    result = runner.invoke(app, ["backfill", "--help"])
+    assert result.exit_code == 0
+    assert "--source-class" in result.output
+    assert "--start-date" in result.output
+    assert "--end-date" in result.output
+    assert "--dry-run" in result.output
+
+
+def test_backfill_overrides_validates_date_window() -> None:
+    overrides = build_backfill_overrides("2022-11-01", "2022-11-30")
+    assert overrides == {"start_date": "2022-11-01", "end_date": "2022-11-30"}
+
+    with pytest.raises(typer.BadParameter):
+        build_backfill_overrides("2022-12-01", "2022-11-01")
+
+
+@pytest.mark.asyncio
+async def test_select_sources_returns_backfill_metadata() -> None:
+    pool = _FakePool()
+    sources = await select_sources(
+        pool=pool,
+        source_slugs=["fixture-source"],
+        source_class="lab_announcement",
+        adapter_name="rss_feed_v1",
+        max_sources=1,
+    )
+
+    assert sources == [
+        {
+            "id": _SOURCE_ID,
+            "slug": "fixture-source",
+            "adapter_name": "rss_feed_v1",
+            "source_class": "lab_announcement",
+        }
+    ]
 
 
 def test_cli_run_requires_source_id() -> None:

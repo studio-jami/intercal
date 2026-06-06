@@ -39,6 +39,8 @@ async def ingest_source(
     http_client: Any | None = None,
     max_documents: int = 200,
     registry: Any | None = None,
+    adapter_config_overrides: dict[str, object] | None = None,
+    trigger: str = "scheduled",
 ) -> dict[str, int]:
     """Fetch and persist raw documents for *source_id*.
 
@@ -63,6 +65,9 @@ async def ingest_source(
         http_client: Optional httpx.AsyncClient for HTTP sources.
         max_documents: Hard cap overriding INGEST_MAX_DOCS_PER_RUN for this call.
         registry: SourceRegistry to use.  If None the module-level singleton is used.
+        adapter_config_overrides: Per-run adapter config overrides, used by
+            backfill execution for date windows without mutating the source row.
+        trigger: Ingestion trigger label persisted on the ingestion_runs row.
 
     Returns:
         Dict with counters: ``fetched``, ``new``, ``skipped``, ``errors``.
@@ -110,6 +115,8 @@ async def ingest_source(
         if isinstance(adapter_config_raw, str)
         else {}
     )
+    if adapter_config_overrides:
+        adapter_config.update(adapter_config_overrides)
     redistribution_allowed: bool = bool(source_row["redistribution_allowed"])
     summary_allowed: bool = bool(source_row["summary_allowed"])
     citation_only: bool = bool(source_row["citation_only"])
@@ -117,12 +124,18 @@ async def ingest_source(
     # ── 2. Look up adapter ────────────────────────────────────────────────────
     adapter = _reg.get(adapter_name)
 
-    # ── 3. Read last cursor state from most-recent run ────────────────────────
+    # ── 3. Read last cursor state from most-recent matching run ───────────────
+    # Historical backfills may apply per-run date-window overrides.  Scope the
+    # saved cursor to the effective adapter config so a scheduled cursor never
+    # collides with a backfill cursor, and a changed backfill window restarts
+    # cleanly instead of resuming from an incompatible token.
+    cursor_scope = _cursor_scope(adapter_config, trigger=trigger)
     last_run_row = await pool.fetchrow(
         "SELECT cursor_state FROM ingestion_runs "
-        "WHERE source_id = $1 AND status = 'succeeded' "
+        "WHERE source_id = $1 AND trigger = $2 AND status = 'succeeded' "
         "ORDER BY started_at DESC LIMIT 1",
         uuid.UUID(source_id),
+        trigger,
     )
     cursor_state: dict[str, object] | None = None
     if last_run_row and last_run_row["cursor_state"]:
@@ -134,16 +147,19 @@ async def ingest_source(
             if isinstance(raw_cs, str)
             else None
         )
+        if cursor_state and cursor_state.get("__intercal_cursor_scope") != cursor_scope:
+            cursor_state = None
 
     # ── 4. Create ingestion_run row ───────────────────────────────────────────
     run_id: uuid.UUID = await pool.fetchval(
         """
         INSERT INTO ingestion_runs
             (source_id, status, started_at, trigger)
-        VALUES ($1, 'running', now(), 'scheduled')
+        VALUES ($1, 'running', now(), $2)
         RETURNING id
         """,
         uuid.UUID(source_id),
+        trigger,
     )
     _log.info("ingest_source: run_id=%s adapter=%r", run_id, adapter_name)
 
@@ -268,6 +284,8 @@ async def ingest_source(
                     # with raw_storage_key NULL, so a later run can backfill it.
 
         # ── Update run: succeeded ─────────────────────────────────────────────
+        if final_cursor or cursor_scope:
+            final_cursor["__intercal_cursor_scope"] = cursor_scope
         await pool.execute(
             """
             UPDATE ingestion_runs SET
@@ -679,6 +697,14 @@ async def cleanup_expired_cache(
 def _sha256(data: bytes) -> str:
     """Return the SHA-256 hex digest of *data* (used for content-hashing documents)."""
     return hashlib.sha256(data).hexdigest()
+
+
+def _cursor_scope(adapter_config: dict[str, object], *, trigger: str) -> dict[str, str]:
+    """Return a stable cursor namespace for this trigger/effective adapter config."""
+    config_hash = hashlib.sha256(
+        json.dumps(adapter_config, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+    return {"trigger": trigger, "adapter_config_hash": config_hash}
 
 
 async def _clear_chunks(pool: Any, doc_id: uuid.UUID) -> None:

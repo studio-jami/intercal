@@ -47,6 +47,7 @@ crippling the product. Every limit below maps to an env-driven knob so we tune w
 ```
 INGEST_CRON=0 */6 * * *          # default cadence (6h); tighten/loosen freely
 INGEST_MAX_DOCS_PER_RUN=200      # cap work per scheduled run
+BACKFILL_MAX_SOURCES=2           # operator cap passed as --max-sources during proof backfills
 EXTRACT_ONLY_CHANGED=true        # never re-extract unchanged (content_hash) docs
 LLM_DAILY_REQUEST_BUDGET=2000    # hard daily cap across providers
 LLM_MAX_OUTPUT_TOKENS=2048       # per call
@@ -62,6 +63,11 @@ and falls back to Gemini on provider auth/quota/timeout failures, `LLM_MAX_OUTPU
 call, and successful provider responses append real request/token measurements to
 `provider_usage_events` when the observability migration is present. Unknown token counts remain
 unavailable; they are not zero-filled.
+
+Historical backfill uses the same worker path as scheduled ingestion. Operators bound it with
+`intercal-pipeline backfill --max-documents <n> --max-sources <n> --start-date <YYYY-MM-DD>
+--end-date <YYYY-MM-DD>` plus a source allowlist or `--source-class`. Backfill runs are dry-run
+first, then a throwaway Neon branch, then a small production proof before full-corpus expansion.
 
 ## Monitoring (owned by Plan 04 observability)
 

@@ -11,12 +11,17 @@ parallel, on-demand path that invokes the *same* portable CLI — neither is a r
 ```
 uv run intercal-pipeline run-all              # every active, non-paused source
 uv run intercal-pipeline run --source-id <id> # a single source
+uv run intercal-pipeline backfill             # bounded historical/date-windowed execution
 ```
 
 The CLI chains `ingest → normalize → extract → embed → resolve → link → derive → version`
 (`services/pipeline`, `intercal_pipeline.run.run_pipeline`). Every stage is idempotent, so a
 re-run never duplicates canonical records and only ingests genuinely new/changed documents
 (`EXTRACT_ONLY_CHANGED`, dedup by `content_hash`, mention-skip on already-extracted docs).
+
+Backfill mode uses the same chain. It only changes source selection and the effective adapter
+configuration passed to ingestion for that run. It does not write shortcut facts or bypass
+normal provenance.
 
 ## Schedule
 
@@ -39,14 +44,53 @@ Inputs (Actions UI or `gh workflow run pipeline.yml`):
 | ----------------------- | ---------- | -------------------------------------------------------------- |
 | `mode`                  | `run-all`  | `run-all` (all active sources) or `run` (one source)           |
 | `source_id`             | —          | source UUID, required when `mode=run`                          |
+| `source_slug`           | —          | optional source slug allowlist for `mode=backfill`             |
+| `source_class`          | —          | optional `sources.metadata.source_class` filter for `mode=backfill` |
+| `adapter_name`          | —          | optional adapter-name filter for `mode=backfill`               |
+| `start_date`            | —          | optional backfill start date (`YYYY-MM-DD`)                    |
+| `end_date`              | —          | optional backfill end date (`YYYY-MM-DD`)                      |
 | `max_documents`         | `0`        | per-source doc cap for this run (`0` = `INGEST_MAX_DOCS_PER_RUN`) |
+| `max_sources`           | `0`        | maximum selected sources for `mode=backfill` (`0` = no explicit cap) |
 | `no_embeddings`         | `false`    | skip embedding-based resolve/link (faster; exact-match only)   |
+| `dry_run`               | `false`    | for `mode=backfill`, print selected sources and controls without writes |
 | `database_url_override` | —          | point the run at a **throwaway Neon branch** for a safe test   |
 
 `database_url_override` is the safe-test seam: dispatch against a disposable Neon branch DSN
 (asyncpg-compatible, e.g. `postgresql://…?sslmode=require`) to exercise the full path end-to-end
 without touching prod or burning the prod budget. The override is a `string` input that lands only
 in the job's `DATABASE_URL` env for that run; it is never written to a tracked file.
+
+### Historical backfill controls
+
+Backfill is started through the same CLI locally, in Actions, or in Cloud Run Jobs:
+
+```
+uv run intercal-pipeline backfill \
+  --source-class lab_announcement \
+  --start-date 2022-11-01 \
+  --end-date 2023-03-31 \
+  --max-documents 25 \
+  --max-sources 2 \
+  --dry-run
+```
+
+Remove `--dry-run` only after the selected source list and caps are correct. The command accepts
+repeatable `--source-id` and `--source-slug` allowlists, plus `--adapter-name` for adapter-specific
+proofs. Date windows are passed as per-run adapter config overrides; the source row is not mutated.
+`ingest_source` persists backfill runs with `trigger='backfill'` and namespaces cursor state by the
+effective adapter config hash, so a changed date window restarts cleanly and scheduled cursors do not
+collide with historical cursors.
+
+Pause/resume uses the existing source lifecycle and cursor rules:
+
+- Pause a source with `sources.is_paused=true` and a `pause_reason`; `backfill` skips paused rows.
+- Resume by clearing `is_paused`; the next matching backfill run resumes from the last succeeded
+  `backfill` cursor for the same effective adapter config.
+- Roll back by pausing the source and restoring the database branch or backup. Canonical graph
+  writes are append-only/idempotent; do not delete individual fact rows as an operational rollback.
+- Repeat a backfill with the same window to prove dedup: duplicate documents are skipped by
+  `content_hash`, already-extracted documents are skipped unless `--extract-force`, and facts are
+  versioned through the normal idempotent writer.
 
 ## Budget & safety controls
 
@@ -62,6 +106,9 @@ in the job's `DATABASE_URL` env for that run; it is never written to a tracked f
   to finish and the next queues behind it.
 - **Timeout:** `timeout-minutes: 30`.
 - **Least privilege:** `permissions: { contents: read }` — the job only reads the checked-out tree.
+- **Backfill caps:** use `--max-documents`, `--max-sources`, a date range, and a source allowlist
+  for proof runs before expanding. Prefer a dry-run first, then a throwaway Neon branch, then a
+  small production proof.
 
 Override the in-code defaults without a code change by setting GitHub **repository variables**
 (`vars.*`): `INGEST_MAX_DOCS_PER_RUN`, `EXTRACT_ONLY_CHANGED`, `LLM_DAILY_REQUEST_BUDGET`,
@@ -89,10 +136,14 @@ on a failed run so real errors fail loudly.
 
 ## Observability
 
-The CLI emits a JSON `PipelineRunHealth` summary (docs fetched/new, mentions/claims extracted,
+The CLI emits a JSON `PipelineRunHealth` summary (mode, source metadata, date-window overrides, docs
+fetched/new/skipped, policy-blocked count when present, mentions/claims extracted, embeddings,
 entities created/merged, relationships, fact versions, per-stage error counts, final status). The
 workflow tees this into `$GITHUB_STEP_SUMMARY` so each run's counts are visible on the run page.
-A `failed` status (or any unhandled error) returns a non-zero exit and marks the run red.
+`ingestion_runs` records source counts, cursor state, trigger, failures, and skip counts. LLM
+request/token usage is appended to `provider_usage_events` by the shared budgeted LLM wrapper when a
+provider reports real measurements. A `failed` status (or any unhandled error) returns a non-zero
+exit and marks the run red.
 
 ## Verifying a change to the workflow
 
@@ -157,6 +208,8 @@ and rolls the existing job to the new SHA. It never sees `.env` or a secret valu
 gcloud run jobs execute intercal-pipeline --region us-central1            # all active sources
 gcloud run jobs execute intercal-pipeline --region us-central1 \
   --args="run-all,--max-documents,5"                                      # small on-demand run
+gcloud run jobs execute intercal-pipeline --region us-central1 \
+  --args="backfill,--source-class,lab_announcement,--start-date,2022-11-01,--end-date,2023-03-31,--max-documents,25,--max-sources,2,--dry-run"
 ```
 
 For a SAFE test, rebind `DATABASE_URL` to a throwaway-Neon-branch Secret Manager version

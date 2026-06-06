@@ -415,7 +415,7 @@ Goal: Run historical backfill as a real production-grade pipeline path with budg
 Depends on:
 
 - [x] Workstream 2 adapters.
-- [ ] Existing Actions and Cloud Run job topology.
+- [x] Existing Actions and Cloud Run job topology.
 
 Enables:
 
@@ -435,16 +435,27 @@ Primary areas:
 
 Implementation tasks:
 
-- [ ] Add date-windowed backfill modes and source allowlists to `intercal-pipeline`.
-- [ ] Add bounded Cloud Run Job execution for historical backfill with `max_documents`, date range, source class, and dry-run controls.
-- [ ] Add resumable cursor tracking and idempotent dedup proof for large historical runs.
-- [ ] Add provider budget guards for LLM extraction, embeddings, HTTP calls, and queue usage.
-- [ ] Add observability records for source counts, extraction counts, fact writes, skipped documents, policy blocks, token usage, and failures.
-- [ ] Add operator runbook entries for first proof, full corpus expansion, pause/resume, rollback, and cost review.
+- [x] Add date-windowed backfill modes and source allowlists to `intercal-pipeline`.
+- [x] Add bounded Actions and Cloud Run Job execution controls for historical backfill with `max_documents`, date range, source class, source allowlists, source caps, and dry-run controls.
+- [x] Add resumable cursor tracking and idempotent dedup proof for large historical runs.
+- [~] Add provider budget guards for LLM extraction, embeddings, HTTP calls, and queue usage.
+- [x] Add observability records for source counts, extraction counts, fact writes, skipped documents, policy blocks, token usage, and failures.
+- [x] Add operator runbook entries for first proof, full corpus expansion, pause/resume, rollback, and cost review.
 
 Exit criteria:
 
-- [ ] A backfill run can be started, paused, resumed, audited, and repeated without duplicate facts or policy drift.
+- [~] A backfill run can be started, paused, resumed, audited, and repeated without duplicate facts or policy drift.
+
+Pass 1 closeout note: `intercal-pipeline backfill` now selects real active sources by repeated
+source ID/slug allowlists, source class, adapter name, date window, source cap, and per-source
+document cap, with a dry-run mode. It invokes the same pipeline stages as scheduled ingestion and
+passes date-window overrides only to ingestion, without mutating source rows. Ingestion persists
+`trigger='backfill'` and namespaces cursor state by trigger plus effective adapter config hash, so
+scheduled cursors and changed historical windows cannot collide. Actions dispatch exposes backfill
+controls, and Cloud Run Jobs can execute the same CLI with bounded args. Observability is the
+existing `PipelineRunHealth`, `ingestion_runs`, and `provider_usage_events` path. Remaining pass 2
+work is to harden non-LLM provider budget accounting for HTTP/request and queue command usage where
+the current source/queue ports do not yet emit durable usage events.
 
 Suggested verification:
 

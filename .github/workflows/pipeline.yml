@@ -20,15 +20,41 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "run-all (every active source) or run (a single source)"
+        description: "run-all, run (one source), or backfill (date-windowed historical execution)"
         type: choice
         required: true
         default: run-all
         options:
           - run-all
           - run
+          - backfill
       source_id:
-        description: "Source UUID (required when mode=run)"
+        description: "Source UUID (required when mode=run; optional allowlist when mode=backfill)"
+        type: string
+        required: false
+        default: ""
+      source_slug:
+        description: "Optional source slug allowlist for mode=backfill"
+        type: string
+        required: false
+        default: ""
+      source_class:
+        description: "Optional metadata.source_class filter for mode=backfill"
+        type: string
+        required: false
+        default: ""
+      adapter_name:
+        description: "Optional adapter_name filter for mode=backfill"
+        type: string
+        required: false
+        default: ""
+      start_date:
+        description: "Optional backfill start date (YYYY-MM-DD)"
+        type: string
+        required: false
+        default: ""
+      end_date:
+        description: "Optional backfill end date (YYYY-MM-DD)"
         type: string
         required: false
         default: ""
@@ -37,8 +63,18 @@ on:
         type: string
         required: false
         default: "0"
+      max_sources:
+        description: "Maximum selected sources for mode=backfill (0 = no explicit cap)"
+        type: string
+        required: false
+        default: "0"
       no_embeddings:
         description: "Skip embedding-based resolve/link (faster; exact-match only)"
+        type: boolean
+        required: false
+        default: false
+      dry_run:
+        description: "For mode=backfill, print selected sources and controls without fetching or writing"
         type: boolean
         required: false
         default: false
@@ -135,8 +171,15 @@ jobs:
         env:
           PIPELINE_MODE: ${{ github.event.inputs.mode || 'run-all' }}
           PIPELINE_SOURCE_ID: ${{ github.event.inputs.source_id }}
+          PIPELINE_SOURCE_SLUG: ${{ github.event.inputs.source_slug }}
+          PIPELINE_SOURCE_CLASS: ${{ github.event.inputs.source_class }}
+          PIPELINE_ADAPTER_NAME: ${{ github.event.inputs.adapter_name }}
+          PIPELINE_START_DATE: ${{ github.event.inputs.start_date }}
+          PIPELINE_END_DATE: ${{ github.event.inputs.end_date }}
           PIPELINE_MAX_DOCS: ${{ github.event.inputs.max_documents || '0' }}
+          PIPELINE_MAX_SOURCES: ${{ github.event.inputs.max_sources || '0' }}
           PIPELINE_NO_EMBEDDINGS: ${{ github.event.inputs.no_embeddings }}
+          PIPELINE_DRY_RUN: ${{ github.event.inputs.dry_run }}
           PIPELINE_DB_OVERRIDDEN: ${{ github.event.inputs.database_url_override != '' }}
         run: |
           set -euo pipefail
@@ -152,6 +195,32 @@ jobs:
               exit 1
             fi
             ARGS+=(run --source-id "$PIPELINE_SOURCE_ID")
+          elif [ "$PIPELINE_MODE" = "backfill" ]; then
+            ARGS+=(backfill)
+            if [ -n "${PIPELINE_SOURCE_ID}" ]; then
+              ARGS+=(--source-id "$PIPELINE_SOURCE_ID")
+            fi
+            if [ -n "${PIPELINE_SOURCE_SLUG}" ]; then
+              ARGS+=(--source-slug "$PIPELINE_SOURCE_SLUG")
+            fi
+            if [ -n "${PIPELINE_SOURCE_CLASS}" ]; then
+              ARGS+=(--source-class "$PIPELINE_SOURCE_CLASS")
+            fi
+            if [ -n "${PIPELINE_ADAPTER_NAME}" ]; then
+              ARGS+=(--adapter-name "$PIPELINE_ADAPTER_NAME")
+            fi
+            if [ -n "${PIPELINE_START_DATE}" ]; then
+              ARGS+=(--start-date "$PIPELINE_START_DATE")
+            fi
+            if [ -n "${PIPELINE_END_DATE}" ]; then
+              ARGS+=(--end-date "$PIPELINE_END_DATE")
+            fi
+            if [ "${PIPELINE_MAX_SOURCES}" != "0" ]; then
+              ARGS+=(--max-sources "$PIPELINE_MAX_SOURCES")
+            fi
+            if [ "${PIPELINE_DRY_RUN}" = "true" ]; then
+              ARGS+=(--dry-run)
+            fi
           else
             ARGS+=(run-all)
           fi

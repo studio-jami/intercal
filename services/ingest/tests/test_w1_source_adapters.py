@@ -684,6 +684,73 @@ async def test_ingest_source_success_with_fake_adapter() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ingest_source_backfill_cursor_is_scoped_to_effective_config() -> None:
+    """A changed backfill window must not reuse an incompatible cursor token."""
+    source_id = uuid.uuid4()
+    row = _make_source_row(source_id, adapter_name="fake_cursor_v1")
+    last_run_row = {
+        "cursor_state": {
+            "offset": 200,
+            "__intercal_cursor_scope": {
+                "trigger": "backfill",
+                "adapter_config_hash": "old-window",
+            },
+        }
+    }
+    pool = _make_fake_pool(source_row=row, last_run_row=last_run_row)
+    seen_cursor_state: list[dict[str, object] | None] = []
+
+    class FakeCursorAdapter:
+        adapter_name = "fake_cursor_v1"
+
+        async def fetch(
+            self,
+            *,
+            adapter_config: dict[str, object],
+            cursor_state: dict[str, object] | None = None,
+            max_documents: int = 200,
+            http_client: object | None = None,
+            cursor_sink: dict[str, object] | None = None,
+        ) -> Any:
+            seen_cursor_state.append(cursor_state)
+            if cursor_sink is not None:
+                cursor_sink["offset"] = 1
+            yield RawDocument(
+                content=json.dumps(adapter_config, sort_keys=True).encode(),
+                external_id="fake:1",
+                title="Fake backfill doc",
+                published_at="2022-11-01T00:00:00Z",
+                content_type="application/json",
+            )
+
+    reg = SourceRegistry()
+    reg.register(FakeCursorAdapter())
+
+    result = await ingest_source(
+        source_id=str(source_id),
+        pool=pool,
+        storage=None,
+        max_documents=1,
+        registry=reg,
+        adapter_config_overrides={"start_date": "2022-11-01", "end_date": "2022-11-30"},
+        trigger="backfill",
+    )
+
+    assert result["new"] == 1
+    assert seen_cursor_state == [None]
+    cursor_updates = [
+        call.args[6]
+        for call in pool.execute.call_args_list
+        if "cursor_state = $6::jsonb" in call.args[0]
+    ]
+    assert cursor_updates
+    persisted = json.loads(cursor_updates[0])
+    assert persisted["offset"] == 1
+    assert persisted["__intercal_cursor_scope"]["trigger"] == "backfill"
+    assert persisted["__intercal_cursor_scope"]["adapter_config_hash"] != "old-window"
+
+
+@pytest.mark.asyncio
 async def test_ingest_source_persists_content_type_in_metadata() -> None:
     """The adapter's content_type must be written into source_documents.metadata
     so W2 normalisation can route deterministically without re-sniffing."""

@@ -29,7 +29,9 @@
     "py:typecheck": "uv run pyright",
     "py:test": "uv run pytest",
     "verify": "node scripts/verify/verify.mjs",
-    "ops:keys": "node scripts/ops/keys.mjs"
+    "ops:keys": "node scripts/ops/keys.mjs",
+    "ops:secrets-fanout": "node scripts/ops/secrets-fanout.mjs",
+    "ops:deploy-cloud-run": "node scripts/ops/deploy-cloud-run.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.0",

@@ -21,6 +21,7 @@ import uuid
 from typing import Any
 
 from intercal_shared.ports.queue import QueueError, QueueMessage
+from intercal_shared.redaction import redact_url
 
 _log = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ class RedisQueueAdapter:
             ) from exc
 
         self._redis: Any = AsyncRedis.from_url(redis_url, decode_responses=True)
-        _log.info("Redis queue adapter initialised (url=%r)", redis_url)
+        _log.info("Redis queue adapter initialised (url=%s)", redact_url(redis_url))
 
     async def enqueue(
         self,

@@ -98,8 +98,78 @@ A `failed` status (or any unhandled error) returns a non-zero exit and marks the
 4. `gh run watch <run-id>` → green; confirm row deltas on the branch; delete the branch.
 5. Optionally dispatch a small **prod** run to confirm idempotency (re-run lands no duplicates).
 
-## Relationship to Cloud Run Jobs (Plan 07 W4)
+## Cloud Run Jobs (Plan 07 W4) — heavy / on-demand runner
 
 Cloud Run Jobs run the identical `intercal-pipeline` CLI from `docker/workers.Dockerfile` for
-heavier/on-demand cadences, with env from Secret Manager. The Actions path here is the free,
-scheduled default; the two are interchangeable runners over one portable worker.
+heavier/on-demand cadences. Same portable worker, different runner — not a re-implementation.
+
+### What is deployed
+
+- **Image:** `docker/workers.Dockerfile` (pinned `python:3.12-slim` + `uv 0.10.9`,
+  `uv sync --all-packages --all-extras --frozen`, entrypoint `intercal-pipeline`). Built by
+  **Cloud Build** (`docker/cloudbuild.workers.yaml`) and pushed to **Artifact Registry**
+  (`us-central1-docker.pkg.dev/<project>/intercal/pipeline`), tagged with the immutable git SHA
+  plus `latest`.
+- **Cloud Run Job** `intercal-pipeline` (region `us-central1`): `run-all` by default; each
+  execution may override args (`--args="run-all,--max-documents,5"`). 1 vCPU / 2Gi,
+  `--max-retries=0`, `--task-timeout=1800s`, `--parallelism=1`.
+- **Runtime service account** `intercal-pipeline@<project>.iam.gserviceaccount.com`,
+  least-privilege: `aiplatform.user` (Vertex ADC via Workload Identity — no key file),
+  `secretmanager.secretAccessor`, `logging.logWriter`, and repo-scoped `artifactregistry.reader`.
+- **Env wiring:** non-secret selectors / budget knobs as plaintext `--set-env-vars`; sensitive
+  values (`DATABASE_URL`, `S3_*`, `REDIS_URL`, Upstash, `GEMINI_API_KEY`) via `--set-secrets`
+  bound to **Secret Manager** secrets named `intercal-<NAME>`. Plaintext env never carries a
+  secret. LLM stays `gemini` (API key) like the Actions path; `LLM_PRIMARY=vertex` + the SA's
+  `aiplatform.user` role make a Vertex switch a one-flag env change (ADC from the job's SA).
+
+### Deploy (operator)
+
+First-time provisioning + any config/secret change — from a host with `gcloud` auth and the
+local `.env`:
+
+```
+pnpm ops:deploy-cloud-run            # AR repo + Cloud Build + SA/IAM + Secret Manager + job
+node scripts/ops/deploy-cloud-run.mjs --dry-run     # preview, no writes
+node scripts/ops/deploy-cloud-run.mjs --build-only  # rebuild image only
+```
+
+The script reads `GCLOUD_PROJECT_ID` and `CLOUD_RUN_REGION` (default `us-central1`) from `.env`,
+pipes secret values to Secret Manager via stdin (never on the command line / in logs), and is
+idempotent. `GCLOUD_REGION` is a *separate* operator-lane knob used only by the W1 secret fan-out's
+`gcloud run services update`; the Cloud Run Job region is `CLOUD_RUN_REGION`.
+
+### Deploy (CI)
+
+`.github/workflows/deploy-cloud-run.yml` is the **build + roll** half: on a push to `main` that
+touches `docker/workers.Dockerfile`, `docker/cloudbuild.workers.yaml`, `services/**`, or `uv.lock`,
+it authenticates with `GCP_SA_KEY` (`google-github-actions/auth@v2`), Cloud Builds the image to AR,
+and rolls the existing job to the new SHA. It never sees `.env` or a secret value — the job's env /
+`--set-secrets` bindings (provisioned by the operator script) persist across image rolls. A
+`workflow_dispatch` input `execute_after_deploy` runs a small smoke execution after the roll.
+
+### Run / verify
+
+```
+gcloud run jobs execute intercal-pipeline --region us-central1            # all active sources
+gcloud run jobs execute intercal-pipeline --region us-central1 \
+  --args="run-all,--max-documents,5"                                      # small on-demand run
+```
+
+For a SAFE test, rebind `DATABASE_URL` to a throwaway-Neon-branch Secret Manager version
+(`gcloud run jobs update … --update-secrets=DATABASE_URL=<verify-secret>:latest`), execute, then
+restore the prod binding and delete the branch + verify secret. The job emits the same
+`PipelineRunHealth` summary and exits non-zero on a failed run.
+
+## Actions vs Cloud Run (the split)
+
+| | GitHub Actions (`pipeline.yml`, W3) | Cloud Run Job (`intercal-pipeline`, W4) |
+| --- | --- | --- |
+| Role | **Routine scheduled default** (free public-repo minutes) | **Heavy / on-demand** runner |
+| Trigger | `cron: "17 */6 * * *"` + `workflow_dispatch` | manual `gcloud run jobs execute` / CI dispatch |
+| Worker | `uv run intercal-pipeline` on the runner | same CLI, baked into the AR image |
+| Secrets | GitHub Actions secrets (W1 fan-out) | Secret Manager (`--set-secrets`) |
+| Vertex ADC | SA-key file (shredded `if: always()`) | job SA / Workload Identity (no key file) |
+
+The 6-hourly schedule lives **only** on Actions to avoid double-running. Cloud Run is reserved for
+ad-hoc / heavier runs that would strain a runner. Both invoke the identical idempotent CLI, so
+either can safely follow the other (dedup by `content_hash`; no duplicate canonical records).

@@ -1,0 +1,97 @@
+name: Deploy Cloud Run Job (pipeline worker)
+
+# Reproducible CD for the heavy/on-demand pipeline path (Plan 07 W4): on a push to main that
+# touches the worker image or the pipeline/shared code, Cloud Build the portable worker image to
+# Artifact Registry and roll the existing Cloud Run Job to the new immutable (git-SHA) tag.
+#
+# This is the BUILD+ROLL half. First-time provisioning (the Artifact Registry repo, the
+# least-privilege runtime service account + IAM, and the Secret Manager values fanned from .env)
+# is done once by the operator via `node scripts/ops/deploy-cloud-run.mjs` — CI never sees .env or
+# any secret value; it only authenticates with GCP_SA_KEY and updates the job's image. The job's
+# env / --set-secrets bindings persist across image rolls.
+#
+# Routine 6-hourly ingestion stays on free GitHub Actions (.github/workflows/pipeline.yml, W3).
+# Cloud Run is the on-demand / heavy runner over the SAME `intercal-pipeline` CLI — see
+# docs/operations/pipeline-cd.md ("Actions vs Cloud Run").
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docker/workers.Dockerfile"
+      - "docker/cloudbuild.workers.yaml"
+      - "services/**"
+      - "uv.lock"
+      - ".github/workflows/deploy-cloud-run.yml"
+  workflow_dispatch:
+    inputs:
+      execute_after_deploy:
+        description: "Run the job once after deploying (small smoke run)"
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: intercal-deploy-cloud-run
+  cancel-in-progress: false
+
+# Least privilege: only read the checked-out tree. GCP auth comes from the SA key secret.
+permissions:
+  contents: read
+
+env:
+  GCLOUD_PROJECT_ID: rich-wavelet-496206-h7
+  GCLOUD_REGION: us-central1
+  AR_REPO: intercal
+  IMAGE_NAME: pipeline
+  JOB_NAME: intercal-pipeline
+
+jobs:
+  build-and-roll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # Authenticate to GCP with the operator service-account key (GitHub secret GCP_SA_KEY).
+      # The key material lives only in the runner's ephemeral workspace and is never echoed.
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Resolve image tag (immutable git SHA)
+        id: tag
+        run: echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Cloud Build worker image → Artifact Registry
+        run: |
+          IMAGE="${GCLOUD_REGION}-docker.pkg.dev/${GCLOUD_PROJECT_ID}/${AR_REPO}/${IMAGE_NAME}"
+          gcloud builds submit \
+            --config docker/cloudbuild.workers.yaml \
+            --substitutions "_IMAGE=${IMAGE},_TAG=${{ steps.tag.outputs.sha }}" \
+            --region "${GCLOUD_REGION}" \
+            --project "${GCLOUD_PROJECT_ID}"
+
+      - name: Roll Cloud Run Job to the new image
+        # Only the image changes; the job's env / --set-secrets bindings (provisioned by the
+        # operator deploy script) persist. No secret value is passed here.
+        run: |
+          IMAGE="${GCLOUD_REGION}-docker.pkg.dev/${GCLOUD_PROJECT_ID}/${AR_REPO}/${IMAGE_NAME}:${{ steps.tag.outputs.sha }}"
+          gcloud run jobs update "${JOB_NAME}" \
+            --image "${IMAGE}" \
+            --region "${GCLOUD_REGION}" \
+            --project "${GCLOUD_PROJECT_ID}"
+
+      - name: Optional smoke execution
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.execute_after_deploy }}
+        # Small cap; the job exits non-zero on a failed pipeline run so a bad image fails loudly.
+        run: |
+          gcloud run jobs execute "${JOB_NAME}" \
+            --region "${GCLOUD_REGION}" \
+            --project "${GCLOUD_PROJECT_ID}" \
+            --args="run-all,--max-documents,5" \
+            --wait

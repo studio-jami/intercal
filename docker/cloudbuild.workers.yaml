@@ -1,0 +1,29 @@
+# Cloud Build config for the Intercal pipeline-worker image (Plan 07 W4).
+# Builds docker/workers.Dockerfile from the repo-root context and pushes two tags
+# (immutable git SHA + moving `latest`) to Artifact Registry.
+#
+# Invoked by scripts/ops/deploy-cloud-run.mjs and .github/workflows/deploy-cloud-run.yml:
+#   gcloud builds submit --config docker/cloudbuild.workers.yaml \
+#     --substitutions _IMAGE=<ar-image>,_TAG=<git-sha> --region <region>
+#
+# _IMAGE defaults to the us-central1 `intercal` repo; override per environment.
+substitutions:
+  _IMAGE: us-central1-docker.pkg.dev/rich-wavelet-496206-h7/intercal/pipeline
+  _TAG: latest
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - docker/workers.Dockerfile
+      - -t
+      - ${_IMAGE}:${_TAG}
+      - -t
+      - ${_IMAGE}:latest
+      - .
+images:
+  - ${_IMAGE}:${_TAG}
+  - ${_IMAGE}:latest
+options:
+  # Small, default pool. Keep within free-tier/trial budget (resource-budget.md).
+  logging: CLOUD_LOGGING_ONLY

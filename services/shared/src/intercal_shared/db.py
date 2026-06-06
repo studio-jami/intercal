@@ -23,6 +23,8 @@ from typing import Any
 
 import asyncpg  # type: ignore[import-untyped]
 
+from intercal_shared.redaction import redact_url
+
 _log = logging.getLogger(__name__)
 
 # Global pool registry — avoids creating redundant pools during a process lifetime.
@@ -44,7 +46,12 @@ async def get_pool(
     """
     async with _pool_lock:
         if dsn not in _pools:
-            _log.info("Creating asyncpg pool for %s (min=%d max=%d)", dsn, min_size, max_size)
+            _log.info(
+                "Creating asyncpg pool for %s (min=%d max=%d)",
+                redact_url(dsn),
+                min_size,
+                max_size,
+            )
             pool: asyncpg.Pool = await asyncpg.create_pool(  # type: ignore[type-arg]
                 dsn=dsn,
                 min_size=min_size,
@@ -60,7 +67,7 @@ async def close_all_pools() -> None:
     async with _pool_lock:
         for dsn, pool in list(_pools.items()):
             await pool.close()
-            _log.info("Closed asyncpg pool for %s", dsn)
+            _log.info("Closed asyncpg pool for %s", redact_url(dsn))
         _pools.clear()
 
 

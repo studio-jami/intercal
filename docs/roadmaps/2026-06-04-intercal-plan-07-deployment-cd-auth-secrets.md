@@ -179,17 +179,54 @@ Suggested verification: dispatch a job; confirm Neon/R2/Upstash deltas and no du
 
 Goal: Heavy/on-demand pipeline + MCP fallback on Cloud Run via Cloud Build + Artifact Registry.
 
+Status: [x] Complete (2026-06-05) — pipeline Cloud Run Job live & executed against real infra.
+Runbook: `docs/operations/pipeline-cd.md` ("Cloud Run Jobs" + the Actions-vs-Cloud-Run split).
+Built & verified for real (project `rich-wavelet-496206-h7`, region `us-central1`):
+
+- **Image:** `docker/workers.Dockerfile` — fixed the same `uv sync` extras gap W3 hit
+  (`--all-extras`; ImportError: aioboto3) + pinned `uv 0.10.9` + `intercal-pipeline` entrypoint.
+  Cloud-built via `docker/cloudbuild.workers.yaml` → Artifact Registry repo `intercal`
+  (`us-central1-docker.pkg.dev/.../intercal/pipeline`, ~282 MiB; immutable git-SHA tag + `latest`).
+- **Cloud Run Job** `intercal-pipeline` (not a service): runs the same portable CLI as W3
+  (`run-all` default; args overridable per execution). 1 vCPU / 2Gi, `--max-retries=0`,
+  `--task-timeout=1800s`. Non-secret config via `--set-env-vars`; sensitive values via
+  `--set-secrets` from **Secret Manager** (`intercal-*` — DB, R2/S3, Upstash, Gemini) — never
+  plaintext env. Least-privilege runtime SA `intercal-pipeline@…` (`aiplatform.user` for the
+  Vertex ADC path via Workload Identity, `secretmanager.secretAccessor`, `logging.logWriter`,
+  repo-scoped `artifactregistry.reader`). LLM stays `gemini` (API key) like the proven path;
+  `LLM_PRIMARY=vertex` posture + the SA role make a Vertex switch one env flag (no key file).
+- **Reproducible CD:** `scripts/ops/deploy-cloud-run.mjs` (`pnpm ops:deploy-cloud-run`) does
+  first-time provisioning (AR repo, SA+IAM, `.env`→Secret Manager, job create/update; values
+  piped via stdin, never logged). `.github/workflows/deploy-cloud-run.yml` is the build+roll half
+  on push to main (auth via `GCP_SA_KEY`) — rebuilds the image and rolls the job to the new SHA.
+- **Security fix (found via the live verify):** `intercal_shared.db` logged the **full DSN
+  (with password)** at pool creation/close, and `queue_redis` logged the Upstash URL+token —
+  a secrets-in-logs violation across all three runners. Added `intercal_shared.redaction.redact_url`
+  and masked both (5 unit tests). No live secrets remain in logs (re-scanned the execution logs).
+
 Implementation tasks:
 
-- [ ] `scripts/ops/deploy-cloud-run.mjs` + `.github/workflows/deploy-cloud-run.yml`: Cloud Build
-      the `docker/workers.Dockerfile` (and `docker/mcp.Dockerfile`) to Artifact Registry; deploy
-      as Cloud Run **Jobs** (pipeline) and an optional Cloud Run **Service** (MCP fallback).
-- [ ] Cloud Scheduler triggers for heavier cadences that outgrow Actions; env via Secret Manager.
-- [ ] Wire the SA (already owner) auth in CI via `GCP_SA_KEY`.
+- [x] `scripts/ops/deploy-cloud-run.mjs` + `.github/workflows/deploy-cloud-run.yml` +
+      `docker/cloudbuild.workers.yaml`: Cloud Build `docker/workers.Dockerfile` to Artifact
+      Registry; deploy as a Cloud Run **Job** (pipeline). MCP fallback **Service** + the
+      `docker/mcp.Dockerfile` build are deferred (MCP is live on Vercel, W2 — the Cloud Run MCP
+      service is only a fallback; the same script extends cleanly when needed).
+- [~] Cloud Scheduler: **deferred by design.** The free GitHub Actions cron (W3) owns the routine
+      6-hourly schedule; Cloud Run is the heavy/on-demand path triggered manually
+      (`gcloud run jobs execute`) or from CI. Adding a Scheduler→Job trigger would double-run the
+      routine schedule — documented split in `pipeline-cd.md`. (One-liner to add if a heavier
+      cadence ever outgrows Actions: `gcloud scheduler jobs create http … --uri …jobs/…:run`.)
+- [x] Wire the CI SA auth via `GCP_SA_KEY` (`google-github-actions/auth@v2`); runtime env via
+      Secret Manager (`--set-secrets`). Env is bound at the job, not echoed in CI.
 
 Exit criteria:
 
-- [ ] A Cloud Run Job runs a pipeline job against live infra; image build is reproducible from CI.
+- [x] A Cloud Run Job runs a pipeline job against live infra; image build is reproducible from CI.
+      Verified: `gcloud run jobs execute intercal-pipeline` → execution `intercal-pipeline-r9vgn`
+      **succeeded** (`status=succeeded total_errors=0`) against a throwaway Neon branch (small cap
+      `--max-documents 2`); real data landed (source_documents 8→10, mentions →910, entities →173,
+      fact_versions →173; wikidata source ingested 2 genuinely new docs through the full
+      ingest→extract→resolve→derive→version chain). Branch + throwaway DSN secret deleted after.
 
 Suggested verification: trigger the Cloud Run Job; confirm parity with the Actions path.
 

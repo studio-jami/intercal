@@ -208,9 +208,10 @@ export type { FreshnessParams };
  * "What does Intercal know about X, how fresh is it, and where is coverage weak?" (Plan 03 W7).
  *
  * This is the fetch layer: it resolves the target and gathers the REAL substrate signals (entity
- * transaction-time recency, newest fact version, active-claim count, how many of those claims are
- * source-backed [the coverage = evidence-depth numerator], and distinct backing sources [the
- * single-source breadth warning]), then delegates to the pure `assembleFreshness` for the coverage +
+ * transaction-time recency, newest fact version, active-claim count, how many of those claims have
+ * CANONICAL `claim_evidence` [the coverage = evidence-depth numerator], and distinct backing
+ * documents [the single-source breadth warning]), then delegates to the pure `assembleFreshness` for
+ * the coverage +
  * staleness/gap logic. Same split as delta.ts (`buildDelta` + `assembleDigest`) so the policy is
  * unit-testable without a DB. Honesty-first: an unresolved topic or a claim-less entity is reported
  * as an explicit gap (coverage 0), never as invented coverage. See freshness.ts for the metric
@@ -228,24 +229,42 @@ export async function getFreshness(db: Db, params: FreshnessParams): Promise<S['
     return assembleFreshness({ kind: 'unknown', topic: params.topic_or_entity, lastIngestedAt });
   }
 
-  // Active claims about the entity (subject OR object) — the corroboration base. We need, per claim,
-  // its backing source documents: the count of claims with ≥1 source is the coverage (evidence
-  // depth) numerator, and the union of distinct sources is the corroboration-breadth signal.
+  // Active claims about the entity (subject OR object) — the corroboration base. Evidence is read
+  // from the CANONICAL `claim_evidence` join table, NOT the denormalized `claims.source_document_ids`
+  // array. The schema (db/migrations/0013) declares `source_document_ids` a "denormalized fast
+  // lookup" and `claim_evidence` the canonical link, and the AGENTS.md provenance invariant ("every
+  // public fact must trace to claim evidence → source documents") is defined on `claim_evidence`.
+  // The two are written by separate, non-transactional statements in the extract pipeline
+  // (services/extract: INSERT claims, then INSERT claim_evidence), so they CAN diverge; a coverage
+  // metric whose whole purpose is provenance honesty must read the authoritative table. (Verified
+  // identical in current prod data, so this is robustness, not a live correction.)
+  //
+  // Per active claim we get: whether it has ≥1 canonical evidence row (the coverage = evidence-depth
+  // numerator) and the union of distinct evidence documents (the corroboration-breadth signal).
   const claimRows = await db
     .selectFrom('claims')
-    .select(['source_document_ids'])
-    .where('status', '=', 'active')
+    .leftJoin('claim_evidence', 'claim_evidence.claim_id', 'claims.id')
+    .select(['claims.id as claim_id', 'claim_evidence.document_id as document_id'])
+    .where('claims.status', '=', 'active')
     .where((eb) =>
-      eb.or([eb('subject_entity_id', '=', entity.id), eb('object_entity_id', '=', entity.id)]),
+      eb.or([
+        eb('claims.subject_entity_id', '=', entity.id),
+        eb('claims.object_entity_id', '=', entity.id),
+      ]),
     )
     .execute();
-  const activeClaimCount = claimRows.length;
-  let evidencedClaimCount = 0;
+  const evidencedClaimIds = new Set<string>();
+  const allClaimIds = new Set<string>();
   const distinctSources = new Set<string>();
-  for (const c of claimRows) {
-    if (c.source_document_ids.length > 0) evidencedClaimCount += 1;
-    for (const id of c.source_document_ids) distinctSources.add(id);
+  for (const row of claimRows) {
+    allClaimIds.add(row.claim_id);
+    if (row.document_id) {
+      evidencedClaimIds.add(row.claim_id);
+      distinctSources.add(row.document_id);
+    }
   }
+  const activeClaimCount = allClaimIds.size;
+  const evidencedClaimCount = evidencedClaimIds.size;
 
   // Newest fact-version transaction time for this subject (the authoritative append-only change
   // axis) — the only remaining DB signal the assembler needs beyond the claims fetch above.

@@ -81,6 +81,19 @@ export interface ClaimsTable {
   updated_at: Date;
 }
 
+export interface ClaimEvidenceTable {
+  id: string;
+  claim_id: string;
+  document_id: string;
+  // 'supports' | 'partially_supports' | 'contradicts' | 'neutral'.
+  support_strength: string;
+  confidence: string; // numeric
+  char_offset_start: number | null;
+  char_offset_end: number | null;
+  quote_excerpt: string | null;
+  created_at: Date;
+}
+
 export interface ClaimContradictionsTable {
   id: string;
   claim_a_id: string;
@@ -158,6 +171,7 @@ export interface Database {
   entity_external_ids: EntityExternalIdsTable;
   relationships: RelationshipsTable;
   claims: ClaimsTable;
+  claim_evidence: ClaimEvidenceTable;
   claim_contradictions: ClaimContradictionsTable;
   fact_versions: FactVersionsTable;
   source_documents: SourceDocumentsTable;

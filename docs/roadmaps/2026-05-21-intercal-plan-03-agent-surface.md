@@ -547,7 +547,8 @@ Suggested verification:
 
 Goal: Tell agents what Intercal knows, how fresh it is, and where coverage is weak.
 
-Status: [x] Complete (2026-06-05; coverage metric audited + redefined 2026-06-05 pass 2) —
+Status: [x] Complete (2026-06-05; coverage metric audited + redefined pass 2; moved to canonical
+`claim_evidence` pass 3, all 2026-06-05) —
 `getFreshness` body in `packages/core` (`freshness.ts` + queries.ts fetch) returns a real freshness
 **and** coverage report; coverage is EVIDENCE DEPTH (evidenced active claims / total active claims),
 **redefined in audit pass 2** away from pass-1's distinct-docs/corpus-size ratio, which degraded with
@@ -599,6 +600,21 @@ Implementation tasks:
       Intercal asserts about this target is source-backed?". A claim without evidence is the genuine
       coverage gap and is exactly what this measures (the AGENTS.md provenance invariant made a ratio).
       0 active claims ⇒ coverage 0 (no recorded knowledge). Rationale documented in `freshness.ts`.
+- [x] Coverage reads CANONICAL `claim_evidence`, not denormalized `source_document_ids` (audit pass
+      3). The evidence-depth numerator (and the distinct-source breadth count) had been computed from
+      `claims.source_document_ids` — which migration 0013 explicitly labels a "denormalized fast
+      lookup; canonical is claim_evidence", and which the extract pipeline writes in a SEPARATE,
+      non-transactional statement from the `claim_evidence` INSERT (services/extract jobs.py), so the
+      two CAN diverge. A coverage metric whose entire purpose is provenance honesty — and the
+      AGENTS.md invariant it encodes ("every public fact must trace to claim evidence → source
+      documents") is defined on `claim_evidence` — must read the authoritative table. `getFreshness`
+      now LEFT JOINs `claim_evidence` (a claim is evidenced iff it has ≥1 canonical evidence row;
+      distinct breadth = distinct evidence documents); added a read-only `ClaimEvidenceTable` to the
+      Kysely db types. Verified on production Neon that the two representations are currently identical
+      (114/114 active claims evidenced both ways, zero set-difference), so this is a robustness/
+      correctness fix, not a live value change: post-fix coverage matches the pass-2 live numbers
+      exactly (Antoine du Hamel 6/6→1.0 thin; rust/Rustdoc 1.0 thin; kubernetes 0; unknown 0). The
+      pure `assembleFreshness` and its 14 tests are unchanged.
 - [x] Stale entity detection — recordings older than a 30-day transaction-time threshold are flagged
       `stale`. Threshold justified against the resource-budget cadence (`INGEST_CRON=0 */6 * * *`,
       every 6h): 30 days ≈ 120 missed ingestion windows — a deliberately conservative "no longer

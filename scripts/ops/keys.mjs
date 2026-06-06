@@ -61,7 +61,7 @@ function parseFlags(argv) {
   return out;
 }
 
-function usage(msg) {
+function usage(msg, exitCode = 2) {
   if (msg) console.error(`[keys] ${msg}\n`);
   console.error(
     [
@@ -74,7 +74,7 @@ function usage(msg) {
       `Known scopes: ${Object.values(SCOPES).join(', ')}`,
     ].join('\n'),
   );
-  process.exit(2);
+  process.exit(exitCode);
 }
 
 function fmt(d) {
@@ -82,8 +82,9 @@ function fmt(d) {
 }
 
 async function main() {
-  const [command, ...rest] = process.argv.slice(2);
-  if (!command || command === 'help' || command === '--help') usage();
+  const [command, ...rest] = process.argv.slice(2).filter((arg) => arg !== '--');
+  if (!command || command === 'help' || command === '--help' || command === '-h')
+    usage(undefined, 0);
 
   const databaseUrl = loadDatabaseUrl();
   if (!databaseUrl) {

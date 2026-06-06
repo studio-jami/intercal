@@ -79,17 +79,29 @@ MCP OAuth) → backups/restore → budget enforcement + cost monitoring (with Pl
 
 Goal: One source of truth for secrets, propagated everywhere by a repeatable script.
 
+Status: [x] Complete (2026-06-05) — Vercel + GitHub Actions fanned live; Cloud Run deferred to W4
+(no service exists yet). Runbook: `docs/operations/secrets.md`.
+
 Implementation tasks:
 
-- [ ] `scripts/ops/secrets-fanout.mjs`: read a local secret manifest (gitignored), push to Vercel
-      env (API), GitHub Actions secrets (`gh`/API), and Cloud Run env/Secret Manager; idempotent,
-      never prints values, supports `--target vercel|github|cloudrun|all` and `--dry-run`.
-- [ ] Document the secret lanes (app-runtime vs ops/automation) in `docs/operations/secrets.md`.
-- [ ] Verify each target reflects the source after a run.
+- [x] `scripts/ops/secrets-fanout.mjs`: reads the tracked manifest `scripts/ops/secrets.manifest.json`
+      (NAMES + per-target mapping + lane; validated by `secrets.manifest.schema.json`) and the
+      gitignored local `.env` (the only place values live). Pushes to Vercel env (REST API),
+      GitHub Actions secrets (`gh secret set`), and Cloud Run env (`gcloud run ... --set-env-vars`,
+      deferred until a service exists). Idempotent (Vercel reconciles split per-target rows into one
+      unified entry; `gh`/`gcloud` overwrite), never prints values (NAME + target + action only;
+      errors redacted), supports `--target vercel|github|cloudrun|all` and `--dry-run`, and lists the
+      NAMES present at each target after a real run to confirm landing.
+- [x] Documented the two secret lanes — `app-runtime` (the fan-out payload) vs `operator` (the
+      credentials that authenticate the push; `targets: []`, never fanned) — in
+      `docs/operations/secrets.md`, and clarified the operator lane (names only) in `.env.example`.
+- [x] Verified each target reflects the source after a run: Vercel 4 names (prod/preview/dev);
+      GitHub 24 app-runtime names (26 present incl. 2 operator-lane set earlier); Cloud Run deferred.
 
 Exit criteria:
 
-- [ ] Changing a secret in one place + running the script updates all environments with no manual steps.
+- [x] Changing a secret in one place (`.env`) + running the script updates all (available)
+      environments with no manual steps. Cloud Run lands automatically once a service exists.
 
 Suggested verification: `node scripts/ops/secrets-fanout.mjs --dry-run`; confirm `gh secret list`, Vercel env, Cloud Run env.
 

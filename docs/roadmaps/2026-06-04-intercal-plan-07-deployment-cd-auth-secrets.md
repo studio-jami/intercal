@@ -200,9 +200,22 @@ Built & verified for real (project `rich-wavelet-496206-h7`, region `us-central1
   piped via stdin, never logged). `.github/workflows/deploy-cloud-run.yml` is the build+roll half
   on push to main (auth via `GCP_SA_KEY`) — rebuilds the image and rolls the job to the new SHA.
 - **Security fix (found via the live verify):** `intercal_shared.db` logged the **full DSN
-  (with password)** at pool creation/close, and `queue_redis` logged the Upstash URL+token —
+  (with password)** at pool creation/close, and `queue_redis` logged the Redis/Upstash URL —
   a secrets-in-logs violation across all three runners. Added `intercal_shared.redaction.redact_url`
-  and masked both (5 unit tests). No live secrets remain in logs (re-scanned the execution logs).
+  and masked both (5 unit tests).
+- **Audit-2 (2026-06-06) — leaked credential purged + proof corrected.** The W4 proof execution
+  cited below (`intercal-pipeline-r9vgn`) actually ran the **pre-redaction** image digest
+  (`sha256:e0e5b3…`, tag `677219a`, built 23:30); the redaction fix landed in a separate image
+  (`sha256:536f0c…`, tags `fc3785b`/`latest`, built 23:50, 20 min later) that was **never
+  execution-verified**. As a result `r9vgn` leaked the throwaway-branch DSN — and because Neon
+  shares the `neondb_owner` password project-wide, that is a **live credential** — into persistent
+  Cloud Logging (`run.googleapis.com/stderr`, 2 entries). Remediation: purged the entire
+  `intercal-pipeline` stderr log stream (`gcloud logging logs delete`; only writer is this job,
+  stderr regenerates) → leak re-scan empty; and re-ran the job on the **fixed** `latest` image
+  against a fresh throwaway branch — logs now show `…neondb_owner:***@host…` (redacted), no `npg_`.
+  NOTE: the leaked value was the live `neondb_owner` password; **rotating it** (then re-running the
+  W1 secret fan-out) is recommended as defense-in-depth and is left to the operator (prod-impacting,
+  out of W4 scope).
 
 Implementation tasks:
 
@@ -222,11 +235,16 @@ Implementation tasks:
 Exit criteria:
 
 - [x] A Cloud Run Job runs a pipeline job against live infra; image build is reproducible from CI.
-      Verified: `gcloud run jobs execute intercal-pipeline` → execution `intercal-pipeline-r9vgn`
-      **succeeded** (`status=succeeded total_errors=0`) against a throwaway Neon branch (small cap
-      `--max-documents 2`); real data landed (source_documents 8→10, mentions →910, entities →173,
-      fact_versions →173; wikidata source ingested 2 genuinely new docs through the full
-      ingest→extract→resolve→derive→version chain). Branch + throwaway DSN secret deleted after.
+      **Authoritative proof (audit-2, fixed image):** `gcloud run jobs execute intercal-pipeline`
+      on image `pipeline:latest` (`sha256:536f0c…`, the redaction-fixed digest) → execution
+      `intercal-pipeline-hnwdm` **succeeded** (`status=succeeded total_errors=0`) against a throwaway
+      Neon branch (`--max-documents 2`); real data landed (branch totals: source_documents 10,
+      mentions 913, entities 177, fact_versions 177; wikidata ingested 2 new docs through the full
+      ingest→extract→resolve→derive→version chain). **Logs clean** — pool lines show
+      `postgresql://neondb_owner:***@…` (password masked); `npg_` leak scan empty. Job restored to
+      the prod `DATABASE_URL` Secret Manager binding; throwaway branch + verify secret deleted.
+      (The earlier `intercal-pipeline-r9vgn` run is superseded — it used the pre-fix image and is
+      recorded under the audit-2 security note above.)
 
 Suggested verification: trigger the Cloud Run Job; confirm parity with the Actions path.
 

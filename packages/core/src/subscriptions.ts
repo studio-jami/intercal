@@ -85,6 +85,8 @@ export interface SubscriptionNotificationRecord {
   deliveredAt?: string;
 }
 
+type ClaimPattern = Record<string, unknown>;
+
 export interface WebhookDeliveryRequest {
   url: string;
   notificationId: string;
@@ -133,6 +135,27 @@ function parseClaimPattern(value: unknown): unknown {
     }
   }
   return value;
+}
+
+function isRecord(value: unknown): value is ClaimPattern {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isNonEmptyPattern(value: unknown): value is ClaimPattern {
+  return isRecord(value) && Object.keys(value).length > 0;
+}
+
+function claimPatternMatches(subscriptionPattern: unknown, changePattern: unknown): boolean {
+  if (!isNonEmptyPattern(subscriptionPattern) || !isNonEmptyPattern(changePattern)) return false;
+  return Object.entries(subscriptionPattern).every(
+    ([key, value]) =>
+      Object.hasOwn(changePattern, key) &&
+      JSON.stringify((changePattern as ClaimPattern)[key]) === JSON.stringify(value),
+  );
 }
 
 function targetKind(row: SubscriptionRow): SubscriptionTargetKind {
@@ -244,6 +267,12 @@ function validateCreate(input: CreateSubscriptionInput): void {
       'Exactly one subscription target matching target.kind is required.',
     );
   }
+  if (input.target.kind !== 'claim_pattern' && !isNonEmptyString(supplied[0]?.[1])) {
+    throw new InvalidRequestError('Subscription target IDs must be non-empty strings.');
+  }
+  if (input.target.kind === 'claim_pattern' && !isNonEmptyPattern(input.target.claimPattern)) {
+    throw new InvalidRequestError('claimPattern must be a non-empty object.');
+  }
   if (input.deliveryMethod === 'webhook') {
     if (!input.webhookUrl)
       throw new InvalidRequestError('webhookUrl is required for webhook delivery.');
@@ -257,6 +286,25 @@ function validateCreate(input: CreateSubscriptionInput): void {
     if (input.webhookSecret && input.webhookSecret.length < 16) {
       throw new InvalidRequestError('webhookSecret must be at least 16 characters.');
     }
+  }
+}
+
+function validateDispatch(input: EnqueueSubscriptionChangeInput): void {
+  const targetFields = {
+    topic: input.topicId,
+    entity: input.entityId,
+    relationship: input.relationshipTypeId,
+    claim_pattern: input.claimPattern,
+  } satisfies Record<SubscriptionTargetKind, unknown>;
+  const supplied = Object.entries(targetFields).filter(([, value]) => value != null);
+  if (supplied.length !== 1 || supplied[0]?.[0] !== input.changeKind) {
+    throw new InvalidRequestError('Exactly one dispatch target matching changeKind is required.');
+  }
+  if (input.changeKind !== 'claim_pattern' && !isNonEmptyString(supplied[0]?.[1])) {
+    throw new InvalidRequestError('Dispatch target IDs must be non-empty strings.');
+  }
+  if (input.changeKind === 'claim_pattern' && !isNonEmptyPattern(input.claimPattern)) {
+    throw new InvalidRequestError('claimPattern must be a non-empty object.');
   }
 }
 
@@ -355,6 +403,7 @@ export async function enqueueSubscriptionNotifications(
   db: Db,
   input: EnqueueSubscriptionChangeInput,
 ): Promise<{ enqueued: number; skipped: number }> {
+  validateDispatch(input);
   let q = db.selectFrom('subscriptions').selectAll().where('is_active', '=', true);
   if (input.changeKind === 'topic') q = q.where('topic_id', '=', input.topicId ?? '');
   if (input.changeKind === 'entity') q = q.where('entity_id', '=', input.entityId ?? '');
@@ -368,6 +417,13 @@ export async function enqueueSubscriptionNotifications(
   let enqueued = 0;
   let skipped = 0;
   for (const sub of rows) {
+    if (
+      input.changeKind === 'claim_pattern' &&
+      !claimPatternMatches(parseClaimPattern(sub.claim_pattern), input.claimPattern)
+    ) {
+      skipped += 1;
+      continue;
+    }
     const targetLabel = await targetLabelForSubscription(db, sub);
     const tokenBudget = clampBudget(sub.token_budget);
     const delta = await buildDelta(db, {
@@ -417,6 +473,7 @@ export async function pollSubscriptionNotifications(
   if (subscription.api_key_id !== input.apiKeyId) {
     throw new ForbiddenError('Subscription belongs to another key.');
   }
+  if (!subscription.is_active) throw new NotFoundError('Subscription not found.');
   const limit = Math.min(MAX_POLL_LIMIT, Math.max(1, input.limit ?? 20));
   const rows = await db
     .selectFrom('subscription_notifications')
@@ -490,6 +547,7 @@ export async function deliverDueWebhookNotifications(
     ])
     .where('subscription_notifications.delivery_method', '=', 'webhook')
     .where('subscription_notifications.status', 'in', ['pending', 'failed'])
+    .where('subscriptions.is_active', '=', true)
     .where((eb) =>
       eb.or([
         eb('subscription_notifications.next_attempt_at', 'is', null),

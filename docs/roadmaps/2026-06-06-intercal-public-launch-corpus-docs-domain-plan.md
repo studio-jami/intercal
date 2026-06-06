@@ -393,6 +393,13 @@ The first proof consumes the same adapters, provenance rules, and public query p
   surfaces, broad source rows/scripts/seeds if source-owned, bounded live-full proof tooling,
   operations docs, related tests, Workstream 4 roadmap status, and changelog. Next coordinator
   action: poll in short intervals, record result, then gate the pass 5 commit.
+- 2026-06-06T15:31:00-04:00 — Workstream 4 pass 5 returned complete. Commit:
+  `24615b2da4055f0a7100e45b95cf38614269f431` (`feat(corpus): prove broad live full coverage`),
+  pushed to `origin/main`. Gate result: 5 files and 1562 LOC fails the numeric closeout gate.
+  `seeded-proof`, `live-first-proof`, and `live-full` now pass on the configured Neon branch after
+  reviewed broad source rows and bounded proof rows were applied. `pnpm lint` still fails on
+  pre-existing Biome schema/version and `mcps/Neon` formatting diagnostics outside this change set.
+  Next coordinator action: dispatch Workstream 4 pass 6 strict quiet audit.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 

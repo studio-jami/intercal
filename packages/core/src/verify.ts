@@ -58,10 +58,10 @@
  *       requires near-verbatim claim-level agreement. Under-claiming (partially/unverified) is the
  *       safe failure mode; a false "supported" would be the substrate asserting something untrue.
  *
- * POINT-IN-TIME (`as_of_date`): evaluated against the bitemporal state as of that date. We only
- * consider claims Intercal had ALREADY RECORDED by then (transaction time: `created_at <= as_of`)
- * AND that were valid in the world at that date (valid time: `valid_from <= as_of` when set, and
- * `valid_until` open or after the date). Without `as_of_date` we verify against the current state.
+ * POINT-IN-TIME (`as_of_date`): evaluated against the historical world state as of that date.
+ * Historical corpus backfills may be recorded after the event they describe, so verification filters
+ * on valid time (`valid_from <= as_of` when set, and `valid_until` open or after the date), not the
+ * row insertion time. Without `as_of_date` we verify against the current valid state.
  *
  * TOKEN BUDGET: the returned evidence is bounded to `token_budget` exactly like W5 — citations are
  * ranked most-relevant-first and trimmed so the response stays within budget; the verdict and
@@ -465,10 +465,10 @@ export async function buildVerification(
     .where(sql<boolean>`${tsv} @@ ${tsq}`);
 
   if (asOf) {
-    // Transaction time: only what Intercal had recorded by `as_of` (created_at is the claim's
-    // transaction-time axis; claims has no recorded_at — see db/types.ts).
-    q = q.where('created_at', '<=', asOf);
-    // World/valid time: the claim was valid at `as_of` (open intervals count).
+    // Historical-corpus query time: the claim was valid in the world at `as_of`.
+    // Do not filter on `created_at`; backfilled evidence can be recorded after the historical
+    // date it describes, and filtering by learn-time would make real backfills unusable for
+    // "was this true as of date X?" checks.
     q = q
       .where((eb) => eb.or([eb('valid_from', 'is', null), eb('valid_from', '<=', asOf)]))
       .where((eb) => eb.or([eb('valid_until', 'is', null), eb('valid_until', '>', asOf)]));

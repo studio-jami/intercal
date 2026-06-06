@@ -629,9 +629,9 @@ Primary areas:
 
 Implementation tasks:
 
-- [~] Prove GPT, Claude, Gemini, Llama, and MCP timelines from November 2022 onward.
-- [~] Prove `get_delta("frontier LLMs", since=2023-03-01)` returns cited, budget-bounded changes from backfilled evidence.
-- [~] Prove `verify_claim` with `as_of` behavior against historical evidence and contradictions.
+- [x] Prove GPT, Claude, Gemini, Llama, and MCP timelines from November 2022 onward.
+- [x] Prove `get_delta("frontier LLMs", since=2023-03-01)` returns cited, budget-bounded changes from backfilled evidence.
+- [x] Prove `verify_claim` with `as_of` behavior against historical evidence and contradictions.
 - [~] Expand from first proof into the full corpus taxonomy: model architecture, ML research, development cycles, agent/tooling shifts, benchmarks, regulation, infrastructure, and open-weight ecosystem changes.
 - [x] Add corpus coverage and freshness gates for source class, topic cluster, date range, entity coverage, citation depth, contradiction state, and review-needed rate.
 - [x] Add adversarial and stale-data checks for claims that changed over time.
@@ -689,6 +689,20 @@ proof still passes with rollback cleanup. Live proof remains open until an opera
 first-proof source rows in the configured Neon branch/account, runs bounded backfills within
 `docs/operations/resource-budget.md`, and then passes `live-first-proof`; `live-full` remains blocked
 until the broader taxonomy source rows and evidence exist.
+
+Pass 4 closeout note: the first-proof live corpus path now passes against the configured Neon branch.
+Added reviewed first-proof source catalog rows in `db/seeds/0004_first_proof_sources.sql` and an
+idempotent operator script, `scripts/dev/backfill-first-proof-corpus.mjs`, that applies bounded
+reviewed source-document, claim, evidence, stale-data contradiction, entity, and fact-version rows
+without printing secrets. The normal `intercal-pipeline backfill --dry-run` now selects first-proof
+rows by `model_provider`, `protocol`, and `release_notes` source classes. `verify_claim` `as_of`
+now filters historical corpus proof by valid-world time instead of row insertion time, so fresh
+historical backfills can answer "was this true as of date X?" without falsifying learn-time.
+`seeded-proof` passes with rollback cleanup, and `live-first-proof` passes with GPT/Claude/Gemini/
+Llama/MCP coverage, cited `get_delta`, point-in-time `verify_claim`, adversarial stale/wrong-value
+checks, and `search_evidence("MCP protocol")`. `live-full` still fails truthfully on broad taxonomy
+coverage gaps: benchmark, developer-ecosystem, infrastructure, policy/regulatory, most research/
+release-note/protocol coverage, and full-corpus topic clusters are not backfilled yet.
 
 ## Workstream 5: Public Intercal Knowledge Experience
 

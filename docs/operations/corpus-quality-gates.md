@@ -88,6 +88,9 @@ bounded dry run before fetching:
 
 ```powershell
 $env:DATABASE_URL = "<neon branch url>"
+node scripts/dev/backfill-first-proof-corpus.mjs --dry-run
+node scripts/dev/backfill-first-proof-corpus.mjs --apply
+
 uv run intercal-pipeline backfill `
   --source-class model_provider `
   --start-date 2022-11-01 `
@@ -97,11 +100,22 @@ uv run intercal-pipeline backfill `
   --dry-run
 ```
 
-Repeat the dry run for the other required source classes, then remove `--dry-run` only on the
-intended Neon branch/account and only within the resource budget. The extraction path carries safe
-corpus classification keys (`source_class`, `topic_cluster`, `corpus_taxonomy`, `corpus_track`) from
-source/document metadata onto extracted claims so live quality gates can count backfilled claims
-without copying arbitrary source metadata.
+`db/seeds/0004_first_proof_sources.sql` owns the reviewed first-proof source catalog. The operator
+script above applies the bounded reviewed first-proof corpus rows against the intended runtime DB:
+source rows, concise reviewed source-document summaries, claims, claim evidence, one stale-data
+contradiction pair, and fact versions. It is deterministic and idempotent, reads `DATABASE_URL` from
+the environment or local `.env`, and never prints the value.
+
+Repeat the pipeline dry run for the other required source classes, then remove `--dry-run` only on
+the intended Neon branch/account and only within the resource budget. The extraction path carries
+safe corpus classification keys (`source_class`, `topic_cluster`, `corpus_taxonomy`,
+`corpus_track`) from source/document metadata onto extracted claims so live quality gates can count
+backfilled claims without copying arbitrary source metadata.
+
+As of the 2026-06-06 Workstream 4 pass 4 proof, `live-first-proof` passes against the configured
+Neon branch after applying the reviewed first-proof corpus rows. `live-full` remains a truthful
+failure until broad AI-history source rows, backfilled evidence, and classified claims exist for the
+full taxonomy.
 
 ## Live Verification Remaining
 

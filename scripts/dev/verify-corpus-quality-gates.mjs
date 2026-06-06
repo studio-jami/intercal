@@ -10,14 +10,34 @@
  * used by REST/MCP. It requires `pnpm --filter @intercal/core build` first so plain node can load
  * the package without a TypeScript runtime.
  */
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(__dirname, '..', '..');
+
 const mode = process.argv[2]?.startsWith('--')
   ? 'seeded-proof'
   : (process.argv[2] ?? 'seeded-proof');
 const json = process.argv.includes('--json');
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = loadDatabaseUrl();
+
+function loadDatabaseUrl() {
+  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
+  const envPath = join(repoRoot, '.env');
+  if (!existsSync(envPath)) return undefined;
+  for (const line of readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+    const match = line.match(/^\s*DATABASE_URL\s*=\s*(.+?)\s*$/);
+    if (match) return match[1].replace(/^["']|["']$/g, '');
+  }
+  return undefined;
+}
 
 if (!databaseUrl) {
-  console.error('DATABASE_URL is required. The value is not printed by this script.');
+  console.error(
+    'DATABASE_URL is required in the environment or local .env. The value is not printed by this script.',
+  );
   process.exit(2);
 }
 

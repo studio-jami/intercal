@@ -21,6 +21,7 @@ export const OBSERVABILITY_VIEW_NAMES = [
 export interface ObservabilitySnapshot {
   sourceHealth: unknown[];
   pipelineMetrics: unknown[];
+  usageLatency: unknown[];
   freshness: unknown[];
   failedJobs: unknown[];
   providerConsumption: unknown[];
@@ -36,10 +37,11 @@ export async function queryObservabilitySnapshot(
   options: { limit?: number } = {},
 ): Promise<ObservabilitySnapshot> {
   const limit = Math.max(1, Math.min(options.limit ?? 50, 500));
-  const [sourceHealth, pipelineMetrics, freshness, failedJobs, providerConsumption] =
+  const [sourceHealth, pipelineMetrics, usageLatency, freshness, failedJobs, providerConsumption] =
     await Promise.all([
       selectView(db, 'observability_source_health', limit),
       selectView(db, 'observability_pipeline_metrics', limit),
+      selectView(db, 'observability_usage_latency', limit),
       selectView(db, 'observability_freshness', limit),
       selectView(db, 'observability_failed_jobs', limit),
       selectView(db, 'observability_provider_consumption', limit),
@@ -48,6 +50,7 @@ export async function queryObservabilitySnapshot(
   return {
     sourceHealth,
     pipelineMetrics,
+    usageLatency,
     freshness,
     failedJobs,
     providerConsumption,

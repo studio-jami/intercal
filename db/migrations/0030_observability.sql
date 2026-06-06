@@ -36,6 +36,8 @@ VALUES
         'Monthly command allowance.'),
     ('upstash', 'storage', 'storage_bytes', 'bytes', 'month', 268435456, true,
         '256 MB storage allowance.'),
+    ('upstash', 'bandwidth', 'bandwidth_bytes', 'bytes', 'unknown', NULL, true,
+        'Bandwidth readings may be imported when provider telemetry is available; resource-budget.md does not pin a stable allowance.'),
     ('r2', 'storage', 'storage_bytes', 'bytes', 'month', 10737418240, true,
         '10 GB storage allowance.'),
     ('r2', 'class_a_ops_month', 'class_a_ops', 'operations', 'month', 1000000, true,
@@ -54,12 +56,18 @@ VALUES
         'Default LLM_DAILY_REQUEST_BUDGET knob from resource-budget.md; override by updating this row if configured differently.'),
     ('vercel', 'function_gb_hours', 'function_gb_hours', 'gb_hours', 'month', 100, true,
         'Approximate Hobby function execution budget from resource-budget.md.'),
+    ('vercel', 'transfer', 'transfer_bytes', 'bytes', 'month', 107374182400, true,
+        'Approximate 100 GB transfer budget from resource-budget.md.'),
+    ('vercel', 'build_minutes', 'build_minutes', 'minutes', 'unknown', NULL, true,
+        'Build-minute allowance is noted in resource-budget.md but must be verified in the provider account before use.'),
     ('cloud_run', 'requests_month', 'requests', 'requests', 'month', 2000000, true,
         'Always-free request allowance from resource-budget.md.'),
     ('cloud_run', 'vcpu_seconds_month', 'vcpu_seconds', 'seconds', 'month', 180000, true,
         'Always-free vCPU-seconds allowance from resource-budget.md.'),
     ('cloud_run', 'gb_seconds_month', 'gb_seconds', 'seconds', 'month', 360000, true,
-        'Always-free GB-seconds allowance from resource-budget.md.')
+        'Always-free GB-seconds allowance from resource-budget.md.'),
+    ('cloud_run', 'egress', 'egress_bytes', 'bytes', 'month', 1073741824, true,
+        '1 GB egress allowance from resource-budget.md.')
 ON CONFLICT (provider, allowance_key) DO UPDATE SET
     metric_name = EXCLUDED.metric_name,
     metric_unit = EXCLUDED.metric_unit,
@@ -310,8 +318,8 @@ usage_rollups AS (
     SELECT
         a.provider,
         a.allowance_key,
-        COALESCE(sum(pue.quantity), 0) AS quantity_used,
-        COALESCE(sum(pue.cost_usd), 0) AS cost_usd,
+        sum(pue.quantity) AS quantity_used,
+        sum(pue.cost_usd) AS cost_usd,
         max(pue.observed_at) AS last_observed_at
     FROM allowance_windows a
     LEFT JOIN provider_usage_events pue
@@ -332,14 +340,16 @@ SELECT
     a.allowance_period,
     a.allowance_quantity,
     a.binding,
-    u.quantity_used,
+    CASE WHEN u.last_observed_at IS NULL THEN NULL ELSE u.quantity_used END AS quantity_used,
     CASE
+        WHEN u.last_observed_at IS NULL THEN NULL
         WHEN a.allowance_quantity IS NULL THEN NULL
         ELSE round((u.quantity_used / NULLIF(a.allowance_quantity, 0)) * 100, 2)
     END AS used_pct,
-    u.cost_usd,
+    CASE WHEN u.last_observed_at IS NULL THEN NULL ELSE u.cost_usd END AS cost_usd,
     u.last_observed_at,
     CASE
+        WHEN u.last_observed_at IS NULL THEN 'unavailable'
         WHEN a.allowance_quantity IS NULL THEN 'unavailable'
         WHEN u.quantity_used >= a.allowance_quantity THEN 'exceeded'
         WHEN u.quantity_used >= a.allowance_quantity * a.warning_ratio THEN 'warning'

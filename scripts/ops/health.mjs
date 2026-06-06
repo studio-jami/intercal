@@ -245,7 +245,7 @@ function printTable(name, rows) {
         .map((column) => {
           const value = formatValue(row[column]);
           const clipped =
-            value.length > widths[column] ? `${value.slice(0, widths[column] - 1)}…` : value;
+            value.length > widths[column] ? `${value.slice(0, widths[column] - 3)}...` : value;
           return clipped.padEnd(widths[column]);
         })
         .join('  '),

@@ -267,6 +267,11 @@ The first proof consumes the same adapters, provenance rules, and public query p
   catalog, backfill execution, query gate, dashboard, docs/marketing, domain, or direct fact-write
   change is required. Workstream 2 is closed; Workstream 3 owns source-row expansion, backfill
   execution, budgets, retries, and operator controls.
+- 2026-06-06T12:55:52-04:00 — Dispatched Workstream 3 pass 1 to agent
+  `019e9ddc-8a5e-7553-a4e2-90b433c92e14` (`Boyle`). Ownership boundary: pipeline backfill
+  execution, ops scripts, Actions/Cloud Run controls, resource-budget and pipeline runbooks,
+  related Python tests, Workstream 3 roadmap status, and changelog. Next coordinator action: poll
+  in short intervals, record result, then dispatch mandatory Workstream 3 pass 2 after pass 1 lands.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 

@@ -24,30 +24,50 @@ export class UpstashRateLimitStore implements RateLimitStorePort {
   }
 
   async incr(key: string, windowSeconds: number): Promise<RateLimitResult> {
+    const out = await this.pipeline([
+      ['INCR', key],
+      ['EXPIRE', key, String(windowSeconds), 'NX'],
+      ['PTTL', key],
+    ]);
+    const incr = out[0];
+    const expire = out[1];
+    const pttl = out[2];
+    if (incr?.error) throw new Error(`Upstash INCR error: ${incr.error}`);
+    if (expire?.error) throw new Error(`Upstash EXPIRE error: ${expire.error}`);
+    const count = Number(incr?.result ?? 0);
+    let pttlMs = Number(pttl?.result ?? -1);
+
+    // Self-heal a counter that has no TTL. PTTL is -1 (key exists, no expiry — EXPIRE NX never
+    // armed it, e.g. a partial earlier write or a manual PERSIST) or -2 (key vanished between INCR
+    // and PTTL). Without a TTL the counter would increment forever and never reset, permanently
+    // locking out that IP/key bucket. Re-arm the window so a stuck bucket always recovers. This is
+    // the rare path (one extra command only when a TTL is genuinely missing), so it does not move
+    // the steady-state Upstash command budget (docs/operations/resource-budget.md).
+    if (pttlMs < 0) {
+      const repair = await this.pipeline([['EXPIRE', key, String(windowSeconds)]]);
+      if (repair[0]?.error) throw new Error(`Upstash EXPIRE(repair) error: ${repair[0].error}`);
+      pttlMs = windowSeconds * 1000;
+    }
+    const resetSeconds = pttlMs > 0 ? Math.ceil(pttlMs / 1000) : windowSeconds;
+    return { count, resetSeconds };
+  }
+
+  /** POST a command array to Upstash's REST pipeline; returns results in command order. */
+  private async pipeline(
+    commands: ReadonlyArray<ReadonlyArray<string>>,
+  ): Promise<Array<{ result?: number; error?: string }>> {
     const res = await this.fetchImpl(`${this.restUrl}/pipeline`, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${this.restToken}`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify([
-        ['INCR', key],
-        ['EXPIRE', key, String(windowSeconds), 'NX'],
-        ['PTTL', key],
-      ]),
+      body: JSON.stringify(commands),
     });
     if (!res.ok) {
       throw new Error(`Upstash rate-limit pipeline failed: HTTP ${res.status}`);
     }
     // Pipeline returns an array of { result } | { error } in command order.
-    const out = (await res.json()) as Array<{ result?: number; error?: string }>;
-    const incr = out[0];
-    const pttl = out[2];
-    if (incr?.error) throw new Error(`Upstash INCR error: ${incr.error}`);
-    const count = Number(incr?.result ?? 0);
-    const pttlMs = Number(pttl?.result ?? windowSeconds * 1000);
-    // PTTL is -1 (no expiry) or -2 (missing) in edge cases; fall back to the full window.
-    const resetSeconds = pttlMs > 0 ? Math.ceil(pttlMs / 1000) : windowSeconds;
-    return { count, resetSeconds };
+    return (await res.json()) as Array<{ result?: number; error?: string }>;
   }
 }

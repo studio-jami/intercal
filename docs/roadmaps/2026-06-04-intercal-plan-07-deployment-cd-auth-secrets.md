@@ -176,7 +176,11 @@ Suggested verification: trigger the Cloud Run Job; confirm parity with the Actio
 Goal: Hashed, scoped API keys + rate limits on the REST surface.
 
 Status: [x] Complete (2026-06-06). Runbook: `docs/operations/auth-and-rate-limits.md`. Live-verified
-against a throwaway Neon branch (17/17). MCP auth (W6) seam left clean/untouched.
+against a throwaway Neon branch (17/17). MCP auth (W6) seam left clean/untouched. Audit-2 (2026-06-06):
+hardened the rate-limit IP-trust (prefer Vercel's trusted `x-real-ip`; never the spoofable left-most
+`x-forwarded-for`), self-heal a TTL-less Upstash counter (no permanent-429 lockout) + surface EXPIRE
+errors, and fixed IPv6 `::` anonymization. Re-verified live (Neon 17/17; deployed anon 200 + headers,
+invalid key 401, `/api/mcp` initialize 200).
 
 Implementation tasks:
 

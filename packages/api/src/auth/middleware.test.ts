@@ -242,6 +242,42 @@ describe('rate limiting → 429 + headers', () => {
   });
 });
 
+describe('trusted client IP for per-IP limiting', () => {
+  // The per-IP bucket must key off the TRUSTED client IP, not an attacker-supplied left-most
+  // x-forwarded-for element. If a caller could vary the left-most XFF value, they would get a
+  // fresh bucket per spoofed IP and escape the anonymous limit entirely.
+
+  it('prefers x-real-ip and rejects further calls from the same trusted IP', async () => {
+    const state: FakeState = { keys: [], usage: [] };
+    const app = appWith(state, { anonPerMinute: 1 });
+    await call(app, '/v1/freshness?topic_or_entity=a', { 'x-real-ip': '203.0.113.7' });
+    const over = await call(app, '/v1/freshness?topic_or_entity=b', { 'x-real-ip': '203.0.113.7' });
+    expect(over.status).toBe(429);
+  });
+
+  it('a spoofed left-most x-forwarded-for cannot mint a fresh bucket (uses right-most hop)', async () => {
+    const state: FakeState = { keys: [], usage: [] };
+    const app = appWith(state, { anonPerMinute: 1 });
+    // Same trusted right-most hop (203.0.113.9), attacker varies only the spoofable left-most value.
+    await call(app, '/v1/freshness?topic_or_entity=a', {
+      'x-forwarded-for': '9.9.9.9, 203.0.113.9',
+    });
+    const over = await call(app, '/v1/freshness?topic_or_entity=b', {
+      'x-forwarded-for': '8.8.8.8, 203.0.113.9', // different left-most, same trusted hop
+    });
+    expect(over.status).toBe(429);
+  });
+
+  it('anonymizes the stored IP to a /24 (IPv4) and keeps no full address', async () => {
+    const state: FakeState = { keys: [], usage: [] };
+    const app = appWith(state);
+    await call(app, '/v1/freshness?topic_or_entity=a', { 'x-real-ip': '198.51.100.42' });
+    const row = state.usage.at(-1);
+    expect(row?.ip_address).toBe('198.51.100.0/24');
+    expect(JSON.stringify(state.usage)).not.toContain('198.51.100.42');
+  });
+});
+
 describe('usage recording', () => {
   it('records a usage_events row per request (anonymous and keyed), no raw key stored', async () => {
     const raw = 'ical_sk_usage';

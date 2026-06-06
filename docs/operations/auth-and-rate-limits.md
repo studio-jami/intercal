@@ -82,6 +82,21 @@ These honor `docs/operations/resource-budget.md`: each limited request costs ~3 
 (INCR + EXPIRE NX + PTTL, one pipelined round-trip), keeping the surface well under the 500k cmd/mo
 Upstash allowance. Tune limits in `policy.ts` or raise a specific key via `requests_per_minute`.
 
+If a counter is ever found with no TTL (PTTL `-1`/`-2` — e.g. a partial earlier write or a manual
+`PERSIST`), the Upstash adapter re-arms the window with one extra `EXPIRE` so a bucket can never get
+stuck incrementing forever (permanent 429). This is a rare repair path, not the steady-state cost.
+
+### Trusted client IP (anti-spoofing)
+
+The per-IP bucket keys off the **trusted** client IP, never an attacker-supplied value. On the
+live Vercel deployment the platform overwrites `x-forwarded-for` / `x-real-ip` with the real client
+IP and does not forward externally supplied values, so they are not client-spoofable there
+(`packages/api/src/auth/middleware.ts`). The resolver prefers Vercel's single trusted `x-real-ip`;
+if it must fall back to `x-forwarded-for` it takes the **right-most** hop (the address the nearest
+trusted proxy observed), never the left-most (which on an appending proxy is the spoofable
+client-claimed value). A forged left-most `x-forwarded-for` therefore cannot mint a fresh bucket to
+evade the anonymous limit.
+
 ### Headers
 
 Every `/v1/*` response carries both the IETF draft and `X-`-prefixed aliases:

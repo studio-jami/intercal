@@ -51,19 +51,50 @@ export interface AuthVars {
 function anonymizeIp(ip: string | null): string | null {
   if (!ip) return null;
   const v4 = ip.split('.');
-  if (v4.length === 4) return `${v4[0]}.${v4[1]}.${v4[2]}.0/24`;
+  if (v4.length === 4 && v4.every((o) => /^\d{1,3}$/.test(o))) {
+    return `${v4[0]}.${v4[1]}.${v4[2]}.0/24`;
+  }
   if (ip.includes(':')) {
-    const groups = ip.split(':').filter(Boolean);
-    return `${groups.slice(0, 3).join(':')}::/48`;
+    // Expand to the leading groups before any `::` compression so we keep a stable /48 prefix.
+    // A compressed address (e.g. `2001:db8::1`) has its zero-run on the RIGHT of the first `::`,
+    // so the groups left of `::` are the network prefix we want; never splice across the `::`.
+    const left = ip.split('::')[0] ?? '';
+    const groups = left.split(':').filter(Boolean);
+    if (groups.length === 0) return null; // e.g. `::1` (loopback) — no meaningful network prefix.
+    const prefix = groups.slice(0, 3);
+    return `${prefix.join(':')}::/48`;
   }
   return null;
 }
 
-/** Best-effort client IP from standard proxy headers (Vercel/Cloud Run set x-forwarded-for). */
+/**
+ * Resolve the TRUSTED client IP for per-IP rate limiting.
+ *
+ * Trust model: this surface runs on Vercel (Node runtime), mounted at `/api/v1/*` (see
+ * `packages/dashboard/app/api/[[...route]]/route.ts`). On Vercel the platform OVERWRITES
+ * `x-forwarded-for` / `x-real-ip` with the real client IP and does not forward externally supplied
+ * values, so they are NOT client-spoofable here. We deliberately do NOT trust the left-most element
+ * of a comma-joined `x-forwarded-for`: on an appending proxy (e.g. GCLB / Cloud Run) the left-most
+ * value is the CLIENT-CLAIMED address and is spoofable — an attacker could rotate it to dodge the
+ * per-IP limit. We therefore prefer Vercel's single trusted headers and, only as a last resort,
+ * take the RIGHT-most XFF element (the address the nearest trusted hop observed), never the
+ * left-most. A spoofed left-most value cannot lower or escape the limit through this path.
+ */
 function clientIp(c: Context): string | null {
+  // Vercel sets these to the real client IP (single value, platform-controlled). Prefer them.
+  const real = c.req.header('x-real-ip')?.trim();
+  if (real) return real;
   const fwd = c.req.header('x-forwarded-for');
-  if (fwd) return fwd.split(',')[0]?.trim() ?? null;
-  return c.req.header('x-real-ip') ?? null;
+  if (fwd) {
+    // Right-most non-empty hop = the address seen by the nearest trusted proxy (the only XFF
+    // element a client cannot forge on an appending proxy). Never trust the left-most element.
+    const hops = fwd
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return hops.at(-1) ?? null;
+  }
+  return null;
 }
 
 function setRateHeaders(c: Context, limit: number, remaining: number, resetSeconds: number): void {

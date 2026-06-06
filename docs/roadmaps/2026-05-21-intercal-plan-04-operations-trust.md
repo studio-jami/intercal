@@ -80,7 +80,9 @@ Goal: Protect REST and MCP access with scoped keys and measurable usage. REST us
 
 Status: [~] REST portion **complete** (2026-06-06, jointly with Plan 07 W5) — hashed scoped keys,
 rate limits, usage events live on `/api/v1/*`; runbook `docs/operations/auth-and-rate-limits.md`.
-MCP OAuth 2.1 is a separate stream (Plan 07 W6) — **not yet** done.
+Audit-2 (2026-06-06): rate-limit IP-trust hardened (trusted `x-real-ip` / right-most XFF, never the
+spoofable left-most), TTL-less Upstash counter self-heals (no permanent-429 lockout), IPv6 `::`
+anonymization fixed; re-verified live. MCP OAuth 2.1 is a separate stream (Plan 07 W6) — **not yet** done.
 
 Depends on:
 

@@ -105,12 +105,6 @@ Per workstream:
 2. When its commit lands, dispatch the second fresh-context pass.
 3. When the second commit lands, gate the workstream on it. Only here does the orchestrator exercise judgment.
 
-### Model per pass
-
-- Pass 1: dispatch with **Sonnet 4.6**.
-- Pass 2 and every additional pass on that stream: dispatch with **Opus 4.8**.
-- Fan-out / helper dispatches: Sonnet or Opus, either is fine. No Haiku.
-
 If a pass needs extra context the reusable prompt doesn't cover, append a short text block to the top
 of that one dispatch. Don't mutate the base prompt.
 

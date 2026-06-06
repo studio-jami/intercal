@@ -244,6 +244,56 @@ async def test_arxiv_adapter_rejects_invalid_date_bound() -> None:
 
 
 @pytest.mark.asyncio
+async def test_arxiv_adapter_locally_excludes_out_of_window_and_undated_entries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    monkeypatch.setattr(
+        socket, "getaddrinfo", _fake_getaddrinfo({"export.arxiv.org": ["151.101.1.91"]})
+    )
+    atom = """<?xml version="1.0"?>
+    <feed xmlns="http://www.w3.org/2005/Atom">
+      <entry>
+        <id>https://arxiv.org/abs/2210.00001</id>
+        <title>Old Paper</title>
+        <summary>Old abstract.</summary>
+        <published>2022-10-01T00:00:00Z</published>
+      </entry>
+      <entry>
+        <id>https://arxiv.org/abs/undated</id>
+        <title>Undated Paper</title>
+        <summary>Undated abstract.</summary>
+      </entry>
+      <entry>
+        <id>https://arxiv.org/abs/2303.00001</id>
+        <title>Current Paper</title>
+        <summary>Current abstract.</summary>
+        <published>2023-03-10T00:00:00Z</published>
+      </entry>
+    </feed>"""
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=atom))
+    )
+    adapter = ArxivAdapter()
+    docs: list[RawDocument] = []
+    async for doc in adapter.fetch(
+        adapter_config={
+            "categories": ["cs.CL"],
+            "start_date": "2023-03-01",
+            "end_date": "2023-03-31",
+        },
+        max_documents=5,
+        http_client=client,
+    ):
+        docs.append(doc)
+    await client.aclose()
+
+    assert [doc.external_id for doc in docs] == ["https://arxiv.org/abs/2303.00001"]
+
+
+@pytest.mark.asyncio
 async def test_rss_feed_adapter_yields_entries_dedupes_and_rejects_private(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -425,6 +475,104 @@ async def test_mediawiki_revisions_adapter_yields_revisions_and_cursor(
     assert docs[0].external_id == "mediawiki:ChatGPT:123"
     assert "ChatGPT page text" in json.loads(docs[0].content)["revision"]["content"]
     assert sink["rvcontinue_by_page"] == {"ChatGPT": "next-token"}
+
+
+@pytest.mark.asyncio
+async def test_mediawiki_revisions_adapter_filters_bounds_undated_and_missing_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    monkeypatch.setattr(
+        socket, "getaddrinfo", _fake_getaddrinfo({"en.wikipedia.org": ["208.80.154.224"]})
+    )
+    data = {
+        "query": {
+            "pages": [
+                {
+                    "title": "ChatGPT",
+                    "revisions": [
+                        {"revid": 1, "timestamp": "2022-10-30T00:00:00Z"},
+                        {"revid": 2},
+                        {"timestamp": "2022-11-30T00:00:00Z"},
+                        {
+                            "revid": 3,
+                            "timestamp": "2022-11-30T00:00:00Z",
+                            "slots": {"main": {"content": "ChatGPT launch revision"}},
+                        },
+                    ],
+                }
+            ]
+        },
+    }
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=data))
+    )
+    adapter = MediaWikiRevisionsAdapter()
+    docs: list[RawDocument] = []
+    async for doc in adapter.fetch(
+        adapter_config={
+            "pages": ["ChatGPT"],
+            "start_date": "2022-11-01",
+            "end_date": "2022-12-31",
+        },
+        max_documents=10,
+        http_client=client,
+    ):
+        docs.append(doc)
+    await client.aclose()
+
+    assert [doc.external_id for doc in docs] == ["mediawiki:ChatGPT:3"]
+
+
+@pytest.mark.asyncio
+async def test_mediawiki_revisions_adapter_caps_page_walk_when_all_rows_skipped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    monkeypatch.setattr(
+        socket, "getaddrinfo", _fake_getaddrinfo({"en.wikipedia.org": ["208.80.154.224"]})
+    )
+    seen_continue: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_continue.append(dict(request.url.params).get("rvcontinue"))
+        return httpx.Response(
+            200,
+            json={
+                "query": {
+                    "pages": [
+                        {
+                            "title": "ChatGPT",
+                            "revisions": [{"revid": 1, "timestamp": "2022-10-30T00:00:00Z"}],
+                        }
+                    ]
+                },
+                "continue": {"rvcontinue": f"token-{len(seen_continue)}"},
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    adapter = MediaWikiRevisionsAdapter()
+    sink: dict[str, object] = {}
+    docs: list[RawDocument] = []
+    async for doc in adapter.fetch(
+        adapter_config={
+            "pages": ["ChatGPT"],
+            "start_date": "2022-11-01",
+            "max_pages_per_page": "2",
+        },
+        max_documents=10,
+        http_client=client,
+        cursor_sink=sink,
+    ):
+        docs.append(doc)
+    await client.aclose()
+
+    assert docs == []
+    assert seen_continue == [None, "token-1"]
+    assert sink["rvcontinue_by_page"] == {"ChatGPT": "token-2"}
 
 
 @pytest.mark.asyncio

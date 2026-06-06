@@ -199,6 +199,12 @@ The first proof consumes the same adapters, provenance rules, and public query p
   source registry, related adapter tests, Workstream 2 roadmap status, and changelog. Next
   coordinator action: poll in short intervals, record result, then gate the quiet-confirmation
   commit.
+- 2026-06-06T12:25:16-04:00 — Workstream 2 pass 3 quiet-confirmation audit found one remaining
+  adapter-foundation gap and fixed it in scope: arXiv and MediaWiki revision adapters now locally
+  enforce historical date windows, suppress undated or identifier-less historical records, cap
+  MediaWiki per-page pagination when skipped rows would otherwise keep walking pages, and sort
+  registry releases deterministically when timestamps tie. No source catalog rows, backfill
+  execution, query gates, dashboard, docs, marketing, or domain work was added.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 
@@ -291,6 +297,12 @@ Pass 2 closeout note: the fresh-context audit kept the Workstream 2 adapter foun
 landed bounded-window hardening for date validation, undated historical records, GitHub repo
 identifier validation, and deterministic SPARQL cursor hashing. Workstream 3 still owns source-row
 catalog expansion and backfill execution.
+
+Pass 3 closeout note: the quiet-confirmation audit found and closed the remaining bounded-window
+adapter gap for arXiv and MediaWiki revision records, including local out-of-window/undated filtering,
+missing revision-id suppression, bounded MediaWiki page walking, and deterministic registry ordering
+for same-timestamp releases. Workstream 3 still owns source-row catalog expansion, backfill execution,
+budgets, retries, and operator controls.
 
 Suggested verification:
 

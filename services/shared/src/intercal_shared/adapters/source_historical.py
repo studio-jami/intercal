@@ -152,7 +152,9 @@ class RegistryReleasesAdapter:
                 continue
             rows.append((uploaded_at, version, files))
 
-        for uploaded_at, version, files in sorted(rows, key=lambda row: row[0] or dt.datetime.min):
+        for uploaded_at, version, files in sorted(
+            rows, key=lambda row: (row[0] or dt.datetime.min.replace(tzinfo=dt.UTC), row[1])
+        ):
             if offset > 0:
                 offset -= 1
                 continue
@@ -209,7 +211,7 @@ class RegistryReleasesAdapter:
             rows.append((published_at, version, version_data))
 
         for published_at, version, version_data in sorted(
-            rows, key=lambda row: row[0] or dt.datetime.min
+            rows, key=lambda row: (row[0] or dt.datetime.min.replace(tzinfo=dt.UTC), row[1])
         ):
             if offset > 0:
                 offset -= 1
@@ -334,6 +336,14 @@ class ArxivAdapter:
                 for entry in entries:
                     if yielded >= max_documents:
                         break
+                    published_at = _parse_dt(_elem_text(entry, "{http://www.w3.org/2005/Atom}published"))
+                    if not _within_window(
+                        published_at,
+                        start_date,
+                        end_date,
+                        require_timestamp=True,
+                    ):
+                        continue
                     yielded += 1
                     yield _arxiv_entry_to_doc(entry, self.adapter_name)
                 next_start += len(entries)
@@ -496,14 +506,19 @@ class MediaWikiRevisionsAdapter:
         client, owns_client = _get_client(http_client)
         try:
             api_url = str(adapter_config.get("mediawiki_api_url", _DEFAULT_MEDIAWIKI_API))
-            _parse_config_date_bound(adapter_config, "start_date")
-            _parse_config_date_bound(adapter_config, "end_date", end_of_day=True)
+            start_date = _parse_config_date_bound(adapter_config, "start_date")
+            end_date = _parse_config_date_bound(adapter_config, "end_date", end_of_day=True)
+            bounded_window = start_date is not None or end_date is not None
             pages = _string_list(adapter_config.get("pages"))
             if not pages:
                 raise SourceFetchError("MediaWiki revisions adapter requires pages")
             yielded = 0
             state = dict(cursor_state or {})
             rvcontinue_by_page = _string_map(state.get("rvcontinue_by_page", {}))
+            max_pages_per_page = max(
+                int(str(adapter_config.get("max_pages_per_page", "10"))),
+                1,
+            )
             for page in pages:
                 if yielded >= max_documents:
                     break
@@ -525,13 +540,17 @@ class MediaWikiRevisionsAdapter:
                 if rvcontinue_by_page.get(page):
                     params["rvcontinue"] = str(rvcontinue_by_page[page])
 
+                pages_fetched = 0
                 while yielded < max_documents:
+                    if pages_fetched >= max_pages_per_page:
+                        break
                     data = await _get_json(
                         client,
                         api_url,
                         params=params,
                         source_name=f"MediaWiki revisions {page}",
                     )
+                    pages_fetched += 1
                     page_rows = data.get("query", {}).get("pages", [])
                     revisions = _mediawiki_revisions(page_rows)
                     if not revisions:
@@ -539,6 +558,16 @@ class MediaWikiRevisionsAdapter:
                     for revision in revisions:
                         if yielded >= max_documents:
                             break
+                        revision_timestamp = _parse_dt(str(revision.get("timestamp") or ""))
+                        if not _within_window(
+                            revision_timestamp,
+                            start_date,
+                            end_date,
+                            require_timestamp=bounded_window,
+                        ):
+                            continue
+                        if not str(revision.get("revid") or ""):
+                            continue
                         yielded += 1
                         yield _mediawiki_revision_to_doc(page, revision, self.adapter_name)
                     next_token = data.get("continue", {}).get("rvcontinue")

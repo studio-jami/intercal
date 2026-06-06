@@ -114,6 +114,7 @@ const MAX_TOKEN_BUDGET = 8000;
 const DEFAULT_MIN_IMPORTANCE = 0;
 const MAX_POLL_LIMIT = 100;
 const MAX_WEBHOOK_ATTEMPTS = 5;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function clampBudget(value: number | undefined | null): number {
   if (value == null || !Number.isFinite(value)) return DEFAULT_TOKEN_BUDGET;
@@ -150,6 +151,16 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isNonEmptyPattern(value: unknown): value is ClaimPattern {
   return isRecord(value) && Object.keys(value).length > 0;
+}
+
+function isUuid(value: string): boolean {
+  return UUID_RE.test(value);
+}
+
+function validateUuidTarget(kind: SubscriptionTargetKind, value: string): void {
+  if ((kind === 'topic' || kind === 'entity') && !isUuid(value)) {
+    throw new InvalidRequestError(`${kind} subscription target must be a UUID.`);
+  }
 }
 
 function claimPatternMatches(subscriptionPattern: unknown, changePattern: unknown): boolean {
@@ -273,6 +284,9 @@ function validateCreate(input: CreateSubscriptionInput): void {
   if (input.target.kind !== 'claim_pattern' && !isNonEmptyString(supplied[0]?.[1])) {
     throw new InvalidRequestError('Subscription target IDs must be non-empty strings.');
   }
+  if (input.target.kind !== 'claim_pattern') {
+    validateUuidTarget(input.target.kind, supplied[0]?.[1] as string);
+  }
   if (input.target.kind === 'claim_pattern' && !isNonEmptyPattern(input.target.claimPattern)) {
     throw new InvalidRequestError('claimPattern must be a non-empty object.');
   }
@@ -317,6 +331,9 @@ function validateDispatch(input: EnqueueSubscriptionChangeInput): void {
   }
   if (input.changeKind !== 'claim_pattern' && !isNonEmptyString(supplied[0]?.[1])) {
     throw new InvalidRequestError('Dispatch target IDs must be non-empty strings.');
+  }
+  if (input.changeKind !== 'claim_pattern') {
+    validateUuidTarget(input.changeKind, supplied[0]?.[1] as string);
   }
   if (input.changeKind === 'claim_pattern' && !isNonEmptyPattern(input.claimPattern)) {
     throw new InvalidRequestError('claimPattern must be a non-empty object.');
@@ -385,6 +402,9 @@ export async function deactivateSubscription(
   actor: AuditActor,
   subscriptionId: string,
 ): Promise<SubscriptionRecord> {
+  if (!isUuid(subscriptionId)) {
+    throw new InvalidRequestError('subscriptionId must be a UUID.');
+  }
   const existing = await db
     .selectFrom('subscriptions')
     .selectAll()
@@ -482,6 +502,9 @@ export async function pollSubscriptionNotifications(
   db: Db,
   input: PollSubscriptionInput,
 ): Promise<SubscriptionNotificationRecord[]> {
+  if (!isUuid(input.subscriptionId)) {
+    throw new InvalidRequestError('subscriptionId must be a UUID.');
+  }
   const subscription = await db
     .selectFrom('subscriptions')
     .selectAll()

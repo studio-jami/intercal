@@ -3,6 +3,7 @@ import type { Db } from './db/client.js';
 import { InvalidRequestError, NotFoundError } from './errors.js';
 import {
   createSubscription,
+  deactivateSubscription,
   enqueueSubscriptionNotifications,
   pollSubscriptionNotifications,
 } from './subscriptions.js';
@@ -30,6 +31,29 @@ describe('subscription target validation', () => {
         dispatchScope: { type: 'api_key', apiKeyId: 'key-1' },
         changeKind: 'topic',
         entityId: '22222222-2222-4222-8222-222222222222',
+        sinceDate: '2026-06-01T00:00:00.000Z',
+      }),
+    ).rejects.toBeInstanceOf(InvalidRequestError);
+  });
+
+  it('rejects malformed UUID topic subscriptions before querying the database', async () => {
+    await expect(
+      createSubscription(dbStub(), {
+        apiKeyId: 'key-1',
+        actor: { type: 'api_key', id: 'key-1' },
+        target: { kind: 'topic', topicId: 'not-a-uuid' },
+        deliveryMethod: 'polling',
+      }),
+    ).rejects.toBeInstanceOf(InvalidRequestError);
+  });
+
+  it('rejects malformed UUID entity dispatch targets before querying the database', async () => {
+    await expect(
+      enqueueSubscriptionNotifications(dbStub(), {
+        actor: { type: 'api_key', id: 'key-1' },
+        dispatchScope: { type: 'api_key', apiKeyId: 'key-1' },
+        changeKind: 'entity',
+        entityId: 'not-a-uuid',
         sinceDate: '2026-06-01T00:00:00.000Z',
       }),
     ).rejects.toBeInstanceOf(InvalidRequestError);
@@ -183,9 +207,24 @@ describe('subscription target validation', () => {
 });
 
 describe('subscription active-state guards', () => {
+  it('rejects malformed polling subscription IDs before querying the database', async () => {
+    await expect(
+      pollSubscriptionNotifications(dbStub(), {
+        apiKeyId: 'key-1',
+        subscriptionId: 'not-a-uuid',
+      }),
+    ).rejects.toBeInstanceOf(InvalidRequestError);
+  });
+
+  it('rejects malformed delete subscription IDs before querying the database', async () => {
+    await expect(
+      deactivateSubscription(dbStub(), 'key-1', { type: 'api_key', id: 'key-1' }, 'not-a-uuid'),
+    ).rejects.toBeInstanceOf(InvalidRequestError);
+  });
+
   it('does not allow polling an inactive subscription', async () => {
     const inactive = {
-      id: 'sub-1',
+      id: '11111111-1111-4111-8111-111111111111',
       api_key_id: 'key-1',
       is_active: false,
     };
@@ -209,7 +248,7 @@ describe('subscription active-state guards', () => {
     await expect(
       pollSubscriptionNotifications(db, {
         apiKeyId: 'key-1',
-        subscriptionId: 'sub-1',
+        subscriptionId: '11111111-1111-4111-8111-111111111111',
       }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });

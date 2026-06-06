@@ -8,7 +8,12 @@
  * pg returns `numeric` as a string and `timestamptz` as a JS `Date`; types reflect that.
  */
 
+import type { ColumnType, Generated } from 'kysely';
+
 type Json = unknown;
+
+/** A timestamptz column that the DB defaults (now()) on insert/update — optional on insert. */
+type DefaultedTimestamp = ColumnType<Date, Date | undefined, Date>;
 
 export interface EntitiesTable {
   id: string;
@@ -165,6 +170,55 @@ export interface IngestionRunsTable {
   finished_at: Date | null;
 }
 
+/**
+ * API keys (db/migrations/0020_api_keys.sql). ONLY the hash is stored — the raw key is shown once
+ * at issuance and never persisted. `scopes` is a jsonb array of scope strings. A key is usable only
+ * when `is_active = true`, `revoked_at IS NULL`, and (`expires_at IS NULL OR expires_at > now()`).
+ */
+export interface ApiKeysTable {
+  id: Generated<string>;
+  name: string;
+  key_prefix: string;
+  key_hash: string;
+  // jsonb string[] — written as a JSON string on insert, read as a parsed array.
+  scopes: ColumnType<string[], string, string>;
+  owner_type: Generated<string>; // 'user' | 'service' | 'system'
+  owner_id: string | null;
+  requests_per_minute: number | null;
+  requests_per_day: number | null;
+  is_active: Generated<boolean>;
+  expires_at: Date | null;
+  last_used_at: Date | null;
+  revoked_at: Date | null;
+  revoked_by: string | null;
+  revocation_reason: string | null;
+  metadata: ColumnType<Json, string, string>;
+  created_at: DefaultedTimestamp;
+  updated_at: DefaultedTimestamp;
+}
+
+/**
+ * Usage events (db/migrations/0021_usage_events.sql). Operational per-request records consumed by
+ * Plan 04 W6 observability. No PII beyond the key id and (optionally) anonymized caller context.
+ */
+export interface UsageEventsTable {
+  id: Generated<string>;
+  api_key_id: string | null;
+  tool_name: string;
+  request_id: string | null;
+  status_code: number | null;
+  latency_ms: number | null;
+  error_code: string | null;
+  token_budget: number | null;
+  tokens_used: number | null;
+  entity_count: number | null;
+  claim_count: number | null;
+  document_count: number | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: DefaultedTimestamp;
+}
+
 export interface Database {
   entities: EntitiesTable;
   entity_aliases: EntityAliasesTable;
@@ -177,4 +231,6 @@ export interface Database {
   source_documents: SourceDocumentsTable;
   sources: SourcesTable;
   ingestion_runs: IngestionRunsTable;
+  api_keys: ApiKeysTable;
+  usage_events: UsageEventsTable;
 }

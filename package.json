@@ -28,10 +28,13 @@
     "py:lint": "uv run ruff check .",
     "py:typecheck": "uv run pyright",
     "py:test": "uv run pytest",
-    "verify": "node scripts/verify/verify.mjs"
+    "verify": "node scripts/verify/verify.mjs",
+    "ops:keys": "node scripts/ops/keys.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.0",
+    "@intercal/api": "workspace:*",
+    "@intercal/core": "workspace:*",
     "pg": "^8.13.0",
     "typescript": "^5.9.2"
   }

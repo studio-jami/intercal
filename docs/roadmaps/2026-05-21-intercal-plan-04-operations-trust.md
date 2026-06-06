@@ -78,19 +78,24 @@ Auth/rate limits -> source policy -> audit events -> feedback/review records -> 
 
 Goal: Protect REST and MCP access with scoped keys and measurable usage. REST uses hashed scoped API keys; MCP at `/api/mcp` uses OAuth 2.1 resource-server (per decision 0001 D10).
 
+Status: [~] REST portion **complete** (2026-06-06, jointly with Plan 07 W5) — hashed scoped keys,
+rate limits, usage events live on `/api/v1/*`; runbook `docs/operations/auth-and-rate-limits.md`.
+MCP OAuth 2.1 is a separate stream (Plan 07 W6) — **not yet** done.
+
 Depends on:
 
-- [ ] Plan 03 REST/MCP endpoints.
-- [ ] Plan 01 `api_keys` and `usage_events` schema.
+- [x] Plan 03 REST/MCP endpoints.
+- [x] Plan 01 `api_keys` and `usage_events` schema.
 
 Enables:
 
-- [ ] Workstream 6 observability.
+- [ ] Workstream 6 observability (now has `usage_events` to read).
 - [ ] Plan 05 security review.
 
 Repo guidance:
 
-- Local bypass must be explicit and unavailable in production mode.
+- Local bypass must be explicit and unavailable in production mode. (No bypass path exists; local
+  dev simply uses the in-process rate-limit store and can issue a key for higher limits.)
 
 Primary areas:
 
@@ -101,19 +106,25 @@ Primary areas:
 
 Implementation tasks:
 
-- [ ] Add API key creation, hashing, validation, and scopes.
-- [ ] Add shared REST/MCP auth middleware.
-- [ ] Add rate-limit policy and usage event recording.
-- [ ] Add key rotation and local dev bypass docs.
+- [x] Add API key creation, hashing, validation, and scopes. (REST — `@intercal/core/src/auth/`.)
+- [~] Add shared REST/MCP auth middleware. (REST middleware done in `packages/api/src/auth/`; the
+      MCP server uses OAuth 2.1, wired in Plan 07 W6 — by design the two surfaces do not share one
+      middleware.)
+- [x] Add rate-limit policy and usage event recording. (Port + Upstash/in-memory adapters; per-key
+      and per-IP policy honoring `resource-budget.md`; `usage_events` row per request.)
+- [x] Add key rotation and local dev docs. (`docs/operations/auth-and-rate-limits.md` +
+      `scripts/ops/keys.mjs` rotation flow.)
 
 Exit criteria:
 
-- [ ] Auth and rate-limit tests cover allowed, denied, exhausted, and local-dev cases.
+- [x] REST auth and rate-limit tests cover allowed, denied (401/403), exhausted (429), anonymous,
+      and local-dev cases (24 unit tests + a 17/17 live Neon-branch verification). MCP OAuth exit
+      criteria remain with Plan 07 W6.
 
 Suggested verification:
 
-- `pnpm test -- auth`
-- `pnpm test -- rate-limit`
+- `pnpm test` (api + core auth/rate-limit suites)
+- `DATABASE_URL=<neon-branch> node scripts/dev/verify-auth.mjs` (live)
 
 ## Workstream 2: Source Policy And Trust
 

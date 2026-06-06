@@ -21,7 +21,10 @@ import { createApp } from './app.js';
 
 // biome-ignore lint/suspicious/noExplicitAny: intentional null DB for request-validation-only tests
 const nullDb = null as any as Db;
-const app = createApp(nullDb);
+// A high anon limit keeps this validation-only suite from tripping the rate limiter (it fires many
+// anonymous GETs against one shared app); dedicated auth/rate-limit behavior is covered in
+// middleware.test.ts. The in-memory store is the default, so no store injection is needed here.
+const app = createApp(nullDb, { anonPerMinute: 100_000 });
 
 /** Fire a GET against the Hono app. */
 async function get(path: string, headers?: Record<string, string>) {
@@ -83,7 +86,7 @@ describe('unknown route', () => {
 
 describe('mounted under /api prefix', () => {
   // biome-ignore lint/suspicious/noExplicitAny: null DB; these paths never reach the query layer
-  const mounted = new Hono().route('/api', createApp(null as any));
+  const mounted = new Hono().route('/api', createApp(null as any, { anonPerMinute: 100_000 }));
 
   it('returns JSON 404 for an unknown /api/v1/* route (not Hono text/plain)', async () => {
     const res = await mounted.request('http://localhost/api/v1/notaroute');

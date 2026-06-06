@@ -28,3 +28,24 @@ export class NotImplementedError extends IntercalError {
     super('not_implemented', message, details);
   }
 }
+
+/** 401 — no credential, or the credential is invalid/revoked/expired. */
+export class UnauthorizedError extends IntercalError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super('unauthorized', message, details);
+  }
+}
+
+/** 403 — authenticated, but the key lacks the scope required for this operation. */
+export class ForbiddenError extends IntercalError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super('forbidden', message, details);
+  }
+}
+
+/** 429 — the caller exceeded its rate-limit policy window. `details.retryAfter` is seconds. */
+export class RateLimitedError extends IntercalError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super('rate_limited', message, details);
+  }
+}

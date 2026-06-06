@@ -175,16 +175,32 @@ Suggested verification: trigger the Cloud Run Job; confirm parity with the Actio
 
 Goal: Hashed, scoped API keys + rate limits on the REST surface.
 
+Status: [x] Complete (2026-06-06). Runbook: `docs/operations/auth-and-rate-limits.md`. Live-verified
+against a throwaway Neon branch (17/17). MCP auth (W6) seam left clean/untouched.
+
 Implementation tasks:
 
-- [ ] API-key middleware in `packages/api`: hash lookup against `api_keys`, scope checks, usage
-      recording (`usage_events`), per-key rate limiting (Upstash or pgmq-backed).
-- [ ] Key issuance/rotation/revocation path (operator only).
-- [ ] Contract: `Authorization: Bearer <key>`; tests for authn/authz/limits.
+- [x] API-key middleware in `packages/api` (`src/auth/`): SHA-256 hash lookup against `api_keys`,
+      scope checks (`read`; 403 on missing), `usage_events` recording for every outcome (anonymized
+      IP, no PII beyond key id), per-key/per-IP fixed-window rate limiting behind a `RateLimitStorePort`
+      (`@intercal/core/src/ratelimit/`) — Upstash Redis REST adapter (shared counter) with an
+      in-process fallback; 429 + `Retry-After` + `RateLimit-*`/`X-RateLimit-*` headers; fail-open on
+      store outage; auth never fail-open. Public-read posture: anonymous reads allowed (tight per-IP
+      limit), a valid key raises the limit. Honors `docs/operations/resource-budget.md`.
+- [x] Key issuance/rotation/revocation path (operator only): `scripts/ops/keys.mjs`
+      (`pnpm ops:keys issue|list|revoke`), a thin wrapper over audited `@intercal/core` lifecycle
+      functions — raw key shown once, only the hash stored, no hardcoded keys / bypass.
+- [x] `Authorization: Bearer <key>`; new `unauthorized`/`forbidden`/`rate_limited` codes mapped in
+      `app.ts` and mirrored as typed SDK errors. Tests: 12 core (keys/scopes/store) + 12 api
+      middleware (anon/valid/invalid/revoked/expired/scope/429/usage). Contracts untouched
+      (`ApiError.code` is a free string).
 
 Exit criteria:
 
-- [ ] Unauthenticated/over-limit requests are rejected; valid scoped keys pass; usage recorded.
+- [x] Unauthenticated-with-a-bad-key (401) / missing-scope (403) / over-limit (429) requests are
+      rejected; anonymous reads pass under a tight limit; valid scoped keys pass with a higher limit;
+      usage recorded. Live-verified end to end (issue → 200 / invalid → 401 / expired → 401 /
+      revoked → 401 / no-scope → 403 / 429 + headers / `usage_events` rows).
 
 ## Workstream 6: MCP auth — OAuth 2.1
 

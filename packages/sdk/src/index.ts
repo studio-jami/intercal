@@ -48,7 +48,10 @@ export type FreshnessReport = Ok<'getFreshness'>;
 /** The REST error taxonomy, as served in the `ApiError.code` field. */
 export type IntercalErrorCode =
   | 'invalid_request'
+  | 'unauthorized'
+  | 'forbidden'
   | 'not_found'
+  | 'rate_limited'
   | 'not_implemented'
   | 'internal_error'
   | 'network_error';
@@ -86,12 +89,39 @@ export class IntercalInvalidRequestError extends IntercalApiError {
   }
 }
 
+/** 401 — no credential, or the key is invalid/revoked/expired. */
+export class IntercalUnauthorizedError extends IntercalApiError {
+  override readonly code = 'unauthorized';
+  constructor(status: number, message: string, details?: Schemas['ApiError']['details']) {
+    super(status, 'unauthorized', message, details);
+    this.name = 'IntercalUnauthorizedError';
+  }
+}
+
+/** 403 — authenticated, but the key lacks the required scope. */
+export class IntercalForbiddenError extends IntercalApiError {
+  override readonly code = 'forbidden';
+  constructor(status: number, message: string, details?: Schemas['ApiError']['details']) {
+    super(status, 'forbidden', message, details);
+    this.name = 'IntercalForbiddenError';
+  }
+}
+
 /** 404 — no entity/claim/source matched the request. */
 export class IntercalNotFoundError extends IntercalApiError {
   override readonly code = 'not_found';
   constructor(status: number, message: string, details?: Schemas['ApiError']['details']) {
     super(status, 'not_found', message, details);
     this.name = 'IntercalNotFoundError';
+  }
+}
+
+/** 429 — the caller exceeded its rate-limit policy. `details.retryAfter` is seconds (when present). */
+export class IntercalRateLimitedError extends IntercalApiError {
+  override readonly code = 'rate_limited';
+  constructor(status: number, message: string, details?: Schemas['ApiError']['details']) {
+    super(status, 'rate_limited', message, details);
+    this.name = 'IntercalRateLimitedError';
   }
 }
 
@@ -134,8 +164,14 @@ function errorFor(status: number, body: Partial<Schemas['ApiError']>): IntercalA
   switch (code) {
     case 'invalid_request':
       return new IntercalInvalidRequestError(status, message, details);
+    case 'unauthorized':
+      return new IntercalUnauthorizedError(status, message, details);
+    case 'forbidden':
+      return new IntercalForbiddenError(status, message, details);
     case 'not_found':
       return new IntercalNotFoundError(status, message, details);
+    case 'rate_limited':
+      return new IntercalRateLimitedError(status, message, details);
     case 'not_implemented':
       return new IntercalNotImplementedError(status, message, details);
     case 'internal_error':
@@ -150,7 +186,10 @@ export interface IntercalClientOptions {
   baseUrl: string;
   /** Injectable fetch (for tests / non-global-fetch runtimes). Defaults to the global `fetch`. */
   fetch?: typeof fetch;
-  /** Bearer token for the (Plan 04) auth surface. Sent as `Authorization: Bearer …` when set. */
+  /**
+   * Bearer API key. Sent as `Authorization: Bearer …` when set. A valid key raises the rate limit
+   * and unlocks scoped surfaces; anonymous (unset) calls are allowed under a tighter per-IP limit.
+   */
   apiKey?: string;
   /** Extra headers merged into every request. */
   headers?: Record<string, string>;

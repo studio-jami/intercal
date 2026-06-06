@@ -1,4 +1,5 @@
 import {
+  createRateLimitStore,
   type Db,
   getDelta,
   getEntity,
@@ -6,18 +7,24 @@ import {
   getSources,
   IntercalError,
   InvalidRequestError,
+  type RateLimitStorePort,
   searchEvidence,
   verifyClaim,
 } from '@intercal/core';
 import { getOpenApiDocument } from '@intercal/shared';
 import { type Context, Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { authMiddleware } from './auth/middleware.js';
+import { ANON_PER_MINUTE, KEYED_PER_MINUTE_DEFAULT, RATE_WINDOW_SECONDS } from './auth/policy.js';
 import { formatErrors, validatorFor } from './validation.js';
 
 /** Error code → HTTP status. Unmapped codes fall back to 500 (see `statusFor`). */
 const STATUS: Record<string, number> = {
   invalid_request: 400,
+  unauthorized: 401,
+  forbidden: 403,
   not_found: 404,
+  rate_limited: 429,
   not_implemented: 501,
   internal_error: 500,
 };
@@ -75,8 +82,23 @@ const sourcesGuard: Guard = (params) => {
   }
 };
 
-export function createApp(db: Db): Hono {
+export interface CreateAppOptions {
+  /**
+   * Rate-limit counter store (port). Defaults to `createRateLimitStore()` which selects Upstash
+   * REST when its credentials are set, else an in-process fallback. Inject a store in tests.
+   */
+  rateLimitStore?: RateLimitStorePort;
+  /** Override the anonymous per-minute limit (tests / self-host tuning). */
+  anonPerMinute?: number;
+  /** Override the default keyed per-minute limit. */
+  keyedPerMinuteDefault?: number;
+}
+
+export function createApp(db: Db, options: CreateAppOptions = {}): Hono {
   const app = new Hono();
+  const store = options.rateLimitStore ?? createRateLimitStore();
+  const anonPerMinute = options.anonPerMinute ?? ANON_PER_MINUTE;
+  const keyedPerMinuteDefault = options.keyedPerMinuteDefault ?? KEYED_PER_MINUTE_DEFAULT;
 
   // Central error taxonomy: every thrown error becomes a JSON ApiError with a mapped status,
   // so the surface never leaks a stack trace or Hono's default text/plain 500. Route handlers
@@ -90,8 +112,39 @@ export function createApp(db: Db): Hono {
   });
 
   // The V1 surface is agent-facing and read-only; allow cross-origin GETs so browser-based
-  // SDK/agent clients can call it directly. Auth + tighter origin policy are Plan 04.
-  app.use('/v1/*', cors({ origin: '*', allowMethods: ['GET', 'OPTIONS'] }));
+  // SDK/agent clients can call it directly. The `Authorization` header is allowlisted so keyed
+  // browser clients can raise their rate limit, and the rate-limit headers are exposed to JS.
+  app.use(
+    '/v1/*',
+    cors({
+      origin: '*',
+      allowMethods: ['GET', 'OPTIONS'],
+      allowHeaders: ['Authorization', 'Content-Type'],
+      exposeHeaders: [
+        'RateLimit-Limit',
+        'RateLimit-Remaining',
+        'RateLimit-Reset',
+        'X-RateLimit-Limit',
+        'X-RateLimit-Remaining',
+        'X-RateLimit-Reset',
+        'Retry-After',
+      ],
+    }),
+  );
+
+  // Auth + rate-limit + usage recording on the contract surface only (infra routes stay open and
+  // unmetered). Public-read posture: anonymous reads are allowed under a tight per-IP limit; a valid
+  // key raises the limit and unlocks scoped surfaces. See `auth/policy.ts`.
+  app.use(
+    '/v1/*',
+    authMiddleware({
+      db,
+      store,
+      anonPerMinute,
+      keyedPerMinuteDefault,
+      windowSeconds: RATE_WINDOW_SECONDS,
+    }),
+  );
 
   app.get('/health', (c) => c.json({ status: 'ok' }));
   app.get('/openapi.json', (c) => c.json(getOpenApiDocument()));

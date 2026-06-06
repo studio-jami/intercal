@@ -7,6 +7,7 @@ payloads. They do not extract claims, resolve entities, or write facts.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import logging
 import os
@@ -56,8 +57,9 @@ class RegistryReleasesAdapter:
         client, owns_client = _get_client(http_client)
         try:
             yielded = 0
-            start_date = _parse_date_bound(adapter_config.get("start_date"))
-            end_date = _parse_date_bound(adapter_config.get("end_date"), end_of_day=True)
+            start_date = _parse_config_date_bound(adapter_config, "start_date")
+            end_date = _parse_config_date_bound(adapter_config, "end_date", end_of_day=True)
+            bounded_window = start_date is not None or end_date is not None
             state = dict(cursor_state or {})
             offsets = _cursor_offsets(state)
 
@@ -70,6 +72,7 @@ class RegistryReleasesAdapter:
                     adapter_config=adapter_config,
                     start_date=start_date,
                     end_date=end_date,
+                    bounded_window=bounded_window,
                     offset=int(offsets.get(f"pypi:{project}", 0)),
                 ):
                     if yielded >= max_documents:
@@ -87,6 +90,7 @@ class RegistryReleasesAdapter:
                     adapter_config=adapter_config,
                     start_date=start_date,
                     end_date=end_date,
+                    bounded_window=bounded_window,
                     offset=int(offsets.get(f"npm:{package}", 0)),
                 ):
                     if yielded >= max_documents:
@@ -107,6 +111,7 @@ class RegistryReleasesAdapter:
                     adapter_config=adapter_config,
                     start_date=start_date,
                     end_date=end_date,
+                    bounded_window=bounded_window,
                 )
                 offsets[key] = 1
                 if doc is not None:
@@ -127,6 +132,7 @@ class RegistryReleasesAdapter:
         adapter_config: Mapping[str, object],
         start_date: dt.datetime | None,
         end_date: dt.datetime | None,
+        bounded_window: bool,
         offset: int,
     ) -> AsyncIterator[RawDocument]:
         base_url = str(adapter_config.get("pypi_api_url", _DEFAULT_PYPI_API)).rstrip("/")
@@ -140,7 +146,9 @@ class RegistryReleasesAdapter:
         for version_raw, files in releases_raw.items():
             version = str(version_raw)
             uploaded_at = _first_upload_time(files)
-            if not _within_window(uploaded_at, start_date, end_date):
+            if not _within_window(
+                uploaded_at, start_date, end_date, require_timestamp=bounded_window
+            ):
                 continue
             rows.append((uploaded_at, version, files))
 
@@ -179,6 +187,7 @@ class RegistryReleasesAdapter:
         adapter_config: Mapping[str, object],
         start_date: dt.datetime | None,
         end_date: dt.datetime | None,
+        bounded_window: bool,
         offset: int,
     ) -> AsyncIterator[RawDocument]:
         base_url = str(adapter_config.get("npm_registry_url", _DEFAULT_NPM_REGISTRY)).rstrip("/")
@@ -193,7 +202,9 @@ class RegistryReleasesAdapter:
         for version_raw, version_data in versions.items():
             version = str(version_raw)
             published_at = _parse_dt(str(times.get(version, "")))
-            if not _within_window(published_at, start_date, end_date):
+            if not _within_window(
+                published_at, start_date, end_date, require_timestamp=bounded_window
+            ):
                 continue
             rows.append((published_at, version, version_data))
 
@@ -235,6 +246,7 @@ class RegistryReleasesAdapter:
         adapter_config: Mapping[str, object],
         start_date: dt.datetime | None,
         end_date: dt.datetime | None,
+        bounded_window: bool,
     ) -> RawDocument | None:
         base_url = str(adapter_config.get("huggingface_api_url", _DEFAULT_HF_API)).rstrip("/")
         url = f"{base_url}/models/{urllib.parse.quote(model_id, safe='/')}"
@@ -248,7 +260,9 @@ class RegistryReleasesAdapter:
         )
         published_at_value = response.get("createdAt") or response.get("lastModified") or ""
         published_at = _parse_dt(str(published_at_value))
-        if not _within_window(published_at, start_date, end_date):
+        if not _within_window(
+            published_at, start_date, end_date, require_timestamp=bounded_window
+        ):
             return None
         payload = {"registry": "huggingface", "model_id": model_id, "model_info": response}
         return RawDocument(
@@ -286,13 +300,19 @@ class ArxivAdapter:
             api_url = str(adapter_config.get("arxiv_api_url", _DEFAULT_ARXIV_API))
             categories = _string_list(adapter_config.get("categories"))
             terms = _string_list(adapter_config.get("search_terms"))
-            start_date = str(adapter_config.get("start_date", "2022-11-01"))
-            end_date = str(adapter_config.get("end_date", _today_date()))
+            start_date = _parse_config_date_bound(
+                adapter_config, "start_date", default="2022-11-01"
+            )
+            end_date = _parse_config_date_bound(
+                adapter_config, "end_date", default=_today_date(), end_of_day=True
+            )
+            if start_date is None or end_date is None:
+                raise SourceFetchError("arXiv adapter requires start_date and end_date bounds")
             search_query = _arxiv_query(
                 categories=categories,
                 terms=terms,
-                start_date=start_date,
-                end_date=end_date,
+                start_date=start_date.date().isoformat(),
+                end_date=end_date.date().isoformat(),
             )
             offset = int(str((cursor_state or {}).get("start", 0)))
             batch_size = min(int(str(adapter_config.get("batch_size", "100"))), 100, max_documents)
@@ -343,8 +363,9 @@ class RssFeedAdapter:
     ) -> AsyncIterator[RawDocument]:
         client, owns_client = _get_client(http_client)
         try:
-            start_date = _parse_date_bound(adapter_config.get("start_date"))
-            end_date = _parse_date_bound(adapter_config.get("end_date"), end_of_day=True)
+            start_date = _parse_config_date_bound(adapter_config, "start_date")
+            end_date = _parse_config_date_bound(adapter_config, "end_date", end_of_day=True)
+            bounded_window = start_date is not None or end_date is not None
             seen_ids = set(_string_list((cursor_state or {}).get("seen_ids")))
             latest_seen = str((cursor_state or {}).get("latest_published_at", ""))
             latest_seen_dt = _parse_dt(latest_seen)
@@ -364,7 +385,9 @@ class RssFeedAdapter:
                         continue
                     if latest_seen_dt and published_at and published_at <= latest_seen_dt:
                         continue
-                    if not _within_window(published_at, start_date, end_date):
+                    if not _within_window(
+                        published_at, start_date, end_date, require_timestamp=bounded_window
+                    ):
                         continue
                     emitted_ids.append(item_id)
                     if published_at is not None:
@@ -450,7 +473,7 @@ class WikidataSparqlBatchAdapter:
                 )
             if cursor_sink is not None:
                 cursor_sink["offset"] = offset + yielded
-                cursor_sink["query_hash"] = str(abs(hash(query)))
+                cursor_sink["query_hash"] = hashlib.sha256(query.encode()).hexdigest()
         finally:
             if owns_client:
                 await client.aclose()
@@ -473,6 +496,8 @@ class MediaWikiRevisionsAdapter:
         client, owns_client = _get_client(http_client)
         try:
             api_url = str(adapter_config.get("mediawiki_api_url", _DEFAULT_MEDIAWIKI_API))
+            _parse_config_date_bound(adapter_config, "start_date")
+            _parse_config_date_bound(adapter_config, "end_date", end_of_day=True)
             pages = _string_list(adapter_config.get("pages"))
             if not pages:
                 raise SourceFetchError("MediaWiki revisions adapter requires pages")
@@ -625,7 +650,10 @@ def _parse_date_bound(value: object, *, end_of_day: bool = False) -> dt.datetime
         return None
     value_text = str(value)
     if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value_text):
-        date_value = dt.date.fromisoformat(value_text)
+        try:
+            date_value = dt.date.fromisoformat(value_text)
+        except ValueError:
+            return None
         time_value = dt.time.max if end_of_day else dt.time.min
         return dt.datetime.combine(date_value, time_value, tzinfo=dt.UTC)
     parsed = _parse_dt(value_text)
@@ -637,6 +665,22 @@ def _parse_date_bound(value: object, *, end_of_day: bool = False) -> dt.datetime
         return None
     time_value = dt.time.max if end_of_day else dt.time.min
     return dt.datetime.combine(date_value, time_value, tzinfo=dt.UTC)
+
+
+def _parse_config_date_bound(
+    adapter_config: Mapping[str, object],
+    key: str,
+    *,
+    default: object | None = None,
+    end_of_day: bool = False,
+) -> dt.datetime | None:
+    raw = adapter_config.get(key, default)
+    if not raw:
+        return None
+    parsed = _parse_date_bound(raw, end_of_day=end_of_day)
+    if parsed is None:
+        raise SourceFetchError(f"Invalid {key} date bound: {raw!r}")
+    return parsed
 
 
 def _parse_dt(value: str) -> dt.datetime | None:
@@ -667,9 +711,11 @@ def _within_window(
     value: dt.datetime | None,
     start_date: dt.datetime | None,
     end_date: dt.datetime | None,
+    *,
+    require_timestamp: bool = False,
 ) -> bool:
     if value is None:
-        return True
+        return not require_timestamp
     if start_date is not None and value < start_date:
         return False
     return not (end_date is not None and value > end_date)

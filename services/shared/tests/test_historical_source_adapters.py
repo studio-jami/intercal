@@ -102,6 +102,55 @@ async def test_registry_releases_adapter_yields_pypi_and_npm_versions(
 
 
 @pytest.mark.asyncio
+async def test_registry_releases_adapter_bounded_window_excludes_undated_versions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo({"pypi.org": ["151.101.0.223"]}))
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                200,
+                json={
+                    "info": {"name": "openai"},
+                    "releases": {
+                        "1.0.0": [{}],
+                        "1.1.0": [{"upload_time_iso_8601": "2023-02-01T00:00:00Z"}],
+                    },
+                },
+            )
+        )
+    )
+    adapter = RegistryReleasesAdapter()
+    docs: list[RawDocument] = []
+    async for doc in adapter.fetch(
+        adapter_config={
+            "pypi_projects": ["openai"],
+            "start_date": "2023-01-01",
+            "end_date": "2023-12-31",
+        },
+        max_documents=10,
+        http_client=client,
+    ):
+        docs.append(doc)
+    await client.aclose()
+
+    assert [doc.external_id for doc in docs] == ["pypi:openai:1.1.0"]
+
+
+@pytest.mark.asyncio
+async def test_registry_releases_adapter_rejects_invalid_date_bound() -> None:
+    adapter = RegistryReleasesAdapter()
+    with pytest.raises(SourceFetchError, match="Invalid start_date"):
+        async for _ in adapter.fetch(
+            adapter_config={"pypi_projects": ["openai"], "start_date": "2023-13-01"},
+            max_documents=1,
+        ):
+            pass
+
+
+@pytest.mark.asyncio
 async def test_registry_releases_adapter_yields_huggingface_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -184,6 +233,17 @@ async def test_arxiv_adapter_yields_atom_entries_and_cursor(
 
 
 @pytest.mark.asyncio
+async def test_arxiv_adapter_rejects_invalid_date_bound() -> None:
+    adapter = ArxivAdapter()
+    with pytest.raises(SourceFetchError, match="Invalid end_date"):
+        async for _ in adapter.fetch(
+            adapter_config={"categories": ["cs.CL"], "end_date": "not-a-date"},
+            max_documents=1,
+        ):
+            pass
+
+
+@pytest.mark.asyncio
 async def test_rss_feed_adapter_yields_entries_dedupes_and_rejects_private(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -235,6 +295,48 @@ async def test_rss_feed_adapter_yields_entries_dedupes_and_rejects_private(
 
 
 @pytest.mark.asyncio
+async def test_rss_feed_adapter_bounded_window_excludes_undated_entries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    monkeypatch.setattr(
+        socket, "getaddrinfo", _fake_getaddrinfo({"feeds.example.com": ["93.184.216.34"]})
+    )
+    rss = """<?xml version="1.0"?>
+    <rss version="2.0"><channel>
+      <item>
+        <guid>undated</guid><title>Undated</title>
+        <link>https://example.com/undated</link>
+        <description>Summary.</description>
+      </item>
+      <item>
+        <guid>dated</guid><title>Dated</title>
+        <link>https://example.com/dated</link>
+        <pubDate>Tue, 05 Mar 2024 10:00:00 GMT</pubDate>
+        <description>Summary.</description>
+      </item>
+    </channel></rss>"""
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=rss))
+    )
+    adapter = RssFeedAdapter()
+    docs: list[RawDocument] = []
+    async for doc in adapter.fetch(
+        adapter_config={
+            "feed_urls": ["https://feeds.example.com/rss.xml"],
+            "start_date": "2024-01-01",
+        },
+        max_documents=5,
+        http_client=client,
+    ):
+        docs.append(doc)
+    await client.aclose()
+
+    assert [doc.external_id for doc in docs] == ["dated"]
+
+
+@pytest.mark.asyncio
 async def test_wikidata_sparql_batch_adapter_yields_binding_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -272,6 +374,7 @@ async def test_wikidata_sparql_batch_adapter_yields_binding_rows(
     assert docs[0].external_id == "wikidata_sparql:http://www.wikidata.org/entity/Q42"
     assert json.loads(docs[0].content)["qid"] == "Q42"
     assert sink["offset"] == 1
+    assert sink["query_hash"] == "87d25ef8fd93c62fbcbd2c9f5e99f96244095cba8fb6dc13fc565b7ec93b884d"
 
 
 @pytest.mark.asyncio
@@ -430,3 +533,61 @@ async def test_github_historical_window_caps_page_walk_when_skipping_newer_relea
     assert docs == []
     assert seen_pages == ["1", "2"]
     assert sink["page_by_repo"] == {"x/y": 3}
+
+
+@pytest.mark.asyncio
+async def test_github_historical_window_excludes_undated_releases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    monkeypatch.setattr(
+        socket, "getaddrinfo", _fake_getaddrinfo({"api.github.com": ["140.82.112.6"]})
+    )
+    releases = [
+        {
+            "id": 1,
+            "tag_name": "v-undated",
+            "name": "undated",
+            "html_url": "https://github.com/x/y/releases/tag/v-undated",
+            "published_at": None,
+            "prerelease": False,
+            "draft": False,
+        },
+        {
+            "id": 2,
+            "tag_name": "v1",
+            "name": "v1",
+            "html_url": "https://github.com/x/y/releases/tag/v1",
+            "published_at": "2023-01-01T00:00:00Z",
+            "prerelease": False,
+            "draft": False,
+        },
+    ]
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json=releases, headers={"Link": ""})
+        )
+    )
+    adapter = GitHubReleasesAdapter()
+    docs: list[RawDocument] = []
+    async for doc in adapter.fetch(
+        adapter_config={"repos": ["x/y"], "start_date": "2023-01-01"},
+        max_documents=5,
+        http_client=client,
+    ):
+        docs.append(doc)
+    await client.aclose()
+
+    assert [doc.external_id for doc in docs] == ["2"]
+
+
+@pytest.mark.asyncio
+async def test_github_releases_adapter_rejects_malformed_repo_identifier() -> None:
+    adapter = GitHubReleasesAdapter()
+    with pytest.raises(SourceFetchError, match="owner/repo"):
+        async for _ in adapter.fetch(
+            adapter_config={"repos": ["x/y/../../z"]},
+            max_documents=1,
+        ):
+            pass

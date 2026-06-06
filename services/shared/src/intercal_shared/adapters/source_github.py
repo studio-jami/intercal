@@ -40,6 +40,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Any
@@ -130,8 +131,8 @@ class GitHubReleasesAdapter:
                 ) from exc
             include_pre = str(adapter_config.get("include_prereleases", "false")).lower() == "true"
             per_page = min(int(str(adapter_config.get("per_page", "30"))), 100)
-            start_date = _parse_date_bound(adapter_config.get("start_date"))
-            end_date = _parse_date_bound(adapter_config.get("end_date"), end_of_day=True)
+            start_date = _parse_config_date_bound(adapter_config, "start_date")
+            end_date = _parse_config_date_bound(adapter_config, "end_date", end_of_day=True)
             historical_mode = start_date is not None or end_date is not None
             cursor_page_by_repo = _cursor_page_by_repo(cursor_state or {})
             max_pages_per_repo = max(int(str(adapter_config.get("max_pages_per_repo", "10"))), 1)
@@ -141,7 +142,7 @@ class GitHubReleasesAdapter:
                 raise SourceFetchError(
                     "adapter_config['repos'] must be a list of 'owner/repo' strings"
                 )
-            repos: list[str] = [str(r) for r in repos_raw]
+            repos: list[str] = [_validate_repo_name(str(r)) for r in repos_raw]
             if not repos:
                 _log.warning("GitHubReleases: no repos configured; yielding nothing")
                 return
@@ -242,6 +243,8 @@ class GitHubReleasesAdapter:
                         if release.get("draft", False):
                             continue
                         published_dt = _parse_datetime(str(release.get("published_at", "") or ""))
+                        if historical_mode and published_dt is None:
+                            continue
                         if (
                             end_date is not None
                             and published_dt is not None
@@ -308,12 +311,23 @@ def _cursor_page_by_repo(cursor_state: dict[str, object]) -> dict[str, int]:
     return {str(repo): int(page) for repo, page in raw.items()}
 
 
+def _validate_repo_name(repo: str) -> str:
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
+        raise SourceFetchError(
+            "adapter_config['repos'] entries must be GitHub 'owner/repo' identifiers"
+        )
+    return repo
+
+
 def _parse_date_bound(value: object, *, end_of_day: bool = False) -> datetime | None:
     if not value:
         return None
     value_text = str(value)
     if len(value_text) == 10 and value_text[4] == "-" and value_text[7] == "-":
-        date_value = datetime.fromisoformat(value_text).date()
+        try:
+            date_value = datetime.fromisoformat(value_text).date()
+        except ValueError:
+            return None
         time_value = datetime.max.time() if end_of_day else datetime.min.time()
         return datetime.combine(date_value, time_value, tzinfo=UTC)
     parsed = _parse_datetime(value_text)
@@ -325,6 +339,21 @@ def _parse_date_bound(value: object, *, end_of_day: bool = False) -> datetime | 
         return None
     time_value = datetime.max.time() if end_of_day else datetime.min.time()
     return datetime.combine(date_value, time_value, tzinfo=UTC)
+
+
+def _parse_config_date_bound(
+    adapter_config: dict[str, object],
+    key: str,
+    *,
+    end_of_day: bool = False,
+) -> datetime | None:
+    raw = adapter_config.get(key)
+    if not raw:
+        return None
+    parsed = _parse_date_bound(raw, end_of_day=end_of_day)
+    if parsed is None:
+        raise SourceFetchError(f"Invalid {key} date bound: {raw!r}")
+    return parsed
 
 
 def _parse_datetime(value: str) -> datetime | None:

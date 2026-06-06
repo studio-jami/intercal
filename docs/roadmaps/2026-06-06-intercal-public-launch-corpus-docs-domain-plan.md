@@ -180,6 +180,12 @@ The first proof consumes the same adapters, provenance rules, and public query p
   audit targets include source policy metadata, SSRF/URL validation, pagination/cursors, dedup,
   bounded date windows, direct fact-write avoidance, and overclaiming. Next coordinator action:
   poll in short intervals, record result, then apply the second-pass gate.
+- 2026-06-06T12:16:31-04:00 — Workstream 2 pass 2 fresh-context audit found cohesive adapter
+  coverage with no direct fact writes, but tightened historical-bound correctness before closeout:
+  invalid configured date bounds now fail closed, bounded registry/RSS/GitHub historical runs exclude
+  undated records, GitHub repo identifiers are validated before request construction, and Wikidata
+  SPARQL cursor hashes are stable across processes. No source catalog rows, backfill execution, query
+  proof, dashboard, docs, marketing, or domain work was added.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 
@@ -267,6 +273,11 @@ Comparable registry variants beyond PyPI/npm/Hugging Face remain follow-up adapt
 No source catalog rows, backfill runner, Cloud Run job, or query-quality proof was added in this
 slice. Workstream 3 owns execution, budget, retries, and operator controls; Workstream 4 owns corpus
 coverage and query proof.
+
+Pass 2 closeout note: the fresh-context audit kept the Workstream 2 adapter foundation in place and
+landed bounded-window hardening for date validation, undated historical records, GitHub repo
+identifier validation, and deterministic SPARQL cursor hashing. Workstream 3 still owns source-row
+catalog expansion and backfill execution.
 
 Suggested verification:
 

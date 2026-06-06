@@ -295,9 +295,21 @@ async function runQueryProofs(tx, options = {}) {
   });
 
   if (options.includeSourcePolicySentinel) {
-    await addProof('search_evidence source-policy body redaction', async () => {
+    await addProof('search_evidence source-policy restricted body not searchable', async () => {
       const evidence = await core.searchEvidence(tx, {
         query: 'W4_SOURCE_POLICY_DO_NOT_LEAK',
+        from_date: '2024-01-01T00:00:00Z',
+        to_date: '2024-12-31T00:00:00Z',
+      });
+      return {
+        passed: evidence.hits.every((item) => item.documentId !== IDS.docs.sourcePolicy),
+        detail: `hits=${evidence.hits.length}`,
+      };
+    });
+
+    await addProof('search_evidence source-policy title fallback', async () => {
+      const evidence = await core.searchEvidence(tx, {
+        query: 'Source policy sentinel',
         from_date: '2024-01-01T00:00:00Z',
         to_date: '2024-12-31T00:00:00Z',
       });

@@ -326,7 +326,16 @@ export async function searchEvidence(
   let q = db
     .selectFrom('source_documents')
     .selectAll()
-    .where((eb) => eb.or([eb('title', 'ilike', pattern), eb('cleaned_text', 'ilike', pattern)]));
+    .where((eb) =>
+      eb.or([
+        eb('title', 'ilike', pattern),
+        eb.and([
+          eb('citation_only', '=', false),
+          eb('summary_allowed', '=', true),
+          eb('cleaned_text', 'ilike', pattern),
+        ]),
+      ]),
+    );
   if (params.from_date) q = q.where('published_at', '>=', new Date(params.from_date));
   if (params.to_date) q = q.where('published_at', '<=', new Date(params.to_date));
 
@@ -335,6 +344,7 @@ export async function searchEvidence(
   const hits = rows.map((row) => {
     const titleHit = row.title?.toLowerCase().includes(params.query.toLowerCase()) ?? false;
     // Respect source policy before emitting any derived body text (see `bodySnippetAllowed`).
+    // The SQL predicate above also prevents restricted body text from becoming a search oracle.
     // When body exposure is not allowed we fall back to the title (citation metadata, no body).
     let snippet = '';
     if (bodySnippetAllowed(row) && row.cleaned_text) {

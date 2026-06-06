@@ -80,6 +80,11 @@ pages and API/MCP answers must not claim class-wide redistribution rights from t
   | false | false | no (title only) |
   | true | (any) | no (title only) |
 
+- **Evidence search over body text** uses the same gate. A restricted document can still match on
+  title/citation metadata, but `cleaned_text` is searched only when `bodySnippetAllowed(policy)` is
+  true. This prevents exact-query probes from turning restricted body text into a search-result
+  existence oracle.
+
 - The deterministic delta digest (`packages/core/delta.ts`) is built from already-extracted,
   structurally-stored claim fields and never re-derives text from a restricted source body, so it
   carries no additional source-text exposure beyond the citations it already grounds.

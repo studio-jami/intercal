@@ -71,10 +71,12 @@ Turbo claim is unverified before supporting evidence exists and later returns ci
 seeded proof mode. The adversarial 1M-context claim must not return `supported`, and the corpus
 quality report separately requires at least one open contradiction row.
 
-Seeded mode also inserts a rollback-scoped source-policy sentinel document whose searchable body is
-`citation_only` and not summary-allowed. The `search_evidence` proof requires the hit to return
-only citation metadata/title text, never the restricted body marker. This proves the evidence query
-path does not leak raw source text when the source policy forbids derived body snippets.
+Seeded mode also inserts a rollback-scoped source-policy sentinel document whose body contains a
+restricted marker and is `citation_only` plus not summary-allowed. The `search_evidence` proof
+requires an exact body-marker query not to return that restricted document at all, and separately
+requires a title query to return only citation metadata/title text. This proves the evidence query
+path does not expose restricted body text through snippets or through a search-result existence
+oracle.
 
 ## Live Backfill Prerequisites
 
@@ -151,6 +153,11 @@ source-policy no-body-leak sentinel described above. `seeded-proof`, `live-first
 `live-full` all pass against the configured Neon branch; the seeded policy check remains
 rollback-scoped because live source-policy coverage depends on whatever restricted sources the
 operator has added.
+
+As of the 2026-06-06 Workstream 4 pass 9 proof, `search_evidence` applies the same source-policy
+body gate to retrieval that it already applied to snippets: restricted body text is neither emitted
+nor searchable, while title/citation metadata remains searchable. The seeded source-policy proof now
+checks both behaviors.
 
 ## Live Verification Remaining
 

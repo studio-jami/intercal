@@ -810,6 +810,14 @@ broad query proofs and the pass 8 source-policy redaction proof. No source catal
 corpus rows, source-policy loosening, dashboard, docs/Mintlify, marketing/SEO, domain routing, or
 release-audit work was added. Workstream 4 is quiet from the corpus/query-proof boundary.
 
+Pass 9 closeout note: the strict quiet audit found one remaining source-policy query-path gap and
+fixed it in scope. `search_evidence` no longer searches restricted `cleaned_text` for
+`citation_only` or summary-forbidden source documents, closing a title-only response oracle for raw
+body text. The seeded source-policy proof now requires an exact restricted-body-marker query to
+return no restricted document, while a title query still returns only citation metadata. No source
+catalog rows, proof corpus rows, source-policy loosening, dashboard, docs/Mintlify, marketing/SEO,
+domain routing, or release-audit work was added.
+
 ## Workstream 5: Public Intercal Knowledge Experience
 
 Goal: Replace the thin dashboard shell with the full read-only public product surface.

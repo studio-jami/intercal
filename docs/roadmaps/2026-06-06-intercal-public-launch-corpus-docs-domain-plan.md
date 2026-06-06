@@ -214,6 +214,13 @@ The first proof consumes the same adapters, provenance rules, and public query p
   `019e9dc4-1aa9-71a0-aee5-4dbc0c112c6f` (`Confucius`). Ownership boundary: Workstream 2
   adapters, source registry, related adapter tests, Workstream 2 roadmap status, and changelog.
   Next coordinator action: poll in short intervals, record result, then gate the pass 4 commit.
+- 2026-06-06T12:45:00-04:00 — Workstream 2 pass 4 quiet check found and closed one final
+  identifier/cursor stability gap: arXiv now suppresses dated entries without stable Atom IDs,
+  Wikidata SPARQL batches reset stale offsets when the active query differs from the saved cursor
+  hash, and SPARQL rows without stable `item`/`qid` identifiers no longer emit offset-derived
+  source documents. Focused adapter tests passed. Workstream 2 is quiet after this pass; source
+  catalog rows, backfill execution, budgets, retries, and operator controls remain Workstream 3
+  scope.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 
@@ -312,6 +319,13 @@ adapter gap for arXiv and MediaWiki revision records, including local out-of-win
 missing revision-id suppression, bounded MediaWiki page walking, and deterministic registry ordering
 for same-timestamp releases. Workstream 3 still owns source-row catalog expansion, backfill execution,
 budgets, retries, and operator controls.
+
+Pass 4 closeout note: the historical adapter foundation is quiet after closing the final
+identifier/cursor stability issue found in fresh audit. arXiv suppresses dated entries without stable
+Atom IDs, Wikidata SPARQL resumes only when the saved query hash matches the active query, skipped
+identifier-less SPARQL rows advance the cursor without producing offset-derived source documents, and
+no adapter writes canonical facts directly. Workstream 3 still owns source-row catalog expansion,
+backfill execution, budgets, retries, and operator controls.
 
 Suggested verification:
 

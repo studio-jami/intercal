@@ -11,5 +11,8 @@
   enforce historical date windows, suppress undated or identifier-less historical records, cap
   MediaWiki per-page pagination, and keep registry cursor ordering deterministic for same-timestamp
   releases.
+- Hardened pass-4 quiet-check behavior so arXiv suppresses dated entries without stable Atom IDs,
+  Wikidata SPARQL batches reset stale offsets when the query changes, and SPARQL rows without
+  stable `item`/`qid` identifiers do not produce offset-derived source documents.
 - Added focused Python tests for adapter registration, source-policy ingestion, SSRF rejection,
   cursor behavior, and normalized `RawDocument` output.

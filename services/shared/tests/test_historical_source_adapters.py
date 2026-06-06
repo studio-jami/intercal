@@ -294,6 +294,50 @@ async def test_arxiv_adapter_locally_excludes_out_of_window_and_undated_entries(
 
 
 @pytest.mark.asyncio
+async def test_arxiv_adapter_excludes_identifierless_entries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    monkeypatch.setattr(
+        socket, "getaddrinfo", _fake_getaddrinfo({"export.arxiv.org": ["151.101.1.91"]})
+    )
+    atom = """<?xml version="1.0"?>
+    <feed xmlns="http://www.w3.org/2005/Atom">
+      <entry>
+        <title>Missing Identifier</title>
+        <summary>Abstract.</summary>
+        <published>2023-03-10T00:00:00Z</published>
+      </entry>
+      <entry>
+        <id>https://arxiv.org/abs/2303.00002</id>
+        <title>Current Paper</title>
+        <summary>Current abstract.</summary>
+        <published>2023-03-11T00:00:00Z</published>
+      </entry>
+    </feed>"""
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=atom))
+    )
+    adapter = ArxivAdapter()
+    docs: list[RawDocument] = []
+    async for doc in adapter.fetch(
+        adapter_config={
+            "categories": ["cs.CL"],
+            "start_date": "2023-03-01",
+            "end_date": "2023-03-31",
+        },
+        max_documents=5,
+        http_client=client,
+    ):
+        docs.append(doc)
+    await client.aclose()
+
+    assert [doc.external_id for doc in docs] == ["https://arxiv.org/abs/2303.00002"]
+
+
+@pytest.mark.asyncio
 async def test_rss_feed_adapter_yields_entries_dedupes_and_rejects_private(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -425,6 +469,52 @@ async def test_wikidata_sparql_batch_adapter_yields_binding_rows(
     assert json.loads(docs[0].content)["qid"] == "Q42"
     assert sink["offset"] == 1
     assert sink["query_hash"] == "87d25ef8fd93c62fbcbd2c9f5e99f96244095cba8fb6dc13fc565b7ec93b884d"
+
+
+@pytest.mark.asyncio
+async def test_wikidata_sparql_batch_resets_changed_query_and_skips_identifierless_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    monkeypatch.setattr(
+        socket, "getaddrinfo", _fake_getaddrinfo({"query.wikidata.org": ["208.80.154.224"]})
+    )
+    data = {
+        "results": {
+            "bindings": [
+                {"itemLabel": {"type": "literal", "value": "No stable id"}},
+                {
+                    "qid": {"type": "literal", "value": "Q123"},
+                    "itemLabel": {"type": "literal", "value": "Stable row"},
+                },
+            ]
+        }
+    }
+    seen_queries: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_queries.append(dict(request.url.params)["query"])
+        return httpx.Response(200, json=data)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    adapter = WikidataSparqlBatchAdapter()
+    sink: dict[str, object] = {}
+    docs: list[RawDocument] = []
+    async for doc in adapter.fetch(
+        adapter_config={"query": "SELECT ?qid ?itemLabel WHERE { ?item ?p ?o }"},
+        cursor_state={"offset": 10, "query_hash": "old-query"},
+        max_documents=5,
+        http_client=client,
+        cursor_sink=sink,
+    ):
+        docs.append(doc)
+    await client.aclose()
+
+    assert "OFFSET 0" in seen_queries[0]
+    assert [doc.external_id for doc in docs] == ["wikidata_sparql:Q123"]
+    assert sink["offset"] == 2
+    assert sink["query_hash"] != "old-query"
 
 
 @pytest.mark.asyncio

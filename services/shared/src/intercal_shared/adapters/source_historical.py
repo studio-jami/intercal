@@ -336,6 +336,8 @@ class ArxivAdapter:
                 for entry in entries:
                     if yielded >= max_documents:
                         break
+                    if not _elem_text(entry, "{http://www.w3.org/2005/Atom}id"):
+                        continue
                     published_at = _parse_dt(_elem_text(entry, "{http://www.w3.org/2005/Atom}published"))
                     if not _within_window(
                         published_at,
@@ -452,7 +454,13 @@ class WikidataSparqlBatchAdapter:
                 raise SourceFetchError(
                     "Wikidata SPARQL adapter requires adapter_config['query'] or entity_ids"
                 )
-            offset = int(str((cursor_state or {}).get("offset", 0)))
+            query_hash = hashlib.sha256(query.encode()).hexdigest()
+            cursor_query_hash = str((cursor_state or {}).get("query_hash", ""))
+            offset = (
+                int(str((cursor_state or {}).get("offset", 0)))
+                if not cursor_query_hash or cursor_query_hash == query_hash
+                else 0
+            )
             limit = min(int(str(adapter_config.get("limit", "100"))), max_documents)
             bounded_query = f"{query.rstrip()}\nLIMIT {limit}\nOFFSET {offset}"
             data = await _get_json(
@@ -465,11 +473,15 @@ class WikidataSparqlBatchAdapter:
             if not isinstance(bindings, list):
                 raise SourceFetchError("Wikidata SPARQL response missing results.bindings")
             yielded = 0
+            scanned = 0
             for row in bindings:
                 if yielded >= max_documents:
                     break
+                scanned += 1
                 payload = _sparql_binding_values(row)
-                item = payload.get("item") or payload.get("qid") or f"offset:{offset + yielded}"
+                item = payload.get("item") or payload.get("qid")
+                if not item:
+                    continue
                 yielded += 1
                 yield RawDocument(
                     content=json.dumps(payload, ensure_ascii=False, sort_keys=True).encode(),
@@ -482,8 +494,8 @@ class WikidataSparqlBatchAdapter:
                     metadata={"adapter": self.adapter_name, "source": "wikidata_sparql"},
                 )
             if cursor_sink is not None:
-                cursor_sink["offset"] = offset + yielded
-                cursor_sink["query_hash"] = hashlib.sha256(query.encode()).hexdigest()
+                cursor_sink["offset"] = offset + scanned
+                cursor_sink["query_hash"] = query_hash
         finally:
             if owns_client:
                 await client.aclose()

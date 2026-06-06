@@ -1,38 +1,183 @@
-name: Pipeline workers
+name: Pipeline (scheduled CD)
 
-# Portable worker entrypoints (decision D11). Free on the public repo's Actions minutes.
-# Manual for now; the scheduled cron is enabled once Plan 02 implements the job bodies
-# (they currently raise NotImplementedError by design, so an enabled cron would fail).
+# Recurring ingestion → … → fact-versioning on the public repo's free Actions minutes
+# (decision D11: portable worker CLI; the same `intercal-pipeline` entrypoint runs here,
+# locally, and as a Cloud Run Job in Plan 07 W4).
+#
+# Cadence: every 6h, per docs/operations/resource-budget.md (INGEST_CRON=0 */6 * * *).
+# The minute is offset off :00 because GitHub may drop schedules queued at the top of the
+# hour under load (docs.github.com — schedule event caveats). GitHub's cron is parsed
+# statically and cannot read a secret/var, so the cadence is pinned here; changing it is a
+# one-line edit that should track resource-budget.md and INGEST_CRON.
+#
+# Each run is short, idempotent (re-runs never duplicate canonical records — see
+# intercal_pipeline.run) and budget-bounded (INGEST_MAX_DOCS_PER_RUN, LLM_DAILY_REQUEST_BUDGET,
+# EXTRACT_ONLY_CHANGED), so overlapping/duplicate runs are safe but still guarded below.
+
 on:
+  schedule:
+    - cron: "17 */6 * * *" # every 6h at :17 — see resource-budget.md / INGEST_CRON
   workflow_dispatch:
     inputs:
-      service:
-        description: "Service package (intercal_ingest|intercal_extract|intercal_resolve|intercal_synthesize)"
+      mode:
+        description: "run-all (every active source) or run (a single source)"
+        type: choice
         required: true
-        default: "intercal_ingest"
-      job:
-        description: "Job name (e.g. ingest_source)"
-        required: true
-  # schedule:
-  #   - cron: "0 * * * *"   # hourly — enable after Plan 02
+        default: run-all
+        options:
+          - run-all
+          - run
+      source_id:
+        description: "Source UUID (required when mode=run)"
+        type: string
+        required: false
+        default: ""
+      max_documents:
+        description: "Per-source document cap for this run (0 = INGEST_MAX_DOCS_PER_RUN)"
+        type: string
+        required: false
+        default: "0"
+      no_embeddings:
+        description: "Skip embedding-based resolve/link (faster; exact-match only)"
+        type: boolean
+        required: false
+        default: false
+      database_url_override:
+        description: "Override DATABASE_URL for a SAFE test run (e.g. a throwaway Neon branch). Leave blank to use the production secret."
+        type: string
+        required: false
+        default: ""
+
+# Serialize runs: a scheduled and a manual run never execute the pipeline concurrently.
+# cancel-in-progress=false — a mid-flight run is idempotent and worth finishing; the new
+# run queues behind it rather than being killed or double-writing.
+concurrency:
+  group: intercal-pipeline
+  cancel-in-progress: false
+
+# Least privilege: the job only reads the checked-out tree. No write scopes needed.
+permissions:
+  contents: read
 
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      STORAGE_PROVIDER: s3
+      # ── Canonical store (Neon). A manual run may override to a throwaway branch. ──
+      DATABASE_URL: ${{ github.event.inputs.database_url_override != '' && github.event.inputs.database_url_override || secrets.DATABASE_URL }}
+      # ── Object storage (R2 via S3 API) ──
+      STORAGE_PROVIDER: ${{ secrets.STORAGE_PROVIDER }}
       S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+      S3_REGION: ${{ secrets.S3_REGION }}
       S3_BUCKET: ${{ secrets.S3_BUCKET }}
       S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
       S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
-      QUEUE_PROVIDER: redis
+      S3_FORCE_PATH_STYLE: ${{ secrets.S3_FORCE_PATH_STYLE }}
+      # ── Queue / cache (Upstash) ──
+      QUEUE_PROVIDER: ${{ secrets.QUEUE_PROVIDER }}
       REDIS_URL: ${{ secrets.REDIS_URL }}
-      EMBEDDINGS_PROVIDER: local
-      LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'gemini' }}
+      UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+      UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+      # ── Embeddings (local fastembed — zero cost) ──
+      EMBEDDINGS_PROVIDER: ${{ secrets.EMBEDDINGS_PROVIDER }}
+      EMBEDDINGS_MODEL: ${{ secrets.EMBEDDINGS_MODEL }}
+      EMBEDDINGS_DIM: ${{ secrets.EMBEDDINGS_DIM }}
+      EMBEDDINGS_BATCH_SIZE: ${{ vars.EMBEDDINGS_BATCH_SIZE || '64' }}
+      # ── LLM (vertex primary → gemini fallback) ──
+      LLM_PROVIDER: ${{ secrets.LLM_PROVIDER }}
+      LLM_MODEL: ${{ secrets.LLM_MODEL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GCLOUD_PROJECT_ID: ${{ secrets.GCLOUD_PROJECT_ID }}
+      # ── Budget knobs (resource-budget.md). Repo vars override the in-code defaults. ──
+      INGEST_MAX_DOCS_PER_RUN: ${{ vars.INGEST_MAX_DOCS_PER_RUN || '200' }}
+      EXTRACT_ONLY_CHANGED: ${{ vars.EXTRACT_ONLY_CHANGED || 'true' }}
+      LLM_DAILY_REQUEST_BUDGET: ${{ vars.LLM_DAILY_REQUEST_BUDGET || '2000' }}
+      LLM_MAX_OUTPUT_TOKENS: ${{ vars.LLM_MAX_OUTPUT_TOKENS || '2048' }}
+      LLM_PRIMARY: ${{ vars.LLM_PRIMARY || 'vertex' }}
+      # ── Observability ──
+      LOG_LEVEL: ${{ secrets.LOG_LEVEL || 'info' }}
+      SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - run: uv sync --all-packages
-      - run: uv run python -m ${{ inputs.service }} ${{ inputs.job }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+
+      - name: Install pipeline + worker packages
+        run: uv sync --all-packages --frozen
+
+      # Vertex ADC: the fanned GOOGLE_SERVICE_ACCOUNT_KEY secret holds the SA JSON.
+      # Write it to a file and point the standard SDK env var at it. Only runs when the
+      # secret is present; the file is under the runner's ephemeral workspace and never
+      # echoed. (When LLM_PROVIDER=gemini the key path is unused — GEMINI_API_KEY drives it.)
+      - name: Configure Vertex ADC (if SA key present)
+        env:
+          GOOGLE_SERVICE_ACCOUNT_KEY_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+        run: |
+          if [ -z "${GOOGLE_SERVICE_ACCOUNT_KEY_JSON}" ]; then
+            echo "No GOOGLE_SERVICE_ACCOUNT_KEY secret set; relying on GEMINI_API_KEY / ambient ADC."
+            exit 0
+          fi
+          install -m 600 /dev/null "$RUNNER_TEMP/gcp-sa.json"
+          printf '%s' "$GOOGLE_SERVICE_ACCOUNT_KEY_JSON" > "$RUNNER_TEMP/gcp-sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/gcp-sa.json" >> "$GITHUB_ENV"
+
+      - name: Run pipeline
+        id: pipeline
+        env:
+          PIPELINE_MODE: ${{ github.event.inputs.mode || 'run-all' }}
+          PIPELINE_SOURCE_ID: ${{ github.event.inputs.source_id }}
+          PIPELINE_MAX_DOCS: ${{ github.event.inputs.max_documents || '0' }}
+          PIPELINE_NO_EMBEDDINGS: ${{ github.event.inputs.no_embeddings }}
+          PIPELINE_DB_OVERRIDDEN: ${{ github.event.inputs.database_url_override != '' }}
+        run: |
+          set -euo pipefail
+
+          if [ "$PIPELINE_DB_OVERRIDDEN" = "true" ]; then
+            echo "::notice::DATABASE_URL overridden by workflow input (safe test target)."
+          fi
+
+          ARGS=()
+          if [ "$PIPELINE_MODE" = "run" ]; then
+            if [ -z "${PIPELINE_SOURCE_ID}" ]; then
+              echo "::error::mode=run requires a source_id input."
+              exit 1
+            fi
+            ARGS+=(run --source-id "$PIPELINE_SOURCE_ID")
+          else
+            ARGS+=(run-all)
+          fi
+
+          if [ "${PIPELINE_MAX_DOCS}" != "0" ]; then
+            ARGS+=(--max-documents "$PIPELINE_MAX_DOCS")
+          fi
+          if [ "${PIPELINE_NO_EMBEDDINGS}" = "true" ]; then
+            ARGS+=(--no-embeddings)
+          fi
+
+          # The CLI writes its JSON health summary to stderr and exits non-zero on a
+          # failed run. Capture stderr so the run summary can surface the counts while
+          # the exit status still fails the job loudly on real errors.
+          set +e
+          uv run intercal-pipeline "${ARGS[@]}" 2> >(tee "$RUNNER_TEMP/pipeline.log" >&2)
+          status=$?
+          set -e
+
+          # Extract the JSON health object(s) from the captured log for the step summary.
+          # No secrets are present in the health summary (counters + timing + status only).
+          {
+            echo "### Pipeline run summary"
+            echo ""
+            echo "- mode: \`$PIPELINE_MODE\`"
+            echo "- exit status: \`$status\`"
+            echo ""
+            echo '```json'
+            # Print from the first JSON token to end of log (the trailing health dump).
+            awk 'f{print} /^[[{]/{f=1; print}' "$RUNNER_TEMP/pipeline.log" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          exit $status

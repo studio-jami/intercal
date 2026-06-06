@@ -73,6 +73,5 @@ jobs:
       - name: Python tests
         run: pnpm py:test
 
-  # Scheduled pipeline workers run as portable CLI entrypoints (see scripts/workers/).
-  # A separate scheduled workflow (cron) invokes `python -m intercal_ingest <job>` etc.
-  # on the public repo's free Actions minutes — added when Plan 02 lands.
+  # Scheduled pipeline CD lives in pipeline.yml (cron + workflow_dispatch), driving the
+  # portable `intercal-pipeline` CLI on the public repo's free Actions minutes (Plan 07 W3).

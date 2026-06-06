@@ -140,16 +140,32 @@ Suggested verification: MCP client lists/calls tools against the deployed `/api/
 
 Goal: Recurring ingestion/extraction/etc. on free public-repo Actions, within budget cadence.
 
+Status: [x] Complete (2026-06-05) — scheduled CD live. Runbook: `docs/operations/pipeline-cd.md`.
+The schedule is enabled (Plan 02 pipeline runs end-to-end via `intercal-pipeline run|run-all`).
+actionlint clean; verified by an actual `gh workflow run` against a throwaway Neon branch (small cap)
+and a small idempotent prod re-run — real data landed, no duplicate canonical records, no secrets in logs.
+
 Implementation tasks:
 
-- [ ] Finalize `.github/workflows/pipeline.yml`: cron from `INGEST_CRON`, per-run caps
-      (`INGEST_MAX_DOCS_PER_RUN`), all secrets wired; enable the schedule once Plan 02 job bodies exist.
-- [ ] Add a manual `workflow_dispatch` matrix for ad-hoc single-job runs.
-- [ ] Keep jobs short and idempotent; respect `docs/operations/resource-budget.md`.
+- [x] Rewrote `.github/workflows/pipeline.yml` to drive the real orchestrator (`uv run
+      intercal-pipeline run-all` / `run --source-id`), not the old per-service stub. Schedule **enabled**
+      `cron: "17 */6 * * *"` (6-hourly per `resource-budget.md` / `INGEST_CRON`; minute offset off `:00`
+      to dodge top-of-hour drops). `setup-uv@v8` + `uv sync --all-packages --frozen`. All app-runtime
+      secrets wired by NAME from the W1 fan-out; Vertex ADC built from `GOOGLE_SERVICE_ACCOUNT_KEY`
+      (SA JSON → `chmod 600` `$RUNNER_TEMP` file → `GOOGLE_APPLICATION_CREDENTIALS`), Gemini fallback via
+      `GEMINI_API_KEY`. Budget knobs overridable via repo `vars.*` (defaults match `resource-budget.md`).
+- [x] `workflow_dispatch` inputs for ad-hoc runs: `mode` (run-all|run), `source_id`, `max_documents`,
+      `no_embeddings`, and `database_url_override` (the safe-test seam → throwaway Neon branch).
+- [x] Short & idempotent: `concurrency: {group: intercal-pipeline, cancel-in-progress: false}` (no
+      overlapping runs; mid-flight run finishes, next queues), `timeout-minutes: 30`, least-privilege
+      `permissions: {contents: read}`. Health summary (counts + status) teed to `$GITHUB_STEP_SUMMARY`;
+      non-zero exit on a `failed` run so real errors fail loudly. No secret value is ever printed.
 
 Exit criteria:
 
-- [ ] A scheduled run executes a real job within budget and is idempotent on re-run.
+- [x] A scheduled run executes a real job within budget and is idempotent on re-run. Verified via a real
+      dispatched Actions run (branch-targeted, small cap → green, rows landed) + a small prod re-run
+      (idempotent: no duplicate canonical records).
 
 Suggested verification: dispatch a job; confirm Neon/R2/Upstash deltas and no duplicate work on re-run.
 

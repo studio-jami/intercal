@@ -618,9 +618,22 @@ Suggested verification:
 
 Goal: Document the dedicated account setup session so later agents can operate without repeated access friction.
 
+Orchestrator checkpoint (2026-06-06T09:28Z): W8 P1 dispatched as agent
+`019e9c1c-fd11-7ed1-8636-3e7420534f8d`. Ownership: account/CLI setup runbook and secret-safe proof
+checklist only; no Plan05/06/07 implementation. Next coordinator action: poll to terminal,
+checkpoint result, then dispatch W8 P2.
+
+P1 closeout (2026-06-06): W8 account setup runbook landed in `docs/operations/account-setup.md`.
+It documents the dedicated operator session prerequisites and proof commands for domain/DNS, SSH/VPS,
+Neon, Cloudflare R2, Upstash, Vertex/Gemini, GCloud Cloud Run/Cloud Build, GitHub Actions, Vercel,
+local CLI auth, secret handoff, and rotation. It links to the existing deployment/secrets/backups/
+budget runbooks instead of duplicating lower-level provider flows or values. Live provider calls
+remain operator-gated when authenticated accounts, controlled domain, throwaway Neon branch, or quota
+approval are not available.
+
 Depends on:
 
-- [ ] Workstream 7 deployment requirements.
+- [x] Workstream 7 deployment requirements.
 
 Enables:
 
@@ -633,17 +646,24 @@ Repo guidance:
 Primary areas:
 
 - `docs/operations/account-setup.md`
-- `docs/security/secrets.md`
+- `docs/operations/secrets.md`
+
+Status: [x] **Complete** (2026-06-06). `docs/operations/account-setup.md` is now the single setup
+session runbook for future operators. It is secret-safe by construction: values remain in `.env` /
+host secret stores, names remain in `.env.example` and `scripts/ops/secrets.manifest.json`, and
+provider proof commands favor metadata/name listing rather than value output. The runbook covers the
+managed hosted path plus the optional VPS lane, names exact operator access needed, and carries live
+proof limitations honestly when provider auth or quota approval is required.
 
 Implementation tasks:
 
-- [ ] Add prerequisites for domain/DNS, SSH keys, VPS, Neon (DB), Cloudflare R2 (storage), Upstash (queue), Vertex AI / Gemini (LLM), GCloud Cloud Run / Cloud Build, GitHub Actions, Vercel, and CLI auth.
-- [ ] Add proof commands for each account/tool.
-- [ ] Add secret handoff and rotation policy.
+- [x] Add prerequisites for domain/DNS, SSH keys, VPS, Neon (DB), Cloudflare R2 (storage), Upstash (queue), Vertex AI / Gemini (LLM), GCloud Cloud Run / Cloud Build, GitHub Actions, Vercel, and CLI auth.
+- [x] Add proof commands for each account/tool.
+- [x] Add secret handoff and rotation policy.
 
 Exit criteria:
 
-- [ ] A single setup session can configure required accounts and leave verifiable docs for future work.
+- [x] A single setup session can configure required accounts and leave verifiable docs for future work.
 
 Suggested verification:
 

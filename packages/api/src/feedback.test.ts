@@ -111,7 +111,7 @@ function initialState(): FakeState {
   return {
     entities: [{ id: '22222222-2222-4222-8222-222222222222', canonical_name: 'Rust' }],
     claims: [{ id: '33333333-3333-4333-8333-333333333333', normalized_text: 'Rust 1.96 exists' }],
-    sources: [{ id: 'rust-lang/rust', name: 'Rust releases' }],
+    sources: [{ id: '55555555-5555-4555-8555-555555555555', name: 'Rust releases' }],
     digests: [{ id: '44444444-4444-4444-8444-444444444444' }],
     keys: [],
     reviewRecords: [],
@@ -245,7 +245,7 @@ describe('POST /v1/feedback', () => {
       app,
       {
         targetType: 'source',
-        targetId: 'rust-lang/rust',
+        targetId: '55555555-5555-4555-8555-555555555555',
         concernType: 'source_quality',
         summary: 'Review source reliability',
       },
@@ -274,6 +274,26 @@ describe('POST /v1/feedback', () => {
 
     expect(res.status).toBe(404);
     expect(body.code).toBe('not_found');
+    expect(state.reviewRecords).toHaveLength(0);
+    expect(state.auditEvents).toHaveLength(0);
+  });
+
+  it('rejects a non-UUID source target before reaching the database insert path', async () => {
+    const state = initialState();
+    const app = createApp(makeFakeDb(state), {
+      rateLimitStore: new MemoryRateLimitStore(),
+      anonPerMinute: 1000,
+    });
+
+    const { res, body } = await postFeedback(app, {
+      targetType: 'source',
+      targetId: 'rust-lang/rust',
+      concernType: 'source_quality',
+      summary: 'Review source reliability',
+    });
+
+    expect(res.status).toBe(400);
+    expect(body.code).toBe('invalid_request');
     expect(state.reviewRecords).toHaveLength(0);
     expect(state.auditEvents).toHaveLength(0);
   });

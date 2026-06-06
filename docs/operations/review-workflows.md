@@ -9,7 +9,8 @@ freshness/coverage calculations.
 Use `POST /v1/feedback` with a JSON body generated from the TypeSpec `FeedbackRequest` model:
 
 - `targetType`: `entity`, `claim`, `source`, `digest`, `freshness`, or `coverage`
-- `targetId`: canonical id or bounded target string
+- `targetId`: canonical UUID for entity, claim, source, and digest targets; bounded target string
+  for freshness and coverage targets
 - `concernType`: `incorrect`, `outdated`, `missing_evidence`, `missing_coverage`,
   `source_quality`, `contradiction`, or `other`
 - `summary`: required, 1-240 characters
@@ -26,9 +27,9 @@ submissions create review records.
 ## Stored Records
 
 Submissions create one `review_records` row with status `received`. Entity, claim, source, and
-digest targets are checked against their backing tables before a record is accepted. Freshness and
-coverage targets are query concerns rather than canonical rows, so their target is stored as a
-bounded string.
+digest targets must be UUIDs and are checked against their backing tables before a record is
+accepted. Freshness and coverage targets are query concerns rather than canonical rows, so their
+target is stored as a bounded string.
 
 The creation event is written to `audit_events` as `feedback.submit` in the same transaction as the
 review record. The audit row targets the review record, includes safe target metadata, and does not

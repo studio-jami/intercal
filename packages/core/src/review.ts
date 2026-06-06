@@ -80,6 +80,8 @@ async function ensureTargetExists(db: Db, targetType: FeedbackTargetType, target
       return;
     }
     case 'source': {
+      if (!UUID_RE.test(targetId))
+        throw new InvalidRequestError('source feedback target must be a UUID');
       const row = await db
         .selectFrom('sources')
         .select('id')

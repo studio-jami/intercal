@@ -48,6 +48,7 @@ const CONFIG = {
   authorizationServers: [ISSUER],
   scopesSupported: ['read'],
   requiredScopes: ['read'],
+  algorithms: ['RS256'],
 };
 
 let pass = 0;
@@ -131,7 +132,13 @@ const { privateKey, publicKey } = await generateKeyPair('RS256');
 const jwk = await exportJWK(publicKey);
 jwk.kid = 'local';
 jwk.alg = 'RS256';
-const verifier = new JwksTokenVerifier(CONFIG, createLocalJWKSet({ keys: [jwk] }));
+// A second, PS256 key under a distinct kid — its public half is in the JWKS, so a PS256-signed token
+// is a VALID signature. The RS256-only allowlist must still reject it (algorithm pinning).
+const psPair = await generateKeyPair('PS256');
+const psJwk = await exportJWK(psPair.publicKey);
+psJwk.kid = 'local-ps';
+psJwk.alg = 'PS256';
+const verifier = new JwksTokenVerifier(CONFIG, createLocalJWKSet({ keys: [jwk, psJwk] }));
 const enabledDeps = { config: CONFIG, verifier, resourceMetadataUrl: RESOURCE_METADATA_URL };
 
 // PRM document (RFC 9728)
@@ -157,16 +164,16 @@ check(
     wwwAuth.includes(`resource_metadata="${RESOURCE_METADATA_URL}"`),
 );
 
-async function mint({ audience = RESOURCE, scope = 'read' } = {}) {
+async function mint({ audience = RESOURCE, scope = 'read', ps = false } = {}) {
   const now = Math.floor(Date.now() / 1000);
   return new SignJWT({ scope })
-    .setProtectedHeader({ alg: 'RS256', kid: 'local' })
+    .setProtectedHeader({ alg: ps ? 'PS256' : 'RS256', kid: ps ? 'local-ps' : 'local' })
     .setSubject('verify-user')
     .setIssuer(ISSUER)
     .setAudience(audience)
     .setIssuedAt(now)
     .setExpirationTime(now + 300)
-    .sign(privateKey);
+    .sign(ps ? psPair.privateKey : privateKey);
 }
 
 // Wrong-audience token → 401 (RFC 8707)
@@ -177,6 +184,15 @@ const wrongRes = await handleMcpRequest(
   enabledDeps,
 );
 check('wrong-audience token → 401', wrongRes.status === 401);
+
+// Validly-signed PS256 token (alg outside the RS256 allowlist) → 401 (algorithm pinning)
+const psTok = await mint({ ps: true });
+const psRes = await handleMcpRequest(
+  db,
+  mcpReq({ jsonrpc: '2.0', id: 7, method: 'tools/list', params: {} }, `Bearer ${psTok}`),
+  enabledDeps,
+);
+check('out-of-allowlist alg (PS256) token → 401', psRes.status === 401);
 
 // Valid token → tools/call authorized
 const goodTok = await mint();

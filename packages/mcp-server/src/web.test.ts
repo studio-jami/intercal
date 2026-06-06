@@ -95,6 +95,7 @@ const ENABLED_CONFIG: McpAuthConfig = {
   authorizationServers: ['https://auth.example.test'],
   scopesSupported: ['read'],
   requiredScopes: ['read'],
+  algorithms: ['RS256'],
 };
 
 function enabledGate(scopes: string[] | null): GateDeps {

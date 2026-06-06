@@ -215,6 +215,12 @@ the official MCP Authorization spec for `2025-06-18` + `2025-11-25` (+ RFC 9728/
 2.1). `/api/mcp` is now an OAuth 2.1 **resource server**; the Authorization Server is an external,
 env-configured integration seam (the AS is out of scope of the MCP spec). Live-verified 7/7 against
 real Neon + live HTTP for the well-known document. REST auth (W5) seam left untouched.
+Audit-2 (2026-06-06): **pinned the JWS `alg` allowlist** (`MCP_OAUTH_ALGORITHMS`, default `RS256`).
+Without it `jose` accepts any alg the resolved JWKS key supports (an RSA key also satisfies `PS*`) —
+algorithm-substitution surface. The allowlist is now passed to `jwtVerify` and a validly-signed
+out-of-allowlist token is rejected (`401`). Re-verified: unit 17 + web 6 green; live 8/8 (added the
+PS256-rejection check). The rest of the resource-server surface audited clean (no bypass; audience/
+iss/exp enforced; PRM + `WWW-Authenticate` spec-correct; AS deferral honest).
 
 Implementation tasks:
 
@@ -229,8 +235,8 @@ Implementation tasks:
       allowed (MCP auth is OPTIONAL per spec) — the live default; enabling auth is an env-only change
       (`MCP_OAUTH_ISSUER` …). A presented-but-bad credential is a hard 401, never a silent downgrade.
 - [x] Document client onboarding (`docs/operations/mcp-auth.md` + `.env.example` seam block); tests
-      for token validation + scope enforcement (14 unit + 3 web-handler) and a live harness
-      (`scripts/dev/verify-mcp-auth.mjs`).
+      for token validation + scope enforcement + alg pinning (17 unit + 3 web-handler) and a live
+      harness (`scripts/dev/verify-mcp-auth.mjs`, 8 checks).
 
 Exit criteria:
 

@@ -29,6 +29,7 @@ const CONFIG: McpAuthConfig = {
   authorizationServers: [ISSUER],
   scopesSupported: ['read'],
   requiredScopes: ['read'],
+  algorithms: ['RS256'],
 };
 
 function mcpRequest(authorization?: string): Request {
@@ -80,6 +81,17 @@ describe('loadMcpAuthConfig — AS integration seam', () => {
 
   it('throws when an issuer is set but no audience can be determined (half-config)', () => {
     expect(() => loadMcpAuthConfig({ MCP_OAUTH_ISSUER: ISSUER })).toThrow(/audience/i);
+  });
+
+  it('defaults the JWS alg allowlist to RS256 and honours an override', () => {
+    const def = loadMcpAuthConfig({ MCP_OAUTH_ISSUER: ISSUER, MCP_OAUTH_AUDIENCE: RESOURCE });
+    expect(def?.algorithms).toEqual(['RS256']);
+    const override = loadMcpAuthConfig({
+      MCP_OAUTH_ISSUER: ISSUER,
+      MCP_OAUTH_AUDIENCE: RESOURCE,
+      MCP_OAUTH_ALGORITHMS: 'ES256, RS256',
+    });
+    expect(override?.algorithms).toEqual(['ES256', 'RS256']);
   });
 });
 
@@ -167,6 +179,7 @@ describe('gateMcpRequest — resource-server gate', () => {
 
 describe('JwksTokenVerifier — real JWT verification (local key set)', () => {
   let privateKey: Awaited<ReturnType<typeof generateKeyPair>>['privateKey'];
+  let psPrivateKey: Awaited<ReturnType<typeof generateKeyPair>>['privateKey'];
   let jwks: { keys: JWK[] };
   let verifier: JwksTokenVerifier;
 
@@ -176,7 +189,14 @@ describe('JwksTokenVerifier — real JWT verification (local key set)', () => {
     const pub = await exportJWK(pair.publicKey);
     pub.kid = 'test-key';
     pub.alg = 'RS256';
-    jwks = { keys: [pub] };
+    // A second, PS256 key under a DISTINCT kid — its public half is in the JWKS, so a PS256 token is
+    // a VALID signature. Rejection then proves the alg allowlist (not a signature failure) is at work.
+    const psPair = await generateKeyPair('PS256');
+    psPrivateKey = psPair.privateKey;
+    const psPub = await exportJWK(psPair.publicKey);
+    psPub.kid = 'ps-key';
+    psPub.alg = 'PS256';
+    jwks = { keys: [pub, psPub] };
     verifier = new JwksTokenVerifier(CONFIG, createLocalJWKSet(jwks));
   });
 
@@ -184,18 +204,22 @@ describe('JwksTokenVerifier — real JWT verification (local key set)', () => {
     audience?: string;
     issuer?: string;
     scope?: string;
+    /** Sign with the PS256 key (header alg PS256, kid ps-key) instead of the default RS256 key. */
+    ps?: boolean;
     /** Absolute exp (seconds since epoch). Defaults to 10 minutes out. */
     exp?: number;
   }): Promise<string> {
     const now = Math.floor(Date.now() / 1000);
+    const alg = opts.ps ? 'PS256' : 'RS256';
+    const kid = opts.ps ? 'ps-key' : 'test-key';
     return new SignJWT({ scope: opts.scope ?? 'read' })
-      .setProtectedHeader({ alg: 'RS256', kid: 'test-key' })
+      .setProtectedHeader({ alg, kid })
       .setSubject('user-1')
       .setIssuer(opts.issuer ?? ISSUER)
       .setAudience(opts.audience ?? RESOURCE)
       .setIssuedAt(now - 600)
       .setExpirationTime(opts.exp ?? now + 600)
-      .sign(privateKey);
+      .sign(opts.ps ? psPrivateKey : privateKey);
   }
 
   it('accepts a correctly-signed, audience-bound token and extracts scopes', async () => {
@@ -220,5 +244,22 @@ describe('JwksTokenVerifier — real JWT verification (local key set)', () => {
     // exp well beyond the 5s clock tolerance.
     const token = await mint({ exp: Math.floor(Date.now() / 1000) - 120 });
     await expect(verifier.verifyAccessToken(token)).rejects.toThrow(/invalid access token/i);
+  });
+
+  it('rejects a validly-signed token whose alg is outside the allowlist (RS256-only)', async () => {
+    // A genuinely valid PS256 signature (its public key is in the JWKS). Without an explicit
+    // allowlist `jose` would accept it; the pinned RS256-only list must reject it — algorithm pinning.
+    const token = await mint({ ps: true });
+    await expect(verifier.verifyAccessToken(token)).rejects.toThrow(/invalid access token/i);
+  });
+
+  it('accepts the configured alg when the allowlist is widened (e.g. PS256)', async () => {
+    const psVerifier = new JwksTokenVerifier(
+      { ...CONFIG, algorithms: ['PS256'] },
+      createLocalJWKSet(jwks),
+    );
+    const token = await mint({ ps: true });
+    const info = await psVerifier.verifyAccessToken(token);
+    expect(info.scopes).toContain('read');
   });
 });

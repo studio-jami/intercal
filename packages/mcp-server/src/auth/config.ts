@@ -23,6 +23,16 @@
 /** The minimal scope an access token must carry to use the read tool surface. */
 export const MCP_READ_SCOPE = 'read';
 
+/**
+ * Default JWS signing algorithm(s) accepted for access tokens. RFC 9068 access tokens are asymmetric
+ * JWTs; RS256 is the near-universal AS default (Auth0/Okta/Keycloak/Entra/…). We pin an explicit
+ * allowlist rather than letting the JWKS key type imply it, so a token cannot be verified under any
+ * algorithm the key would technically permit (e.g. an RSA key also satisfies PS256/PS384/PS512) —
+ * defence against algorithm-substitution. `none` is never accepted by `jose`. Override with
+ * `MCP_OAUTH_ALGORITHMS` only if your AS signs with a different asymmetric alg (e.g. `ES256`).
+ */
+export const MCP_DEFAULT_ALGORITHMS = ['RS256'] as const;
+
 /** Resolved resource-server configuration (auth enabled), or `null` when auth is disabled. */
 export interface McpAuthConfig {
   /**
@@ -45,6 +55,13 @@ export interface McpAuthConfig {
    * sufficient (no scope gate). Mirrors the REST `read`-scope posture when populated.
    */
   requiredScopes: string[];
+  /**
+   * The JWS `alg` allowlist enforced during signature verification (RFC 9068 / OAuth 2.1 alg
+   * pinning). A token whose header `alg` is not in this list is rejected before signature math —
+   * closing algorithm-substitution within the key's applicable set. Defaults to
+   * {@link MCP_DEFAULT_ALGORITHMS} (`RS256`).
+   */
+  algorithms: string[];
 }
 
 /** Strip a single trailing slash for canonical-URI consistency (spec guidance). */
@@ -66,6 +83,8 @@ export interface McpAuthEnv {
   MCP_OAUTH_AUDIENCE?: string;
   MCP_OAUTH_SCOPES_SUPPORTED?: string;
   MCP_OAUTH_REQUIRED_SCOPES?: string;
+  /** JWS alg allowlist for token verification (comma/space list); defaults to RS256. */
+  MCP_OAUTH_ALGORITHMS?: string;
   /** Public base URL of the deployment; used to derive the canonical resource when no audience is set. */
   PUBLIC_API_BASE_URL?: string;
 }
@@ -100,6 +119,7 @@ export function loadMcpAuthConfig(env: McpAuthEnv = process.env): McpAuthConfig 
 
   const scopesSupported = splitList(env.MCP_OAUTH_SCOPES_SUPPORTED);
   const requiredScopes = splitList(env.MCP_OAUTH_REQUIRED_SCOPES ?? MCP_READ_SCOPE);
+  const algorithms = splitList(env.MCP_OAUTH_ALGORITHMS);
 
   return {
     resource,
@@ -107,5 +127,6 @@ export function loadMcpAuthConfig(env: McpAuthEnv = process.env): McpAuthConfig 
     jwksUri: env.MCP_OAUTH_JWKS_URI?.trim() || undefined,
     scopesSupported: scopesSupported.length > 0 ? scopesSupported : [MCP_READ_SCOPE],
     requiredScopes,
+    algorithms: algorithms.length > 0 ? algorithms : [...MCP_DEFAULT_ALGORITHMS],
   };
 }

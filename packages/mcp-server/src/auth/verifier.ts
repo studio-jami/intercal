@@ -22,7 +22,7 @@ import { InvalidTokenError } from '@modelcontextprotocol/sdk/server/auth/errors.
 import type { OAuthTokenVerifier } from '@modelcontextprotocol/sdk/server/auth/provider.js';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { createRemoteJWKSet, type JWTPayload, type JWTVerifyGetKey, jwtVerify } from 'jose';
-import type { McpAuthConfig } from './config.js';
+import { MCP_DEFAULT_ALGORITHMS, type McpAuthConfig } from './config.js';
 
 /** Default RFC 8414 JWKS location relative to an issuer when none is configured explicitly. */
 function deriveJwksUri(issuer: string): string {
@@ -50,6 +50,7 @@ export class JwksTokenVerifier implements OAuthTokenVerifier {
   private readonly jwks: JWTVerifyGetKey;
   private readonly issuer: string;
   private readonly audience: string;
+  private readonly algorithms: string[];
 
   /**
    * @param config resolved resource-server config (issuer + audience + JWKS URI).
@@ -62,6 +63,11 @@ export class JwksTokenVerifier implements OAuthTokenVerifier {
     if (!issuer) throw new Error('JwksTokenVerifier requires at least one authorization server.');
     this.issuer = issuer;
     this.audience = config.resource;
+    // Pin the accepted JWS algorithms. Without this, `jose` accepts ANY alg the resolved key
+    // supports (e.g. an RSA JWKS key also satisfies PS256/PS384/PS512), widening the attack surface
+    // to algorithm substitution. RFC 9068 / OAuth 2.1 want the RS to constrain this explicitly.
+    this.algorithms =
+      config.algorithms.length > 0 ? config.algorithms : [...MCP_DEFAULT_ALGORITHMS];
     this.jwks = keyResolver ?? createRemoteJWKSet(new URL(config.jwksUri ?? deriveJwksUri(issuer)));
   }
 
@@ -71,6 +77,7 @@ export class JwksTokenVerifier implements OAuthTokenVerifier {
       // `jwtVerify` enforces signature (against the JWKS), `iss`, `aud`, and time claims. Audience
       // pinning here is the RFC 8707 / spec MUST: a token whose `aud` is not this resource is rejected.
       ({ payload } = await jwtVerify(token, this.jwks, {
+        algorithms: this.algorithms,
         issuer: this.issuer,
         audience: this.audience,
         clockTolerance: 5,

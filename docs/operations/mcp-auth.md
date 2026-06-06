@@ -40,6 +40,11 @@ handling (`packages/mcp-server/src/web.ts`):
   itself depends on; no hand-rolled crypto):
   - **Signature** verified against the AS's published **JWKS** (RFC 7517), fetched + cached by
     `jose.createRemoteJWKSet` (public keys only; the resource server holds no signing key).
+  - **Algorithm** pinned to an explicit allowlist (`MCP_OAUTH_ALGORITHMS`, default `RS256`). The
+    token's header `alg` MUST be in the list or it is rejected before signature math. This closes
+    algorithm-substitution: without it, `jose` accepts any alg the resolved JWKS key supports (an RSA
+    key also satisfies `PS256/PS384/PS512`). `alg: none` is never accepted. Widen the list only if
+    your AS signs with a different asymmetric alg (e.g. `ES256`).
   - **Issuer** (`iss`) pinned to the configured AS.
   - **Audience** (`aud`) pinned to this server's canonical resource identifier — the central spec
     MUST (**RFC 8707** audience binding / RFC 9068): a token not issued for this resource is rejected.
@@ -111,6 +116,7 @@ MCP_OAUTH_AUDIENCE=https://<domain>/api/mcp   # canonical resource URI (token au
 MCP_OAUTH_JWKS_URI=https://<as>/…/jwks.json   # optional; defaults to <issuer>/.well-known/jwks.json
 MCP_OAUTH_SCOPES_SUPPORTED=read               # optional; advertised in PRM (default: read)
 MCP_OAUTH_REQUIRED_SCOPES=read                # optional; scope gate (default: read; empty = no gate)
+MCP_OAUTH_ALGORITHMS=RS256                     # optional; pinned JWS alg allowlist (default: RS256)
 ```
 
 Any OAuth 2.1 / OIDC AS that issues **RS256 JWT access tokens** with the correct `iss`/`aud`/`exp`
@@ -138,13 +144,15 @@ a local key set standing in for the AS — no live AS or network needed; never p
 node scripts/dev/verify-mcp-auth.mjs        # needs DATABASE_URL (env or .env)
 ```
 
-It asserts (live, 7 checks): auth-disabled initialize / tools-list / tools-call still work
+It asserts (live, 8 checks): auth-disabled initialize / tools-list / tools-call still work
 (anonymous); and auth-enabled PRM document resolves, no-token → 401 + `WWW-Authenticate`,
-wrong-audience token → 401 (RFC 8707), valid token → `tools/call` authorized.
+wrong-audience token → 401 (RFC 8707), a validly-signed token whose `alg` is outside the allowlist
+(PS256 vs the RS256 default) → 401 (algorithm pinning), valid token → `tools/call` authorized.
 
-Unit/integration tests: `packages/mcp-server/src/auth/auth.test.ts` (config seam, PRM, gate
-401/403/anon/authorized, real JWT signature/issuer/audience/expiry) and `web.test.ts` (gate wired
-into the handler). Existing initialize/tools-list/unknown-tool tests confirm the surface is
+Unit/integration tests: `packages/mcp-server/src/auth/auth.test.ts` (config seam incl. the alg
+allowlist, PRM, gate 401/403/anon/authorized, real JWT signature/issuer/audience/expiry, and
+algorithm pinning — a validly-signed out-of-allowlist token is rejected) and `web.test.ts` (gate
+wired into the handler). Existing initialize/tools-list/unknown-tool tests confirm the surface is
 unchanged in disabled mode.
 
 The anonymous MCP surface (`node scripts/dev/verify-mcp.mjs <url>`) continues to work unchanged when

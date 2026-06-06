@@ -272,6 +272,14 @@ The first proof consumes the same adapters, provenance rules, and public query p
   execution, ops scripts, Actions/Cloud Run controls, resource-budget and pipeline runbooks,
   related Python tests, Workstream 3 roadmap status, and changelog. Next coordinator action: poll
   in short intervals, record result, then dispatch mandatory Workstream 3 pass 2 after pass 1 lands.
+- 2026-06-06T13:12:00-04:00 — Workstream 3 pass 1 returned complete. Commit:
+  `5a34a4aba3859017518a677cc93d753e4eb52bb5` (`feat(pipeline): add bounded historical backfill
+  execution`), pushed to `origin/main`. Changed files: pipeline CLI/run, ingest cursor scoping,
+  Actions workflow, operations docs, resource budget, active roadmap, changelog, and focused tests.
+  Verification reported: `pnpm py:test services/pipeline services/ingest`, `pnpm py:lint`, `pnpm
+  py:typecheck`, `git diff --check`, and changed-file secret scan passed. Not run: live Neon/Cloud
+  Run/Actions backfill and `pnpm ops:health`. Next coordinator action: dispatch mandatory
+  Workstream 3 pass 2 with fresh context, including non-LLM budget accounting gap review.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 

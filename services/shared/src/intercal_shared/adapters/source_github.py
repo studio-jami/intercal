@@ -38,6 +38,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from intercal_shared.ports.source import RawDocument, SourceFetchError, SourceRateLimitError
+from intercal_shared.ssrf import SsrfError, create_guarded_client, resolve_and_validate
 
 _log = logging.getLogger(__name__)
 
@@ -98,18 +99,27 @@ class GitHubReleasesAdapter:
             if http_client is not None and isinstance(http_client, httpx.AsyncClient):
                 # Borrowed client: do NOT mutate its headers (that would leak
                 # our auth/version headers into other adapters sharing it).
-                # GitHub headers are passed per-request instead.
+                # GitHub headers are passed per-request instead.  A borrowed
+                # client (e.g. a test MockTransport) is trusted as-is; the SSRF
+                # guard still pre-validates the configured base URL below.
                 client = http_client
                 owns_client = False
             else:
-                client = httpx.AsyncClient(
-                    headers=headers,
-                    timeout=30.0,
-                    follow_redirects=True,
-                )
+                # Own client: IP-pinned + scheme-allowlisted + no auto-redirects
+                # via the SSRF guard, so an operator/user-configured github_api_url
+                # cannot point the fetcher at an internal/metadata address.
+                client = create_guarded_client(headers=headers)
                 owns_client = True
 
             api_url = str(adapter_config.get("github_api_url", _DEFAULT_GITHUB_API)).rstrip("/")
+
+            # SSRF guard: validate the configured API base URL before any fetch.
+            try:
+                resolve_and_validate(api_url)
+            except SsrfError as exc:
+                raise SourceFetchError(
+                    f"GitHub adapter: configured github_api_url blocked by SSRF policy: {exc}"
+                ) from exc
             include_pre = str(adapter_config.get("include_prereleases", "false")).lower() == "true"
             per_page = min(int(str(adapter_config.get("per_page", "30"))), 100)
 

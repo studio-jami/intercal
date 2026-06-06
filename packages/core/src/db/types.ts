@@ -150,6 +150,9 @@ export interface SourceDocumentsTable {
   cleaned_text: string | null;
   document_type: string | null;
   redistribution_allowed: boolean;
+  // Source-policy snapshot (migration 0025): when false, no derived snippet/summary of the body
+  // may be emitted (citation is still allowed unless citation_only also restricts it).
+  summary_allowed: boolean;
   citation_only: boolean;
 }
 

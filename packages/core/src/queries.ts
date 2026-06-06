@@ -293,6 +293,24 @@ export interface EvidenceParams {
   limit?: number;
 }
 
+/** The source-policy fields that gate how much of a document may be exposed in a response. */
+export interface DocumentPolicy {
+  citation_only: boolean;
+  summary_allowed: boolean;
+}
+
+/**
+ * Source-policy gate for emitting a derived body snippet (Plan 04 W2). A snippet is a derived
+ * summary of the source body, so it is permitted only when the source is NOT `citation_only`
+ * (citation_only ⇒ cite URL/title, never the body) AND `summary_allowed` is true (a source may
+ * permit citation yet forbid derived summaries). Pure + exported so the policy is unit-testable
+ * independent of the DB. When this returns false, callers fall back to citation metadata (title),
+ * which carries no body text.
+ */
+export function bodySnippetAllowed(policy: DocumentPolicy): boolean {
+  return !policy.citation_only && policy.summary_allowed;
+}
+
 export async function searchEvidence(
   db: Db,
   params: EvidenceParams,
@@ -309,9 +327,10 @@ export async function searchEvidence(
 
   const hits = rows.map((row) => {
     const titleHit = row.title?.toLowerCase().includes(params.query.toLowerCase()) ?? false;
-    // Respect source policy: no body snippet for citation-only documents.
+    // Respect source policy before emitting any derived body text (see `bodySnippetAllowed`).
+    // When body exposure is not allowed we fall back to the title (citation metadata, no body).
     let snippet = '';
-    if (!row.citation_only && row.cleaned_text) {
+    if (bodySnippetAllowed(row) && row.cleaned_text) {
       const idx = row.cleaned_text.toLowerCase().indexOf(params.query.toLowerCase());
       const start = idx >= 0 ? Math.max(0, idx - 80) : 0;
       snippet = row.cleaned_text.slice(start, start + 240).trim();

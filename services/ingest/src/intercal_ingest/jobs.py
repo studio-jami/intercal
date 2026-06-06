@@ -84,7 +84,8 @@ async def ingest_source(
     # ── 1. Load source row ───────────────────────────────────────────────────
     source_row = await pool.fetchrow(
         "SELECT id, slug, adapter_name, adapter_config, is_active, is_paused, "
-        "       redistribution_allowed, citation_only, rate_limit_requests_per_minute "
+        "       redistribution_allowed, summary_allowed, citation_only, "
+        "       rate_limit_requests_per_minute "
         "FROM sources WHERE id = $1",
         uuid.UUID(source_id),
     )
@@ -110,6 +111,7 @@ async def ingest_source(
         else {}
     )
     redistribution_allowed: bool = bool(source_row["redistribution_allowed"])
+    summary_allowed: bool = bool(source_row["summary_allowed"])
     citation_only: bool = bool(source_row["citation_only"])
 
     # ── 2. Look up adapter ────────────────────────────────────────────────────
@@ -184,14 +186,16 @@ async def ingest_source(
                         source_id, ingestion_run_id,
                         content_hash, external_id, url, title, language,
                         published_at, cleaned_text, content_length,
-                        document_type, redistribution_allowed, citation_only,
+                        document_type, redistribution_allowed, summary_allowed,
+                        citation_only,
                         metadata
                     ) VALUES (
                         $1, $2,
                         $3, $4, $5, $6, $7,
                         $8, $9, $10,
                         $11, $12, $13,
-                        $14::jsonb
+                        $14,
+                        $15::jsonb
                     )
                     ON CONFLICT (content_hash) DO NOTHING
                     RETURNING id
@@ -208,6 +212,7 @@ async def ingest_source(
                     content_length,
                     _infer_document_type(doc),
                     redistribution_allowed,
+                    summary_allowed,
                     citation_only,
                     json.dumps(doc_metadata),
                 )

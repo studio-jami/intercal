@@ -42,6 +42,7 @@ export {
 } from './errors.js';
 export type {
   DeltaParams,
+  DocumentPolicy,
   EntityParams,
   EvidenceParams,
   FreshnessParams,
@@ -49,6 +50,7 @@ export type {
   VerifyClaimParams,
 } from './queries.js';
 export {
+  bodySnippetAllowed,
   getDelta,
   getEntity,
   getFreshness,

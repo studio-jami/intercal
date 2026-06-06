@@ -41,6 +41,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from intercal_shared.ports.source import RawDocument, SourceFetchError, SourceRateLimitError
+from intercal_shared.ssrf import SsrfError, create_guarded_client, resolve_and_validate
 
 _log = logging.getLogger(__name__)
 
@@ -83,13 +84,14 @@ class WikidataChangesAdapter:
 
         try:
             if http_client is not None and isinstance(http_client, httpx.AsyncClient):
+                # A borrowed client (e.g. a test MockTransport) is trusted as-is;
+                # the SSRF guard still pre-validates the configured URLs below.
                 client = http_client
             else:
-                client = httpx.AsyncClient(
-                    headers={"User-Agent": _USER_AGENT},
-                    timeout=30.0,
-                    follow_redirects=True,
-                )
+                # Own client: IP-pinned + scheme-allowlisted + no auto-redirects
+                # (the SSRF guard re-validates every connection it opens, closing
+                # the DNS-rebinding window for operator/user-configured URLs).
+                client = create_guarded_client(headers={"User-Agent": _USER_AGENT})
                 owns_client = True
 
             api_url = str(adapter_config.get("wikidata_api_url", _DEFAULT_WIKIDATA_API))
@@ -99,6 +101,18 @@ class WikidataChangesAdapter:
             wp_summary_url = str(
                 adapter_config.get("wikipedia_summary_url", _DEFAULT_WIKIPEDIA_SUMMARY)
             )
+
+            # SSRF guard: validate the configured endpoints before any fetch so a
+            # malicious adapter_config URL (pointing at localhost / 169.254.169.254
+            # / an internal host) is rejected up front, not after a request fires.
+            try:
+                resolve_and_validate(api_url)
+                if fetch_wp:
+                    resolve_and_validate(wp_summary_url)
+            except SsrfError as exc:
+                raise SourceFetchError(
+                    f"Wikidata adapter: configured URL blocked by SSRF policy: {exc}"
+                ) from exc
 
             params: dict[str, str | int] = {
                 "action": "query",

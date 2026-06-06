@@ -586,6 +586,7 @@ def _make_source_row(
         "is_active": True,
         "is_paused": False,
         "redistribution_allowed": True,
+        "summary_allowed": True,
         "citation_only": False,
         "rate_limit_requests_per_minute": None,
     }

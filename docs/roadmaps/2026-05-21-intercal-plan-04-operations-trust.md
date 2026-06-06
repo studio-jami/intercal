@@ -139,9 +139,27 @@ Suggested verification:
 
 Goal: Enforce storage, citation, redistribution, and reliability policy per source.
 
+Status: [x] **Complete** (2026-06-06). Source policy is enforced end-to-end and every
+externally-influenced outbound fetch is SSRF-guarded. Built on Plan 02 W1 (sources already carry
+`redistribution_allowed` / `citation_only` and raw archival was already gated). This pass:
+(1) added the reusable **SSRF fetch guard** `services/shared/intercal_shared/ssrf.py` (scheme
+allowlist; resolve-then-validate all A/AAAA; block loopback / `0.0.0.0` / cloud-metadata
+`169.254.169.254` / link-local / RFC1918 / IPv6 ULA `fc00::/7` / `fe80::/10` / multicast /
+reserved; unwrap IPv4-mapped/6to4/Teredo IPv6; canonicalise decimal/octal/hex encodings; **pin the
+connection to the validated IP** to defeat DNS rebinding; **re-validate every redirect hop**;
+timeouts + body-size cap) and wired it into the Wikidata + GitHub source adapters (pre-validate
+configured URLs; own clients built via `create_guarded_client`);
+(2) closed the `summary_allowed` enforcement gap — snapshotted onto `source_documents`
+(migration `0025`), written at ingest, and honored in response assembly via the pure
+`bodySnippetAllowed` gate (citation_only ⇒ title-only; summary_allowed=false ⇒ title-only).
+Reliability scoring + health history already exist (Plan 02 `score_source_health` +
+`ingestion_runs`). Durable doc: `docs/operations/source-policy.md`. Live-verified: a real
+`api.github.com` fetch succeeds through the IP-pinning client while metadata/loopback/private are
+blocked at the socket boundary.
+
 Depends on:
 
-- [ ] Plan 02 source registry.
+- [x] Plan 02 source registry.
 
 Enables:
 
@@ -155,26 +173,35 @@ Repo guidance:
 Primary areas:
 
 - `services/ingest`
-- `packages/api`
-- `packages/mcp-server`
+- `services/shared` (source adapters + SSRF guard)
+- `packages/core` (response-assembly policy gate)
+- `db/` (source policy snapshot)
 - `docs/operations/source-policy.md`
 
 Implementation tasks:
 
-- [ ] Add source policy enforcement in ingestion and response assembly.
-- [ ] Add source allowlist controls.
-- [ ] Add source reliability scoring.
-- [ ] Add source health history.
-- [ ] Add citation-origin/citation-laundering detection foundation.
+- [x] Add source policy enforcement in ingestion and response assembly. (Raw-archival +
+      citation_only gating in `ingest_source`; `summary_allowed` snapshot + `bodySnippetAllowed`
+      gate in the query layer.)
+- [x] Add SSRF protection for fetched (operator/future user-submitted) URLs. (`ssrf.py` guard +
+      adapter wiring; user-submission endpoint left as a clean seam — Plan 04 W4 / Plan 06.)
+- [x] Source reliability scoring + health history. (Already live from Plan 02 W1:
+      `score_source_health` writes `sources.reliability_score`; `ingestion_runs` is the history.)
+- [ ] Add source allowlist controls. (Deferred: belongs with the operator/admin surface — Plan 06.)
+- [ ] Add citation-origin/citation-laundering detection foundation. (Deferred: a later trust pass
+      once cross-source claim corroboration data exists; not faked here.)
 
 Exit criteria:
 
-- [ ] Restricted sources can be cited or summarized only according to policy.
+- [x] Restricted sources can be cited or summarized only according to policy. (Truth table proven
+      in `source-policy.test.ts`; ingestion gates raw/full-text storage.)
+- [x] Externally-influenced fetches are SSRF-safe against the full hostile matrix while legitimate
+      public sources still fetch.
 
 Suggested verification:
 
-- `uv run pytest services/ingest/tests -k source_policy`
-- `pnpm test -- source-policy`
+- `uv run pytest services/shared/tests/test_ssrf.py` (SSRF hostile matrix + legit fetch + adapter)
+- `pnpm --filter @intercal/core test` (`source-policy.test.ts` — body-exposure gate)
 
 ## Workstream 3: Audit Events
 

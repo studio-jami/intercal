@@ -307,6 +307,14 @@ The first proof consumes the same adapters, provenance rules, and public query p
   ingest cursor/run semantics, ops scripts/workflows, operations docs, resource budget, related
   Python tests, Workstream 3 roadmap status, and changelog. Next coordinator action: poll in short
   intervals, record result, then gate the pass 4 commit.
+- 2026-06-06T14:02:00-04:00 — Workstream 3 pass 4 strict quiet audit returned quiet. Fresh
+  context rechecked `intercal-pipeline backfill`, source allowlists and source-class/adapter
+  filters, date-window overrides, `max_documents`/`max_sources`, dry-run behavior, cursor scoping
+  across alternating windows, idempotent document/fact dedup, Actions and Cloud Run controls,
+  pause/resume/rollback docs, source HTTP usage accounting, budget guards, queue accounting
+  limitation wording, and overclaiming against the live code and tests. No code, workflow, ops
+  script, durable-doc, changelog, or test change is required. Workstream 3 is closed as quiet with
+  the explicit queue-command accounting limitation documented.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 
@@ -512,9 +520,15 @@ command accounting remains explicitly unavailable from this path because backfil
 `QueuePort` and the queue adapters do not emit real command counts; do not infer Upstash usage from
 backfill runs.
 
-Workstream 3 is closed after pass 3 with one explicit accounting limitation: queue command usage must
-come from real provider telemetry or a later queue-port instrumentation change, not from inferred or
-zero-filled backfill metrics.
+Pass 4 closeout note: the strict quiet audit found no remaining meaningful backfill execution or
+budgeting gap inside the Workstream 3 boundary. `intercal-pipeline backfill` uses the normal pipeline
+path, selects active non-paused sources through allowlists and source filters, passes bounded
+date-window overrides without mutating source rows, supports dry-run selection review, resumes
+matching scoped cursors across alternating windows, and relies on content-hash plus stage-level
+idempotency for repeat runs. Actions and Cloud Run invoke the same CLI with documented caps and
+operator controls. Queue command usage remains the one explicit accounting limitation: it must come
+from real provider telemetry or a later queue-port instrumentation change, not from inferred or
+zero-filled backfill metrics. Workstream 3 is closed as quiet.
 
 Suggested verification:
 

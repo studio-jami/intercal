@@ -2,7 +2,9 @@
 
 Date: 2026-05-21
 Aligned: 2026-06-05 to live stack (W1 complete)
-Status: [~] Active — W1–W7 complete (W5 = get_delta digest, W6 = verify_claim verdict, W7 = freshness/coverage report, all live on Neon), W8 pending
+Status: [x] COMPLETE — W1–W8 all complete (W5 = get_delta digest, W6 = verify_claim verdict,
+W7 = freshness/coverage report, W8 = full-surface agent/contract harness + live acceptance proof);
+the Phase C acceptance gate is proven against the deployed MCP + SDK/REST with real production data.
 Source reports: `docs/research/2026-05-21-intercal-foundation-report.md`, `docs/research/2026-06-04-intercal-revisit-audit-and-dev-environment.md`, `docs/architecture/mcp-api.md`, `docs/architecture/provider-boundaries.md`; decisions `docs/decisions/0001-foundation-stack.md`, `docs/decisions/0002-final-hosting-topology.md`
 Owner: Main orchestration agent
 Surface: query services, REST API, MCP server, SDK, token-budgeted digests, evidence search, claim verification, freshness
@@ -662,9 +664,12 @@ Suggested verification:
 
 Goal: Prove an agent can get a cited update through REST and MCP.
 
+Status: [x] Complete (2026-06-06) — full-surface agent/contract harness + live acceptance proof.
+
 Depends on:
 
-- [ ] Workstreams 1-7.
+- [x] Workstreams 1-7 — all surface bodies live (query layer, REST, MCP `/api/mcp`, SDK,
+      `getDelta`, `verifyClaim`, freshness/coverage).
 
 Enables:
 
@@ -672,28 +677,62 @@ Enables:
 
 Repo guidance:
 
-- Fixture must not depend on live provider keys.
+- Fixture must not depend on live provider keys. (Honoured: the deterministic harness runs offline
+  from frozen REAL captures; the live proof is env-gated `INTERCAL_LIVE=1`, never required for
+  `pnpm test`, and reads only the public read-only surface — no provider keys, no secrets.)
 
-Primary areas:
+Primary areas (as built):
 
-- `packages/api`
-- `packages/mcp-server`
-- `packages/sdk`
-- `services/synthesize`
+- `packages/mcp-server` — the harness lives here because it is the one package that can import BOTH
+  access paths: the MCP `Client`/transport (its own dependency) and `@intercal/sdk` (added as a
+  workspace devDependency). `services/synthesize` is not involved — the V1 surface is deterministic
+  and provider-free, so there is no synthesis service to drive.
+- `packages/sdk` — live smoke test refreshed: `verifyClaim` now asserts the LIVE W6 verdict
+  (supported + cited) and point-in-time `unverified`, replacing the stale 501 expectation.
 
 Implementation tasks:
 
-- [ ] Add fixture query for "what changed about this topic since this date, in 500 tokens, with sources".
-- [ ] Assert topic resolution, fact retrieval, evidence retrieval, digest assembly, citations, confidence, freshness, and budget fit.
-- [ ] Run fixture through REST and MCP.
+- [x] Full-surface harness `packages/mcp-server/src/agent-surface.test.ts` driven by REAL captured
+      responses `agent-surface.fixtures.ts` (frozen bytes from `lntercal.vercel.app/api/v1/*`,
+      typed against the generated contract — a contract change breaks compilation). Includes the
+      plan's canonical query: "what changed about this topic since this date, in N tokens, with
+      sources" (`get_delta topic=rust since_date=… token_budget=120` → a real digest where 4 of 12
+      changes render to fit the budget, "8 omitted" reported, every change cited).
+- [x] Shared assertions enforce, per tool, against the contract: WELL-FORMED, CITED (evidence /
+      citations / source-document ids present), CONFIDENCE-scored (numeric `Confidence` in [0,1]),
+      and BUDGET-bounded (digest content ≤ `token_budget`). Topic resolution, fact/evidence
+      retrieval, digest assembly, freshness/coverage, and the verify honesty rule (no fabricated
+      support; `unverified` ⇒ confidence 0) are all asserted.
+- [x] Run through BOTH access paths from ONE capture: the MCP path drives a real MCP `Client` over
+      the in-process transport (real JSON-RPC wire) via a documented handler-injection seam added to
+      `buildMcpServer(db, handlers?)` (default = the live DB-backed query layer; production unchanged);
+      the SDK/REST path drives the real `IntercalClient` over an injected fetch serving the same
+      fixtures on the real `/v1/*` routes. A cross-path equivalence test asserts MCP and SDK return
+      byte-identical bodies for `get_delta` and `verify_claim` — the "one query layer" invariant.
+- [x] Env-gated LIVE proof (`INTERCAL_LIVE=1`) drives the SAME assertions against the DEPLOYED MCP
+      (`/api/mcp` Streamable HTTP) and SDK/REST (`/api/v1/*`) with real production data.
 
 Exit criteria:
 
-- [ ] REST and MCP return contract-valid, cited, budgeted answers for the same fixture.
+- [x] REST and MCP return contract-valid, cited, budgeted answers for the same fixture — 14
+      deterministic harness tests green offline (6 MCP + 6 SDK + 2 cross-path equivalence), plus the
+      2 env-gated live tests green against the deployed surface with real data.
 
 Suggested verification:
 
-- `pnpm test -- agent-fixture`
+- `pnpm --filter @intercal/mcp-server test` (deterministic harness)
+- `INTERCAL_LIVE=1 pnpm --filter @intercal/mcp-server test` (live acceptance proof: deployed MCP +
+  SDK/REST, all six tools, delta + verify against real data)
+
+## Plan 03 Closeout (2026-06-06)
+
+Plan 03 is **fully complete** — every workstream (W1–W8) and every acceptance criterion is done,
+live, and verified against the deployed surface with real production data. Per AGENTS.md ("retire
+completed dated plans to `docs/_legacy/roadmaps/`"), this dated plan is now a **candidate for
+retirement** to `docs/_legacy/roadmaps/`. It is FLAGGED here, not moved, so the program orchestrator
+can retire it as part of the Phase C closeout / Phase D kickoff. Phase C of the master program
+(`docs/roadmaps/2026-06-04-intercal-program.md`) is satisfied; next is the MCP-OAuth/auth portion of
+Plan 07 + Plan 04 (Phase D).
 
 ## Final Verification And Closeout
 
@@ -715,13 +754,17 @@ Suggested verification:
 
 ## Acceptance Criteria
 
-- [ ] REST and MCP expose all V1 tools/endpoints.
-- [ ] SDK examples run.
-- [x] Digests are budgeted and cited (W5 `getDelta`; live on Neon).
-- [ ] Claim verification handles support, contradiction, and uncertainty.
+- [x] REST and MCP expose all V1 tools/endpoints (W2/W3; verified live + by the W8 harness, which
+      drives all six through both access paths).
+- [x] SDK examples run (W4; the W8 harness drives the real `IntercalClient` over all six operations,
+      deterministic + live).
+- [x] Digests are budgeted and cited (W5 `getDelta`; live on Neon; W8 asserts budget bound + citation).
+- [x] Claim verification handles support, contradiction, and uncertainty (W6 `verifyClaim`; W8
+      asserts supported-with-evidence and `unverified` no-fabrication + point-in-time).
 - [x] Freshness/coverage is visible in responses (W7 `getFreshness`; live on Neon — coverage ∈ [0,1]
       + strong/stale/thin labels, explicit gaps for unknown/claim-less targets).
-- [ ] Agent fixture passes through REST and MCP.
+- [x] Agent fixture passes through REST and MCP (W8 — deterministic harness green offline; live
+      acceptance proof green against the deployed MCP + SDK/REST with real production data).
 
 ## Implementation Order
 

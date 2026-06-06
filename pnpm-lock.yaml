@@ -216,6 +216,9 @@ importers:
         specifier: 'catalog:'
         version: 1.29.0(zod@4.4.3)
     devDependencies:
+      '@intercal/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.0

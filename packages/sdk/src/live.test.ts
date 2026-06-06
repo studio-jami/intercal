@@ -5,11 +5,12 @@
  * offline-safe. Run it with:
  *   INTERCAL_LIVE=1 pnpm --filter @intercal/sdk test
  *
- * It asserts the contract end-to-end: a real entity read returns cited facts, and the two deferred
- * operations (delta/verify) surface a typed `IntercalNotImplementedError` rather than faking a body.
+ * It asserts the contract end-to-end: real reads return cited facts, and the two synthesis
+ * operations (delta W5 / verify W6 — now live) return cited, confidence-scored, budget-bounded
+ * results against production data.
  */
 import { describe, expect, it } from 'vitest';
-import { IntercalClient, IntercalNotImplementedError } from './index.js';
+import { IntercalClient } from './index.js';
 
 const LIVE = process.env.INTERCAL_LIVE === '1';
 const BASE = process.env.INTERCAL_BASE_URL ?? 'https://lntercal.vercel.app/api';
@@ -51,9 +52,26 @@ describe.skipIf(!LIVE)('IntercalClient — live V1 surface', () => {
     expect(res.confidence.method).toBe('aggregate_extraction');
   });
 
-  it('verifyClaim surfaces the deferred 501 as a typed error', async () => {
-    const err = await client.verifyClaim({ claim_text: 'Rust 1.96 exists' }).catch((e) => e);
-    expect(err).toBeInstanceOf(IntercalNotImplementedError);
-    expect(err.status).toBe(501);
+  it('verifyClaim returns a cited verdict against live data (Plan 03 W6, live)', async () => {
+    const res = await client.verifyClaim({ claim_text: 'Rust has version 1.96.0' });
+    expect(res.claimText).toBeTruthy();
+    expect(['supported', 'partially_supported', 'contradicted', 'unverified']).toContain(
+      res.verdict,
+    );
+    expect(typeof res.confidence.score).toBe('number');
+    // A `supported` verdict must rest on real cited supporting evidence — never fabricated.
+    if (res.verdict === 'supported') {
+      expect(res.supportingEvidence.length).toBeGreaterThan(0);
+      expect(res.supportingEvidence[0]?.sourceDocumentId).toBeTruthy();
+    }
+  });
+
+  it('verifyClaim is point-in-time correct: before the fact was recorded → unverified', async () => {
+    const res = await client.verifyClaim({
+      claim_text: 'Rust has version 1.96.0',
+      as_of_date: '2020-01-01T00:00:00Z',
+    });
+    expect(res.verdict).toBe('unverified');
+    expect(res.confidence.score).toBe(0);
   });
 });

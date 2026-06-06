@@ -28,6 +28,7 @@
     "@modelcontextprotocol/sdk": "catalog:"
   },
   "devDependencies": {
+    "@intercal/sdk": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

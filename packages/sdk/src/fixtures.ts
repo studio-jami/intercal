@@ -133,12 +133,14 @@ export const errorFixtures: {
     status: 404,
     body: { code: 'not_found', message: 'No entity found for "zzz-nonexistent-xyz-123"' },
   },
+  // 501 taxonomy mapping. The V1 synthesis bodies (get_delta W5, verify_claim W6) are now LIVE, so
+  // no current endpoint serves this — it remains the captured shape of the `not_implemented` code so
+  // the SDK's error mapping stays covered for any future deferred operation.
   not_implemented: {
     status: 501,
     body: {
       code: 'not_implemented',
-      message:
-        'Plan 03 — get_delta: token-budgeted digest synthesis over changed claims/entities since a date.',
+      message: 'Plan NN — <operation>: deferred body not yet implemented.',
     },
   },
   internal_error: {

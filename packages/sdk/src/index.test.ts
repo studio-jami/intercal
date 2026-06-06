@@ -139,7 +139,7 @@ describe('IntercalClient — error taxonomy', () => {
     expect(err.code).toBe('not_found');
   });
 
-  it('maps 501 → IntercalNotImplementedError for the deferred delta seam', async () => {
+  it('maps a 501 not_implemented body → IntercalNotImplementedError', async () => {
     const { status, body } = errorFixtures.not_implemented;
     const { impl } = stubFetch(status, body);
     const client = new IntercalClient({ baseUrl: BASE, fetch: impl });
@@ -148,7 +148,7 @@ describe('IntercalClient — error taxonomy', () => {
       .catch((e) => e);
     expect(err).toBeInstanceOf(IntercalNotImplementedError);
     expect(err.status).toBe(501);
-    expect(err.message).toContain('Plan 03');
+    expect(err.code).toBe('not_implemented');
   });
 
   it('maps 500 → IntercalServerError', async () => {

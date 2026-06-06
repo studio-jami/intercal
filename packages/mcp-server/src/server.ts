@@ -24,7 +24,13 @@ import {
 
 type ToolFn = (db: Db, params: Record<string, unknown>) => Promise<unknown>;
 
-const HANDLERS: Record<string, ToolFn> = {
+/**
+ * The per-tool dispatch table. Each entry is a thin call into the shared `@intercal/core` query
+ * layer — the SAME semantics the REST surface uses, so MCP and REST never diverge. Exported so a
+ * contract/agent harness can drive the real MCP wire path with deterministic, contract-shaped
+ * results without a live DB (see `agent-surface.test.ts`); production always uses these defaults.
+ */
+export const DEFAULT_HANDLERS: Record<string, ToolFn> = {
   get_delta: (db, p) => getDelta(db, p as unknown as DeltaParams),
   get_entity: (db, p) => getEntity(db, p as unknown as EntityParams),
   search_evidence: (db, p) => searchEvidence(db, p as unknown as EvidenceParams),
@@ -64,8 +70,14 @@ function toErrorResult(err: unknown): CallToolResult {
  * Stateless by construction: the server holds only the injected `db` handle and the static
  * tool registry — no per-session/per-connection state — so it is safe to instantiate one
  * server + transport per request on serverless (the Vercel `/api/mcp` mount does exactly this).
+ *
+ * `handlers` defaults to {@link DEFAULT_HANDLERS} (the live DB-backed query layer). It is an
+ * injection seam for the contract/agent harness only — production never passes it.
  */
-export function buildMcpServer(db: Db): Server {
+export function buildMcpServer(
+  db: Db,
+  handlers: Record<string, ToolFn> = DEFAULT_HANDLERS,
+): Server {
   const server = new Server(
     { name: 'intercal', version: '0.1.0' },
     {
@@ -90,7 +102,7 @@ export function buildMcpServer(db: Db): Server {
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (req): Promise<CallToolResult> => {
-    const fn = HANDLERS[req.params.name];
+    const fn = handlers[req.params.name];
     if (!fn) {
       return {
         content: [{ type: 'text', text: `invalid_request: unknown tool "${req.params.name}"` }],

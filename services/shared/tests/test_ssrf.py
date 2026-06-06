@@ -303,6 +303,204 @@ async def test_read_capped_rejects_oversized_body() -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Guarded-client body-size cap (enforced by the pinning transport on EVERY
+# response — not only when a caller remembers to use read_capped). These swap the
+# transport's inner network transport for a MockTransport so no socket is opened.
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _guarded_client_with_inner(handler: Any, policy: SsrfPolicy | None = None) -> Any:
+    """Build a guarded client whose pinning transport delegates to *handler*.
+
+    The pinning + validation logic still runs; only the final network hop is
+    replaced by a MockTransport so the cap/Content-Length logic is exercised
+    without a real socket.
+    """
+    import httpx
+    from intercal_shared.ssrf import DEFAULT_POLICY, create_guarded_client
+
+    client = create_guarded_client(policy or DEFAULT_POLICY)
+    client._transport._inner = httpx.MockTransport(handler)  # type: ignore[attr-defined]
+    return client
+
+
+async def test_guarded_client_caps_oversized_streamed_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A body larger than max_bytes (with no/lying Content-Length) trips the cap
+    on a buffered .aread()/.json()/.text read through a guarded client."""
+    import httpx
+    from intercal_shared.ssrf import SsrfPolicy
+
+    monkeypatch.setattr(
+        socket, "getaddrinfo", _fake_getaddrinfo({"public.example.com": ["93.184.216.34"]})
+    )
+    policy = SsrfPolicy(max_bytes=1000)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        # Stream chunks so total exceeds the cap; omit Content-Length so only the
+        # streaming cap can catch it (defeats a lying/absent Content-Length).
+        async def agen():  # type: ignore[no-untyped-def]
+            for _ in range(5):
+                yield b"x" * 400
+
+        # An async-iterable body makes httpx emit a streaming (no Content-Length)
+        # response, so the cap must catch it mid-stream.
+        return httpx.Response(200, content=agen())
+
+    client = _guarded_client_with_inner(handler, policy)
+    with pytest.raises(SsrfError) as exc:
+        await client.get("http://public.example.com/big")
+    await client.aclose()
+    assert exc.value.reason == "too_large"
+
+
+async def test_guarded_client_rejects_oversized_content_length(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An over-cap Content-Length is rejected up front, before the body is read."""
+    import httpx
+    from intercal_shared.ssrf import SsrfPolicy
+
+    monkeypatch.setattr(
+        socket, "getaddrinfo", _fake_getaddrinfo({"public.example.com": ["93.184.216.34"]})
+    )
+    policy = SsrfPolicy(max_bytes=1000)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, headers={"content-length": "999999"}, content=b"x" * 10)
+
+    client = _guarded_client_with_inner(handler, policy)
+    with pytest.raises(SsrfError) as exc:
+        await client.get("http://public.example.com/big")
+    await client.aclose()
+    assert exc.value.reason == "too_large"
+
+
+async def test_guarded_client_allows_within_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A body within the cap reads normally through a guarded client."""
+    import httpx
+
+    monkeypatch.setattr(
+        socket, "getaddrinfo", _fake_getaddrinfo({"public.example.com": ["93.184.216.34"]})
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"ok": True})
+
+    client = _guarded_client_with_inner(handler)
+    resp = await client.get("http://public.example.com/x")
+    assert resp.json() == {"ok": True}
+    await client.aclose()
+
+
+async def test_guarded_client_blocks_private_at_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The pinning transport itself validates: a host resolving to a private IP
+    is rejected before the (mock) network hop — the guard is on the connect path,
+    not only the pre-validate call."""
+    import httpx
+
+    monkeypatch.setattr(
+        socket, "getaddrinfo", _fake_getaddrinfo({"rebind.example.com": ["10.0.0.7"]})
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover - must not run
+        raise AssertionError("network hop reached for a blocked host")
+
+    client = _guarded_client_with_inner(handler)
+    with pytest.raises(SsrfError) as exc:
+        await client.get("http://rebind.example.com/")
+    await client.aclose()
+    assert exc.value.reason == "private"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Additional adversarial URL-shape vectors
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_userinfo_in_url_validates_real_host_not_userinfo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``http://expected.com@127.0.0.1/`` must validate the REAL host (127.0.0.1),
+    not the userinfo (expected.com). urlsplit puts only the host in .hostname."""
+    monkeypatch.setattr(
+        socket, "getaddrinfo", _fake_getaddrinfo({"expected.com": ["93.184.216.34"]})
+    )
+    with pytest.raises(SsrfError) as exc:
+        resolve_and_validate("http://expected.com@127.0.0.1/")
+    assert exc.value.reason == "loopback"
+
+
+def test_userinfo_with_public_host_uses_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Userinfo present but the real host is public → validated on the host."""
+    monkeypatch.setattr(
+        socket, "getaddrinfo", _fake_getaddrinfo({"real.example.com": ["93.184.216.34"]})
+    )
+    target = resolve_and_validate("https://user:pass@real.example.com/path")
+    assert target.host == "real.example.com"
+
+
+def test_dns_resolving_to_ipv4_mapped_ipv6_metadata_blocked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A hostname whose AAAA record is an IPv4-mapped IPv6 wrapping the metadata
+    address must be unwrapped and blocked."""
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        _fake_getaddrinfo({"sneaky.example.com": ["::ffff:169.254.169.254"]}),
+    )
+    with pytest.raises(SsrfError) as exc:
+        resolve_and_validate("https://sneaky.example.com/")
+    assert exc.value.reason == "cloud_metadata"
+
+
+def test_overlong_octal_ipv4_canonicalised_and_blocked() -> None:
+    """Octal-padded loopback (``0177.0000.0000.0001``) canonicalises to 127.0.0.1."""
+    with pytest.raises(SsrfError) as exc:
+        resolve_and_validate("http://0177.0000.0000.0001/")
+    assert exc.value.reason == "loopback"
+
+
+def test_short_form_ipv4_decimal_blocked() -> None:
+    """Short-form ``127.1`` (libc expands to 127.0.0.1) is blocked."""
+    with pytest.raises(SsrfError) as exc:
+        resolve_and_validate("http://127.1/")
+    assert exc.value.reason == "loopback"
+
+
+def test_invalid_port_rejected() -> None:
+    with pytest.raises(SsrfError) as exc:
+        resolve_and_validate("http://example.com:notaport/")
+    assert exc.value.reason == "port"
+
+
+async def test_guarded_get_rejects_non_http_redirect_scheme(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A 302 Location with a non-http(s) scheme (file://) must be rejected at the
+    redirect hop, not followed."""
+    import httpx
+    from intercal_shared.ssrf import guarded_get
+
+    monkeypatch.setattr(
+        socket, "getaddrinfo", _fake_getaddrinfo({"public.example.com": ["93.184.216.34"]})
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(302, headers={"location": "file:///etc/passwd"})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    with pytest.raises(SsrfError) as exc:
+        await guarded_get(client, "http://public.example.com/start")
+    await client.aclose()
+    assert exc.value.reason == "scheme"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Adapter integration: malicious adapter_config URL is rejected before fetch
 # ──────────────────────────────────────────────────────────────────────────────
 

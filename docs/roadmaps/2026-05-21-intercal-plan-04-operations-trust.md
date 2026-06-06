@@ -157,6 +157,22 @@ Reliability scoring + health history already exist (Plan 02 `score_source_health
 `api.github.com` fetch succeeds through the IP-pinning client while metadata/loopback/private are
 blocked at the socket boundary.
 
+**Audit-2 (2026-06-06, second fresh-context pass):** adversarial SSRF-bypass hunt + source-policy
+e2e re-audit. One genuine gap fixed — the `max_bytes` body cap lived only in the standalone
+`read_capped` helper, which the adapters never call (they buffer via `client.get().json()`), so a
+hostile/huge configured endpoint could exhaust worker memory. Enforcement moved into the guarded
+client's pinning transport so the cap is automatic on **every** response (over-cap `Content-Length`
+rejected up front + a stream wrapper that trips mid-body on a lying/absent `Content-Length`). SSRF
+test matrix extended 41 → **52** (added: userinfo-in-URL validates the real host not the userinfo;
+DNS→IPv4-mapped-metadata; short-form/overlong-octal IPv4; invalid port; redirect→`file://` scheme;
+transport-level private block; streamed + Content-Length body caps; within-cap pass). No bypass
+found in scheme/redirect/encoding/userinfo/IPv6-embedding/DNS-rebinding vectors. Source policy
+confirmed honored end-to-end on both the Python store path (snapshot written at ingest) and the TS
+serve path (`bodySnippetAllowed` gates `searchEvidence`; `delta.ts`/`verify.ts` never read
+`cleaned_text`); **proven live** via `scripts/dev/verify-source-policy.mjs` (rolled-back txn on the
+prod Neon branch: permissive ⇒ body snippet, `summary_allowed=false`/`citation_only=true` ⇒
+title-only, no body leak; 0025 column live; 5/5).
+
 Depends on:
 
 - [x] Plan 02 source registry.
@@ -202,6 +218,8 @@ Suggested verification:
 
 - `uv run pytest services/shared/tests/test_ssrf.py` (SSRF hostile matrix + legit fetch + adapter)
 - `pnpm --filter @intercal/core test` (`source-policy.test.ts` — body-exposure gate)
+- `node --env-file=.env scripts/dev/verify-source-policy.mjs` (live snippet-gate proof against the
+  real DB; inserts probe rows in a rolled-back transaction — safe on prod, persists nothing)
 
 ## Workstream 3: Audit Events
 

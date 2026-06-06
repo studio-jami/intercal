@@ -92,8 +92,12 @@ The guard is aligned with the **OWASP SSRF Prevention Cheat Sheet**. It enforces
   `guarded_get()` follows them manually, **re-validating each `Location`** through the same policy up
   to a bounded hop count, so a validated public URL cannot 302 the fetcher to a private/metadata
   address.
-- **Timeouts & size caps** — per-request connect/read timeouts and a `max_bytes` body cap
-  (`read_capped`) so a hostile or pathological endpoint cannot hang a worker or exhaust memory.
+- **Timeouts & size caps** — per-request connect/read timeouts and a `max_bytes` body cap enforced
+  automatically by the guarded client's pinning transport on **every** response (an over-cap
+  `Content-Length` is rejected up front, and the response stream is wrapped so a lying/absent
+  `Content-Length` still trips the cap mid-body — covering the buffered `.json()`/`.text` reads the
+  adapters use), so a hostile or pathological endpoint cannot hang a worker or exhaust memory. The
+  standalone streaming `read_capped` helper remains for callers driving a borrowed client.
 
 ### Where it is wired
 

@@ -53,7 +53,7 @@ from __future__ import annotations
 import dataclasses
 import ipaddress
 import socket
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from urllib.parse import urlsplit
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -326,10 +326,15 @@ def create_guarded_client(
     - never auto-follows redirects (``follow_redirects=False`` is forced); use
       :func:`guarded_get` for redirect-following with per-hop re-validation, or
       handle 3xx explicitly;
-    - applies the policy's connect/read timeouts.
+    - applies the policy's connect/read timeouts;
+    - enforces the policy's ``max_bytes`` body-size cap on every response (a
+      too-large ``Content-Length`` is rejected up front and the stream is
+      wrapped so the cap also trips mid-body), so buffered ``.json()`` /
+      ``.text`` reads cannot exhaust memory.
 
-    ``headers`` and other ``httpx.AsyncClient`` kwargs are forwarded. Callers
-    must still bound response size via :func:`read_capped` / ``max_bytes``.
+    ``headers`` and other ``httpx.AsyncClient`` kwargs are forwarded. The
+    streaming :func:`read_capped` helper remains for callers driving a borrowed
+    (non-guarded) client.
 
     Raising on a borrowed/shared client is avoided by giving each guarded client
     its own pinning transport.
@@ -370,8 +375,40 @@ def _make_pinning_transport(policy: SsrfPolicy) -> httpx.AsyncBaseTransport:
     The class is defined here (not at module scope) because ``httpx`` is an
     optional dependency imported lazily; defining the subclass at call time keeps
     the import lazy while still giving callers a proper ``AsyncBaseTransport``.
+
+    The transport also enforces the policy's ``max_bytes`` body-size cap on
+    **every** response: a too-large ``Content-Length`` is rejected before the
+    body is read, and the response stream is wrapped so the cap also trips
+    *during* streaming (defeating a hostile endpoint that advertises a small
+    ``Content-Length`` but sends more). This makes the cap automatic for all
+    callers of a guarded client — no adapter has to remember to call
+    :func:`read_capped`.
     """
     import httpx
+
+    class _CappedByteStream(httpx.AsyncByteStream):
+        """Wrap an inner byte stream, raising :class:`SsrfError` past *max_bytes*."""
+
+        def __init__(self, inner: httpx.AsyncByteStream, max_bytes: int) -> None:
+            self._inner = inner
+            self._max_bytes = max_bytes
+
+        async def __aiter__(self):  # type: ignore[override]
+            total = 0
+            async for chunk in self._inner:
+                total += len(chunk)
+                if total > self._max_bytes:
+                    await self.aclose()
+                    raise SsrfError(
+                        f"response body exceeded {self._max_bytes} bytes",
+                        reason="too_large",
+                    )
+                yield chunk
+
+        async def aclose(self) -> None:
+            aclose = getattr(self._inner, "aclose", None)
+            if aclose is not None:
+                await aclose()
 
     class _PinningAsyncTransport(httpx.AsyncBaseTransport):
         def __init__(self, policy: SsrfPolicy) -> None:
@@ -405,7 +442,27 @@ def _make_pinning_transport(policy: SsrfPolicy) -> httpx.AsyncBaseTransport:
                     "sni_hostname": original_host,
                 },
             )
-            return await self._inner.handle_async_request(pinned_request)
+            response = await self._inner.handle_async_request(pinned_request)
+
+            # Body-size cap (defence against memory exhaustion). Reject an
+            # over-cap Content-Length up front, then wrap the stream so a lying
+            # Content-Length cannot smuggle a larger body past the cap.
+            content_length = response.headers.get("content-length")
+            if content_length is not None:
+                try:
+                    if int(content_length) > self._policy.max_bytes:
+                        await response.aclose()
+                        raise SsrfError(
+                            f"response Content-Length {content_length} exceeds "
+                            f"{self._policy.max_bytes} bytes",
+                            reason="too_large",
+                        )
+                except ValueError:
+                    pass  # Malformed Content-Length; the streaming cap still applies.
+            # An async transport always yields an AsyncByteStream; narrow for the type checker.
+            inner_stream = cast("httpx.AsyncByteStream", response.stream)
+            response.stream = _CappedByteStream(inner_stream, self._policy.max_bytes)
+            return response
 
         async def aclose(self) -> None:
             await self._inner.aclose()

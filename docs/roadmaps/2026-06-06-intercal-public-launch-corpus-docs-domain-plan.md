@@ -243,6 +243,11 @@ The first proof consumes the same adapters, provenance rules, and public query p
   `019e9dd1-ef93-7ad0-983d-096858428e5e` (`Locke`). Ownership boundary: Workstream 2 adapters,
   source registry, related adapter tests, Workstream 2 roadmap status, and changelog. Next
   coordinator action: poll in short intervals, record result, then gate the pass 6 commit.
+- 2026-06-06T12:57:00-04:00 — Workstream 2 pass 6 returned complete. Commit:
+  `486f6c8e237024ee52e61ab0a74583f3283c4274` (`fix(shared): harden rss feed item urls`), pushed
+  to `origin/main`. Gate result: 4 files and 92 LOC passes the numeric gate, but contents are a
+  meaningful RSS URL-validation hardening fix plus tests. Next coordinator action: dispatch another
+  fresh-context Workstream 2 quiet audit; do not close from pass 6.
 - 2026-06-06T13:21:00-04:00 — Workstream 2 pass 6 strict quiet audit found and closed one
   remaining RSS URL-validation gap. RSS/Atom entries from an otherwise valid public feed now skip
   item links blocked by the SSRF/public-URL guard before persisting the link as source-document

@@ -28,6 +28,7 @@ coverage/
 # Local infra / data
 pgdata/
 miniodata/
+.backups/
 *.local
 .agents/
 

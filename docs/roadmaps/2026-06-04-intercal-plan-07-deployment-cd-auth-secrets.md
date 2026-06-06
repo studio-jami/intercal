@@ -331,16 +331,31 @@ resolved-principal seam (Plan 04 W6).
 
 Goal: Provable recovery of the canonical store.
 
+Status: [~] Implemented; live proof operator-gated (2026-06-06) — durable runbook and runnable proof path landed in
+`docs/operations/backups.md` + `scripts/ops/backup-restore.mjs` (`pnpm ops:backup`,
+`pnpm ops:restore-proof`, `pnpm backup:test`). The runbook documents the hosted Neon recovery lane
+(branching + point-in-time restore) and the portable second-copy lane (`pg_dump --format=custom`
+with optional R2/S3 upload). The proof command restores a dump into an operator-supplied fresh Neon
+branch or target database and then runs a read-only heartbeat for pgvector, migrations, seeded
+sources, source documents, claims, claim evidence provenance, entities, relationships, and
+bitemporal fact versions. This satisfies the backup/restore portion of Plan 04 W7 without taking on
+the broader deployment-path docs. Live restore execution is operator-access-gated: it needs
+Postgres client tools plus a real `DATABASE_URL`/`RESTORE_DATABASE_URL` and optional R2/S3 env; in
+this session `pg_dump`/`pg_restore` were not on PATH, so the real restore proof was not executed.
+The script help/dry-run path is safe and value-redacted.
+
 Implementation tasks:
 
-- [ ] Document Neon branching + point-in-time restore; add a periodic `pg_dump` to R2 as a
+- [x] Document Neon branching + point-in-time restore; add a periodic `pg_dump` to R2 as a
       portable second copy (free egress).
-- [ ] Restore-proof runbook: restore a dump into a fresh Neon branch and run the fixture heartbeat.
-- [ ] `docs/operations/backups.md`.
+- [x] Restore-proof runbook: restore a dump into a fresh Neon branch and run the fixture heartbeat.
+- [x] `docs/operations/backups.md`.
 
 Exit criteria:
 
-- [ ] A documented restore reproduces a working DB and passes the heartbeat.
+- [!] A documented restore reproduces a working DB and passes the heartbeat. Runnable path exists;
+      live execution requires `pg_dump`/`pg_restore`, operator DB credentials, and a throwaway Neon
+      branch/target.
 
 ## Workstream 8: Budget enforcement & cost monitoring
 

@@ -31,7 +31,10 @@
     "verify": "node scripts/verify/verify.mjs",
     "ops:keys": "node scripts/ops/keys.mjs",
     "ops:secrets-fanout": "node scripts/ops/secrets-fanout.mjs",
-    "ops:deploy-cloud-run": "node scripts/ops/deploy-cloud-run.mjs"
+    "ops:deploy-cloud-run": "node scripts/ops/deploy-cloud-run.mjs",
+    "ops:backup": "node scripts/ops/backup-restore.mjs backup",
+    "ops:restore-proof": "node scripts/ops/backup-restore.mjs restore-proof",
+    "backup:test": "node scripts/ops/backup-restore.mjs restore-proof"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.0",

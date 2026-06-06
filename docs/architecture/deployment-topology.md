@@ -44,7 +44,8 @@ alternative for **other people** — it is not the maintainers' dev flow.
 
 - SQL-first (`db/migrations`); apply with `node scripts/dev/migrate.mjs --seed` against any
   `DATABASE_URL`. Forward-fix policy — see [`../../db/README.md`](../../db/README.md).
-- Neon provides branching + point-in-time restore; managed-backup runbook is owned by Plan 04.
+- Neon branching + point-in-time restore and the portable `pg_dump`/R2 restore proof are documented
+  in [`../operations/backups.md`](../operations/backups.md).
 
 ## Free-tier drift
 

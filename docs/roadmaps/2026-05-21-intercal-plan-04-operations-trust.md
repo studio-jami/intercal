@@ -420,6 +420,13 @@ Suggested verification:
 
 Goal: Document and prove the live and alternative deployment paths with backup/restore.
 
+Backup/restore overlap status (2026-06-06): Plan 07 W7 landed the hosted-backup portion in
+`docs/operations/backups.md` with `scripts/ops/backup-restore.mjs` (`pnpm ops:backup`,
+`pnpm ops:restore-proof`, `pnpm backup:test`). It documents Neon branching/PITR plus a portable
+`pg_dump` custom-format second-copy path with optional R2/S3 upload, and restores into a fresh
+operator-supplied branch/target before running the restored-store heartbeat. The broader deployment
+path, VPS, self-host, DNS/TLS, and account setup surfaces remain open here.
+
 Depends on:
 
 - [ ] Workstreams 1-6.
@@ -445,11 +452,14 @@ Implementation tasks:
 - [ ] Document optional self-host path using `docker compose` (for other users; maintainers use Neon direct).
 - [ ] Document single-VPS deployment as a paid-tier alternative.
 - [ ] Add DNS, TLS, env, health check, migration, upgrade, backup, and restore instructions.
-- [ ] Add backup/restore test command (Neon branch + dump).
+- [x] Add backup/restore test command (Neon branch + dump). (Backup/restore portion only; broader
+      deployment-path tasks remain open.)
 
 Exit criteria:
 
-- [ ] Backup and restore are proven for the live Neon path; VPS path is documented.
+- [~] Backup and restore are proven for the live Neon path; VPS path is documented. (The Plan 07 W7
+      runbook/script proof path exists; live execution requires operator credentials/tools and a
+      throwaway branch.)
 
 Suggested verification:
 

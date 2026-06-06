@@ -31,6 +31,7 @@ flow, decisions, and how to operate Intercal safely.
 
 - [`operations/resource-budget.md`](operations/resource-budget.md) — free/credit allowances per service, consumption plan, throttle knobs, scale triggers.
 - [`operations/secrets.md`](operations/secrets.md) — one source of truth for secrets + the idempotent fan-out tool (`scripts/ops/secrets-fanout.mjs`); app-runtime vs operator lanes.
+- [`operations/backups.md`](operations/backups.md) — Neon PITR/branch recovery plus portable `pg_dump`/R2 second-copy restore proof.
 - `operations/` — development setup, deployment, backups, source policy, observability,
   review workflows, account setup (authored as the relevant roadmaps land).
 

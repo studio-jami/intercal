@@ -194,6 +194,11 @@ The first proof consumes the same adapters, provenance rules, and public query p
   undated records, GitHub repo identifiers are validated before request construction, and Wikidata
   SPARQL cursor hashes are stable across processes. No source catalog rows, backfill execution, query
   proof, dashboard, docs, marketing, or domain work was added.
+- 2026-06-06T12:21:45-04:00 — Dispatched Workstream 2 pass 3 quiet-confirmation pass to agent
+  `019e9dbd-5a85-7003-a7ed-c9fb2c74b260` (`Aquinas`). Ownership boundary: Workstream 2 adapters,
+  source registry, related adapter tests, Workstream 2 roadmap status, and changelog. Next
+  coordinator action: poll in short intervals, record result, then gate the quiet-confirmation
+  commit.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 

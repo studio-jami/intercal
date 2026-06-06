@@ -435,6 +435,11 @@ The first proof consumes the same adapters, provenance rules, and public query p
   proof surfaces, broad source rows/scripts/seeds, operations docs, related tests, Workstream 4
   roadmap status, and changelog. Next coordinator action: poll in short intervals, record result,
   then gate the pass 8 commit.
+- 2026-06-06T18:23:00-04:00 — Workstream 4 pass 8 returned complete. Commit:
+  `87b2217539a69dd30794da416520623596702be6` (`test(dev): prove source-policy corpus redaction`),
+  pushed to `origin/main`. Gate result: 4 files and 53 LOC passes the numeric gate, but contents are
+  meaningful source-policy redaction proof work. Seeded, live-first, and live-full verifier modes
+  still pass. Next coordinator action: dispatch Workstream 4 pass 9 strict quiet audit.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 

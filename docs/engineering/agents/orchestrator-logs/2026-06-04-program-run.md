@@ -117,7 +117,14 @@ Sequence: Plan 07 W1 (secrets) first → then auth cluster (Plan04 W1 + Plan07 W
 | t67 | 07/W1 | P3 | Opus | a8f148f4fadf8234b | QUIET → **W1 CLOSED** (zero leakage, lane-sep double-enforced, idempotent, live-verified Vercel 4 + GitHub 25) | (none) | 0 | begin REST auth stream |
 | t68 | 07W5+04W1(REST) | P1 | Opus | a7d06e3b22fdc2d73 | returned OK; hashed scoped API keys + RateLimitStorePort(Upstash+fallback) + usage_events + anon policy + ops:keys CLI; LIVE 17/17 throwaway branch; 24 tests | a8916b1 | 29f +1951/-23 | gate P2: timing-safe, RL races/headers, XFF trust, anon+MCP unbroken |
 | t69 | 07W5+04W1(REST) | P2 | Opus | a6ff4ffed7e3901f2 | INTERRUPTED (session limit 10:10pm, now reset); no change committed | (none) | 0 | re-dispatch P2 |
-| t70 | 07W5+04W1(REST) | P2 | Opus | — | re-dispatched | — | — | gate |
+| t70 | 07W5+04W1(REST) | P2 | Opus | afb695778bf0c5897 | returned OK; fixed 3 security bugs (spoofable XFF left-most→trusted IP, RL TTL-loss lockout self-heal, IPv6 :: anonymization); timing-safe confirmed; MCP bypasses REST mw; anon ok; 140 tests | 58fb16d | 8f +273/-22 | security fixes → P3 confirm-quiet |
+| t71 | 07W5+04W1(REST) | P3 | Opus | ad418d8a6629e6155 | QUIET → **REST AUTH STREAM CLOSED** (Plan07 W5 + Plan04 W1 REST). Orchestrator-confirmed LIVE on lntercal: anon 200 + RateLimit-Limit:30, invalid key→401. (P3's 404 was wrong hostname `intercal` vs `lntercal`.) | (none) | 0 | begin MCP OAuth W6 |
+| t72 | 07/W6 | P1 | Opus | a7e9c8e1573aab9e5 | returned OK; MCP OAuth2.1 resource server (jose JWKS, RFC9728 PRM, WWW-Auth 401/403, RFC8707 aud binding); AS = env seam (deferred honestly); anon-read preserved when no AS; spec-verified 2025-06-18/11-25; LIVE 7/7; 88 mcp tests | ea5b8b0 | ~12f +1336 | gate P2: spec compliance + no bypass |
+| t73 | 07/W6 | P2 | Opus | a38a8453f357e0b89 | returned OK; fixed JWS alg-allowlist gap (alg-substitution; PS256-vs-RSA); MCP_OAUTH_ALGORITHMS default RS256; no-bypass+PRM+aud confirmed; LIVE 8/8 | dba6b87 | 9f +169/-15 | security fix → P3 confirm-quiet |
+| t74 | 07/W6 | P3 | Opus | a940b6e4ba6b30ab0 | QUIET (only trivial lint sweep) → **W6 CLOSED** (MCP OAuth RS spec-correct, no bypass); LIVE 8/8 | f04d053 | 1f | **AUTH COMPLETE** (REST keys + MCP OAuth) → worker CD |
+| t75 | 07/W3 | P1 | Opus | — | dispatched (Actions scheduled pipeline CD) | — | — | gate → P2 |
+
+**Phase D progress:** Plan07 W1✅ secrets · REST-auth✅(W5+Plan04W1-REST) · W6✅ MCP OAuth | remaining: Plan07 W3 (Actions CD), W4 (Cloud Run Jobs), W7 (backups), W8 (budget); Plan04 W2 source-policy/SSRF, W3 audit, W4 feedback, W5 subs, W6 observability, W7 deploy-paths, W8 runbook.
 
 **Phase D consolidation note:** REST auth (Plan07 W5 hashed scoped API keys) + rate limits (Plan04 W1 REST portion) done as ONE coherent middleware stack. MCP OAuth = Plan07 W6 (separate). Plan04 W1 MCP-rate-limit folded into W6.
 

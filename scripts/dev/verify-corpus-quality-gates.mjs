@@ -187,80 +187,81 @@ function proof(name, passed, detail) {
 
 async function runQueryProofs(tx) {
   const proofs = [];
-  const entity = await core.getEntity(tx, {
-    name_or_id: 'ChatGPT',
-    at_date: '2023-03-01T00:00:00Z',
-  });
-  proofs.push(
-    proof(
-      'get_entity ChatGPT as_of',
-      entity.entity.displayName === 'ChatGPT' && entity.facts.length > 0,
-      `${entity.entity.displayName}; facts=${entity.facts.length}`,
-    ),
-  );
+  async function addProof(name, run) {
+    try {
+      const result = await run();
+      proofs.push(proof(name, result.passed, result.detail));
+    } catch (error) {
+      proofs.push(proof(name, false, error instanceof Error ? error.message : String(error)));
+    }
+  }
 
-  const freshness = await core.getFreshness(tx, { topic_or_entity: 'MCP protocol' });
-  proofs.push(
-    proof('get_freshness MCP protocol', freshness.coverage > 0, `coverage=${freshness.coverage}`),
-  );
-
-  const delta = await core.getDelta(tx, {
-    topic: 'frontier LLMs',
-    since_date: '2023-03-01T00:00:00Z',
-    token_budget: 300,
+  await addProof('get_entity ChatGPT as_of', async () => {
+    const entity = await core.getEntity(tx, {
+      name_or_id: 'ChatGPT',
+      at_date: '2023-03-01T00:00:00Z',
+    });
+    return {
+      passed: entity.entity.displayName === 'ChatGPT' && entity.facts.length > 0,
+      detail: `${entity.entity.displayName}; facts=${entity.facts.length}`,
+    };
   });
-  proofs.push(
-    proof(
-      'get_delta frontier LLMs',
-      delta.changedClaims.length >= 4 && delta.summary.citations.length > 0,
-      `claims=${delta.changedClaims.length}; citations=${delta.summary.citations.length}`,
-    ),
-  );
 
-  const before = await core.verifyClaim(tx, {
-    claim_text: 'GPT-4 Turbo supports a 128k context window',
-    as_of_date: '2023-10-01T00:00:00Z',
+  await addProof('get_freshness MCP protocol', async () => {
+    const freshness = await core.getFreshness(tx, { topic_or_entity: 'MCP protocol' });
+    return { passed: freshness.coverage > 0, detail: `coverage=${freshness.coverage}` };
   });
-  proofs.push(
-    proof(
-      'verify_claim point-in-time before evidence',
-      before.verdict === 'unverified',
-      `verdict=${before.verdict}`,
-    ),
-  );
 
-  const after = await core.verifyClaim(tx, {
-    claim_text: 'GPT-4 Turbo supports a 128k context window',
-    as_of_date: '2024-04-01T00:00:00Z',
+  await addProof('get_delta frontier LLMs', async () => {
+    const delta = await core.getDelta(tx, {
+      topic: 'frontier LLMs',
+      since_date: '2023-03-01T00:00:00Z',
+      token_budget: 300,
+    });
+    return {
+      passed: delta.changedClaims.length >= 4 && delta.summary.citations.length > 0,
+      detail: `claims=${delta.changedClaims.length}; citations=${delta.summary.citations.length}`,
+    };
   });
-  proofs.push(
-    proof(
-      'verify_claim point-in-time after evidence',
-      after.verdict !== 'unverified' && after.supportingEvidence.length > 0,
-      `verdict=${after.verdict}; supporting=${after.supportingEvidence.length}; contradicting=${after.contradictingEvidence.length}`,
-    ),
-  );
 
-  const adversarial = await core.verifyClaim(tx, {
-    claim_text: 'GPT-4 Turbo supports a 1M context window',
-    as_of_date: '2024-04-01T00:00:00Z',
+  await addProof('verify_claim point-in-time before evidence', async () => {
+    const before = await core.verifyClaim(tx, {
+      claim_text: 'GPT-4 Turbo supports a 128k context window',
+      as_of_date: '2023-10-01T00:00:00Z',
+    });
+    return { passed: before.verdict === 'unverified', detail: `verdict=${before.verdict}` };
   });
-  proofs.push(
-    proof(
-      'verify_claim adversarial stale/wrong value',
-      adversarial.verdict !== 'supported',
-      `verdict=${adversarial.verdict}`,
-    ),
-  );
 
-  const evidence = await core.searchEvidence(tx, {
-    query: 'MCP protocol',
-    from_date: '2024-01-01T00:00:00Z',
-    to_date: '2026-06-06T00:00:00Z',
+  await addProof('verify_claim point-in-time after evidence', async () => {
+    const after = await core.verifyClaim(tx, {
+      claim_text: 'GPT-4 Turbo supports a 128k context window',
+      as_of_date: '2024-04-01T00:00:00Z',
+    });
+    return {
+      passed: after.verdict !== 'unverified' && after.supportingEvidence.length > 0,
+      detail: `verdict=${after.verdict}; supporting=${after.supportingEvidence.length}; contradicting=${after.contradictingEvidence.length}`,
+    };
   });
-  proofs.push(
-    proof('search_evidence MCP protocol', evidence.hits.length > 0, `hits=${evidence.hits.length}`),
-  );
+
+  await addProof('verify_claim adversarial stale/wrong value', async () => {
+    const adversarial = await core.verifyClaim(tx, {
+      claim_text: 'GPT-4 Turbo supports a 1M context window',
+      as_of_date: '2024-04-01T00:00:00Z',
+    });
+    return {
+      passed: adversarial.verdict !== 'supported',
+      detail: `verdict=${adversarial.verdict}`,
+    };
+  });
+
+  await addProof('search_evidence MCP protocol', async () => {
+    const evidence = await core.searchEvidence(tx, {
+      query: 'MCP protocol',
+      from_date: '2024-01-01T00:00:00Z',
+      to_date: '2026-06-06T00:00:00Z',
+    });
+    return { passed: evidence.hits.length > 0, detail: `hits=${evidence.hits.length}` };
+  });
   return proofs;
 }
 
@@ -268,7 +269,14 @@ async function runLive(selectedMode) {
   const config = selectedMode === 'live-full' ? fullConfig : firstProofConfig;
   const report = await core.queryCorpusQualityReport(db, config);
   const evaluation = core.evaluateCorpusQualityReport(report, config);
-  return { mode: selectedMode, passed: evaluation.passed, report, evaluation };
+  const queryProofs = selectedMode === 'live-first-proof' ? await runQueryProofs(db) : [];
+  return {
+    mode: selectedMode,
+    passed: evaluation.passed && queryProofs.every((item) => item.passed),
+    report,
+    evaluation,
+    queryProofs,
+  };
 }
 
 const rollbackSentinel = new Error('ROLLBACK_WORKSTREAM_4_SEEDED_PROOF');

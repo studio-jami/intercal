@@ -664,6 +664,19 @@ adversarially contradicted. `seeded-proof` passes and confirms rollback cleanup.
 and `live-full` fail truthfully on missing real GPT-era AI-history backfill coverage, so Workstream 4
 query/corpus machinery is proven but production broad-corpus claims remain open.
 
+Pass 3 closeout note: the live-first-proof audit still fails on real DB state, not seeded verifier
+machinery. Current configured DB inventory has active sources only for `api` and `registry`, document
+coverage only for those classes, and all live claims are `unclassified`; the bounded backfill dry run
+for `--source-class model_provider` selects zero sources. This pass fixed a pipeline proof gap by
+carrying safe corpus classification metadata (`source_class`, `topic_cluster`, `corpus_taxonomy`,
+`corpus_track`) from source/document metadata onto extracted claims, and tightened
+`live-first-proof` so it also reports query-proof failures (`get_entity`, `get_freshness`,
+`get_delta`, `verify_claim`, and `search_evidence`) instead of only aggregate quality counts. Seeded
+proof still passes with rollback cleanup. Live proof remains open until an operator adds reviewed
+first-proof source rows in the configured Neon branch/account, runs bounded backfills within
+`docs/operations/resource-budget.md`, and then passes `live-first-proof`; `live-full` remains blocked
+until the broader taxonomy source rows and evidence exist.
+
 ## Workstream 5: Public Intercal Knowledge Experience
 
 Goal: Replace the thin dashboard shell with the full read-only public product surface.

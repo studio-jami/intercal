@@ -23,7 +23,8 @@ node scripts/dev/verify-corpus-quality-gates.mjs live-full
   gate report, then rolls the transaction back. This is the reproducible proof path when live
   backfill has not yet populated GPT-era AI-history data.
 - `live-first-proof` evaluates the first GPT/Claude/Gemini/Llama/MCP proof gates against the
-  existing corpus. Use this after a bounded backfill proof run.
+  existing corpus and then exercises the same query proof set as seeded mode. Use this after a
+  bounded backfill proof run.
 - `live-full` evaluates the broad AI-history taxonomy gates against the existing corpus. This should
   fail until source rows and backfill evidence cover every required source class, topic cluster,
   date range, entity, citation-depth, contradiction, and review-needed threshold.
@@ -67,6 +68,40 @@ The verifier requires citations on public facts and checks point-in-time behavio
 Turbo claim is unverified before supporting evidence exists and later returns cited support in
 seeded proof mode. The adversarial 1M-context claim must not return `supported`, and the corpus
 quality report separately requires at least one open contradiction row.
+
+## Live Backfill Prerequisites
+
+`live-first-proof` needs real source rows before a backfill can produce evidence. The source catalog
+must include active, non-paused rows whose `sources.metadata.source_class` and
+`sources.metadata.topic_cluster` classify the first-proof corpus. At minimum, operators need source
+rows for GPT/Claude/Gemini/Llama/MCP coverage across:
+
+- `model_provider` + `frontier_llms`
+- `research` + `frontier_llms` or `ml_research`
+- `registry` + `open_weight_models`
+- `protocol` + `model_context_protocol`
+- `release_notes` + `frontier_llms`
+
+The historical backfill path does not fabricate these rows. Operators must add reviewed public
+source rows with real adapter configuration, license posture, and source-policy booleans, then run a
+bounded dry run before fetching:
+
+```powershell
+$env:DATABASE_URL = "<neon branch url>"
+uv run intercal-pipeline backfill `
+  --source-class model_provider `
+  --start-date 2022-11-01 `
+  --end-date 2026-06-06 `
+  --max-documents 5 `
+  --max-sources 2 `
+  --dry-run
+```
+
+Repeat the dry run for the other required source classes, then remove `--dry-run` only on the
+intended Neon branch/account and only within the resource budget. The extraction path carries safe
+corpus classification keys (`source_class`, `topic_cluster`, `corpus_taxonomy`, `corpus_track`) from
+source/document metadata onto extracted claims so live quality gates can count backfilled claims
+without copying arbitrary source metadata.
 
 ## Live Verification Remaining
 

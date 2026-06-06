@@ -588,6 +588,71 @@ async def test_extract_claims_single_claim_persisted() -> None:
 
 
 @pytest.mark.asyncio
+async def test_extract_claims_carries_safe_corpus_metadata() -> None:
+    text = "Anthropic released Claude."
+    chunk_id = uuid.uuid4()
+    claim_data: dict[str, Any] = {
+        "claims": [
+            {
+                "subject_text": "Claude",
+                "predicate": "released",
+                "object_text": "AI assistant",
+                "normalized_text": "Anthropic released Claude.",
+                "qualifiers": {},
+                "valid_from": None,
+                "valid_until": None,
+                "confidence": 0.91,
+                "char_offset_start": 0,
+                "char_offset_end": len(text),
+            }
+        ]
+    }
+    inserted_metadata: list[dict[str, Any]] = []
+    pool = _make_pool(
+        doc_row={
+            "id": uuid.UUID(DOC_ID),
+            "cleaned_text": text,
+            "redistribution_allowed": False,
+            "source_metadata": {
+                "source_class": "model_provider",
+                "topic_cluster": "frontier_llms",
+                "api_token": "must-not-copy",
+            },
+            "document_metadata": {
+                "topic_cluster": "model_context_protocol",
+                "content_type": "application/json",
+            },
+        },
+        chunks=[
+            {
+                "id": chunk_id,
+                "chunk_index": 0,
+                "chunk_text": text,
+                "char_offset_start": 0,
+                "char_offset_end": len(text),
+            }
+        ],
+    )
+
+    async def _fetchval(query: str, *args: Any) -> uuid.UUID:
+        if "INSERT INTO claims" in query:
+            inserted_metadata.append(json.loads(args[12]))
+        return uuid.uuid4()
+
+    pool.fetchval = _fetchval
+    llm = _make_llm(claims_data=claim_data)
+
+    await extract_claims(document_id=DOC_ID, pool=pool, llm=llm)
+
+    assert inserted_metadata == [
+        {
+            "source_class": "model_provider",
+            "topic_cluster": "model_context_protocol",
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_extract_claims_idempotent_delete_called() -> None:
     """DELETE FROM claims is called before inserting."""
     text = "Q5401080 published."

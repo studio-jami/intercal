@@ -46,7 +46,7 @@ import json
 import logging
 import re
 import uuid
-from typing import Any
+from typing import Any, cast
 
 _log = logging.getLogger(__name__)
 
@@ -639,7 +639,17 @@ async def extract_claims(
 
     # ── 1. Load document row + chunks ─────────────────────────────────────────
     row = await pool.fetchrow(
-        "SELECT id, cleaned_text, redistribution_allowed FROM source_documents WHERE id = $1",
+        """
+        SELECT
+            source_documents.id,
+            source_documents.cleaned_text,
+            source_documents.redistribution_allowed,
+            source_documents.metadata AS document_metadata,
+            sources.metadata AS source_metadata
+        FROM source_documents
+        LEFT JOIN sources ON sources.id = source_documents.source_id
+        WHERE source_documents.id = $1
+        """,
         doc_id,
     )
     if row is None:
@@ -647,6 +657,10 @@ async def extract_claims(
 
     redistribution_allowed: bool = bool(row["redistribution_allowed"])
     cleaned_text: str = row["cleaned_text"] or ""
+    corpus_metadata = _claim_corpus_metadata(
+        source_metadata=_row_get(row, "source_metadata"),
+        document_metadata=_row_get(row, "document_metadata"),
+    )
 
     chunks = await pool.fetch(
         """
@@ -823,7 +837,8 @@ async def extract_claims(
                     valid_from, valid_until,
                     extractor, extraction_confidence,
                     source_document_ids,
-                    contradiction_status, status
+                    contradiction_status, status,
+                    metadata
                 ) VALUES (
                     $1, $2, $3,
                     $4::jsonb, $5,
@@ -831,7 +846,8 @@ async def extract_claims(
                     $8, $9,
                     $10, $11,
                     ARRAY[$12::uuid],
-                    'none', 'active'
+                    'none', 'active',
+                    $13::jsonb
                 )
                 RETURNING id
                 """,
@@ -847,6 +863,7 @@ async def extract_claims(
                 EXTRACTOR_LLM,
                 confidence,
                 doc_id,
+                json.dumps(corpus_metadata, sort_keys=True),
             )
 
             # Insert claim_evidence row linking claim → source document.
@@ -1561,6 +1578,54 @@ def _claims_prompt(chunk_text: str) -> str:
 # ──────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
+
+_CLAIM_CORPUS_METADATA_KEYS = frozenset(
+    {
+        "source_class",
+        "topic_cluster",
+        "corpus_taxonomy",
+        "corpus_track",
+    }
+)
+
+
+def _claim_corpus_metadata(
+    *,
+    source_metadata: object,
+    document_metadata: object,
+) -> dict[str, str]:
+    """Return safe corpus-classification metadata to carry onto extracted claims."""
+    merged: dict[str, str] = {}
+    for raw in (source_metadata, document_metadata):
+        metadata = _coerce_metadata_dict(raw)
+        for key in _CLAIM_CORPUS_METADATA_KEYS:
+            value = metadata.get(key)
+            if isinstance(value, str) and value.strip():
+                merged[key] = value.strip()
+    return merged
+
+
+def _coerce_metadata_dict(raw: object) -> dict[str, object]:
+    if isinstance(raw, dict):
+        typed = cast(dict[object, object], raw)
+        return {str(key): value for key, value in typed.items()}
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+        if isinstance(parsed, dict):
+            return {str(key): value for key, value in cast(dict[object, object], parsed).items()}
+    return {}
+
+
+def _row_get(row: object, key: str) -> object:
+    if isinstance(row, dict):
+        return cast(dict[object, object], row).get(key)
+    try:
+        return row[key]  # type: ignore[index]
+    except (KeyError, IndexError, TypeError):
+        return None
 
 
 def parse_valid_time(value: Any) -> Any:

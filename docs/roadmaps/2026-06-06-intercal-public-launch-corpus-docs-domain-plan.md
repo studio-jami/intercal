@@ -424,6 +424,12 @@ The first proof consumes the same adapters, provenance rules, and public query p
   proof surfaces, broad source rows/scripts/seeds, operations docs, related tests, Workstream 4
   roadmap status, and changelog. Next coordinator action: poll in short intervals, record result,
   then gate the pass 7 commit.
+- 2026-06-06T15:58:00-04:00 — Workstream 4 pass 7 returned complete. Commit:
+  `9d68a8d80eaa5cb3af60e4b520dac32415f49c21` (`test(core): prove broad corpus live query paths`),
+  pushed to `origin/main`. Gate result: 4 files and 84 LOC passes the numeric gate, but contents are
+  meaningful live-full query-path proof tightening. Seeded, live-first, and live-full verifier modes
+  passed with the new broad query checks. Next coordinator action: dispatch Workstream 4 pass 8
+  strict quiet audit.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 

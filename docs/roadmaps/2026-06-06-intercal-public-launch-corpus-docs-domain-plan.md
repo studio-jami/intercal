@@ -139,6 +139,11 @@ The first proof consumes the same adapters, provenance rules, and public query p
   timed polls and a queued status nudge returned no checkpoint. Previous status was `running`; no
   result or changes were accepted from that handle. Next coordinator action: dispatch replacement
   Workstream 2 pass 1 from current repo state.
+- 2026-06-06T11:56:08-04:00 — Dispatched replacement Workstream 2 pass 1 to agent
+  `019e9da5-e21a-7082-8766-e449c1c7549e` (`Russell`). Ownership boundary matches the original
+  Workstream 2 pass 1 adapter/source-registry/shared-test boundary. Next coordinator action: poll
+  in short intervals, record result in `docs/engineering/agents/orchestrator-logs/`, then dispatch
+  mandatory Workstream 2 pass 2 after pass 1 lands.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 

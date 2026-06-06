@@ -56,11 +56,12 @@ QUEUE_PROVIDER=redis             # switch to 'postgres' (pgmq) to spare Upstash 
 ```
 
 These are enforced in `services/shared` config plus the worker CLIs. The worker runtime builds LLMs
-through the budgeted shared factory: one daily request budget is shared across provider attempts,
-`LLM_PRIMARY=vertex` prefers Vertex and falls back to Gemini on provider auth/quota/timeout failures,
-`LLM_MAX_OUTPUT_TOKENS` caps each LLM call, and successful provider responses append real request/token
-measurements to `provider_usage_events` when the observability migration is present. Unknown token
-counts remain unavailable; they are not zero-filled.
+through the budgeted shared factory: one daily request budget is seeded from same-day
+`provider_usage_events` and then shared across provider attempts, `LLM_PRIMARY=vertex` prefers Vertex
+and falls back to Gemini on provider auth/quota/timeout failures, `LLM_MAX_OUTPUT_TOKENS` caps each LLM
+call, and successful provider responses append real request/token measurements to
+`provider_usage_events` when the observability migration is present. Unknown token counts remain
+unavailable; they are not zero-filled.
 
 ## Monitoring (owned by Plan 04 observability)
 
@@ -74,8 +75,10 @@ counts remain unavailable; they are not zero-filled.
   provider measurements before treating a budget row as observed.
 - Alert thresholds at ~70% of each binding allowance. The worker runtime reads
   `observability_provider_consumption` for Vertex/Gemini daily-request rows: `warning` providers are
-  deprioritized behind fallback, and `exceeded` providers are excluded. If the view is not migrated or
-  has no real usage events yet, the local `LLM_DAILY_REQUEST_BUDGET` remains the hard guard.
+  deprioritized behind fallback, and `exceeded` providers are excluded. It also seeds the local
+  `LLM_DAILY_REQUEST_BUDGET` counter from today's real Vertex/Gemini request rows so reruns on the
+  same UTC day do not reset the cap. If the view/table is not migrated or has no real usage events
+  yet, the process-local `LLM_DAILY_REQUEST_BUDGET` remains the hard guard for that worker run.
 
 ## Scale triggers (when to spend)
 

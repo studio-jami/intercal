@@ -22,7 +22,12 @@ import os
 from typing import TYPE_CHECKING
 
 from intercal_shared.config import Settings
-from intercal_shared.llm_runtime import FallbackLlm, UsageRecordingLlm, llm_provider_budget_states
+from intercal_shared.llm_runtime import (
+    FallbackLlm,
+    UsageRecordingLlm,
+    llm_daily_request_usage,
+    llm_provider_budget_states,
+)
 from intercal_shared.ports.llm import InMemoryRequestBudget, LlmPort, RequestBudget
 
 if TYPE_CHECKING:
@@ -179,7 +184,8 @@ async def make_budgeted_llm(cfg: Settings, *, pool: object) -> LlmPort:
     when the primary is unavailable or already at a Plan 04 warning threshold,
     and appends real provider-usage observations after successful calls.
     """
-    budget = make_request_budget(cfg)
+    used_requests = await llm_daily_request_usage(pool=pool)
+    budget = InMemoryRequestBudget(limit=cfg.llm_daily_request_budget, used=used_requests)
     budget_states = await llm_provider_budget_states(pool=pool)
     providers = llm_provider_order(cfg, budget_states=budget_states)
     adapters: list[tuple[str, LlmPort]] = []

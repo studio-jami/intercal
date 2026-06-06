@@ -2,9 +2,23 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from intercal_shared.config import Settings
-from intercal_shared.factory import make_llm, make_queue, make_scheduler, make_storage
+from intercal_shared.factory import (
+    make_llm,
+    make_queue,
+    make_request_budget,
+    make_scheduler,
+    make_storage,
+)
+from intercal_shared.ports.llm import (
+    InMemoryRequestBudget,
+    LlmBudgetExceededError,
+    LlmResponse,
+    StructuredResult,
+)
 
 
 def _isolated_settings(**kwargs: object) -> Settings:
@@ -86,6 +100,70 @@ def test_llm_provider_order_excludes_exceeded_and_deprioritizes_warning() -> Non
     assert llm_provider_order(cfg, budget_states={"vertex": "exceeded"}) == ["gemini"]
     with pytest.raises(LlmBudgetExceededError):
         llm_provider_order(cfg, budget_states={"vertex": "exceeded", "gemini": "exceeded"})
+
+
+def test_make_request_budget_defaults_to_zero_used() -> None:
+    budget = make_request_budget(_isolated_settings(llm_daily_request_budget=1))
+    assert isinstance(budget, InMemoryRequestBudget)
+    budget.check_and_consume()
+    with pytest.raises(LlmBudgetExceededError):
+        budget.check_and_consume()
+
+
+@pytest.mark.asyncio
+async def test_make_budgeted_llm_seeds_budget_from_same_day_usage(monkeypatch: Any) -> None:
+    from intercal_shared import factory
+    from intercal_shared.ports.llm import LlmPort
+
+    class _FakePool:
+        async def fetchrow(self, sql: str, *args: Any) -> dict[str, Any]:
+            return {"quantity_used": 1}
+
+        async def fetch(self, sql: str, *args: Any) -> list[dict[str, Any]]:
+            return []
+
+    class _FakeLlm:
+        def __init__(self, budget: InMemoryRequestBudget) -> None:
+            self.budget = budget
+
+        async def complete(
+            self,
+            prompt: str,
+            *,
+            system: str | None = None,
+            max_tokens: int | None = None,
+            temperature: float = 0.0,
+        ) -> LlmResponse:
+            self.budget.check_and_consume()
+            raise AssertionError("budget guard should fire before provider call")
+
+        async def extract_structured(
+            self,
+            schema: dict[str, Any],
+            prompt: str,
+            *,
+            system: str | None = None,
+            max_tokens: int | None = None,
+        ) -> StructuredResult:
+            self.budget.check_and_consume()
+            raise AssertionError("budget guard should fire before provider call")
+
+    def _fake_make_llm(
+        cfg: Settings,
+        budget: object | None = None,
+        *,
+        provider: str | None = None,
+    ) -> LlmPort:
+        assert isinstance(budget, InMemoryRequestBudget)
+        return _FakeLlm(budget)
+
+    monkeypatch.setattr(factory, "make_llm", _fake_make_llm)
+
+    cfg = _isolated_settings(llm_daily_request_budget=1, llm_primary="gemini")
+    llm = await factory.make_budgeted_llm(cfg, pool=_FakePool())
+
+    with pytest.raises(LlmBudgetExceededError):
+        await llm.complete("hello")
 
 
 @pytest.mark.asyncio

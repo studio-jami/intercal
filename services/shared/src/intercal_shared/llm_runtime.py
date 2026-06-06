@@ -269,6 +269,39 @@ async def llm_provider_budget_states(*, pool: Any) -> dict[str, str]:
     return {str(row["provider"]): str(row["budget_state"]) for row in rows}
 
 
+async def llm_daily_request_usage(*, pool: Any) -> int:
+    """Return today's real LLM request usage across routed providers.
+
+    The local budget remains the pre-call reservation guard.  This read seeds it
+    from append-only successful usage rows so separate worker invocations on the
+    same UTC day do not reset the daily budget.
+    """
+    period_start, period_end = utc_day_window()
+    try:
+        row = await pool.fetchrow(
+            """
+            SELECT COALESCE(sum(quantity), 0)::bigint AS quantity_used
+            FROM provider_usage_events
+            WHERE provider = ANY($1::text[])
+              AND allowance_key = 'daily_requests'
+              AND (
+                observed_at >= $2
+                OR period_end >= $2
+              )
+              AND observed_at < $3
+            """,
+            ["vertex", "gemini"],
+            period_start,
+            period_end,
+        )
+    except Exception as exc:
+        _log.warning("LLM daily request usage unavailable; local budget only: %s", exc)
+        return 0
+    if row is None:
+        return 0
+    return max(0, int(row["quantity_used"] or 0))
+
+
 def _token_total(input_tokens: int | None, output_tokens: int | None) -> int | None:
     values = [v for v in (input_tokens, output_tokens) if isinstance(v, int) and v >= 0]
     if not values:

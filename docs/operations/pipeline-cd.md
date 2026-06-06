@@ -53,9 +53,10 @@ in the job's `DATABASE_URL` env for that run; it is never written to a tracked f
 - **Per-run cap:** `INGEST_MAX_DOCS_PER_RUN` (repo var, default `200`).
 - **LLM:** `LLM_DAILY_REQUEST_BUDGET` (default `2000`), `LLM_MAX_OUTPUT_TOKENS` (`2048`),
   `LLM_PRIMARY=vertex`, `EXTRACT_ONLY_CHANGED=true`. The worker constructs LLMs through the shared
-  budgeted runtime wrapper: one request budget covers primary + fallback attempts, Vertex is preferred,
-  Gemini is the fallback, and successful responses append real request/token usage rows for Plan 04
-  provider-consumption cards. Embeddings are local fastembed (zero cost).
+  budgeted runtime wrapper: the request budget is seeded from same-day real usage rows and covers
+  primary + fallback attempts, Vertex is preferred, Gemini is the fallback, and successful responses
+  append real request/token usage rows for Plan 04 provider-consumption cards. Embeddings are local
+  fastembed (zero cost).
 - **Concurrency guard:** `concurrency: { group: intercal-pipeline, cancel-in-progress: false }` —
   a scheduled and a manual run never execute concurrently; a mid-flight (idempotent) run is allowed
   to finish and the next queues behind it.

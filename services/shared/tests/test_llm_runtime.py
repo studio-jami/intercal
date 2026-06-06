@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from intercal_shared.llm_runtime import FallbackLlm, UsageRecordingLlm, llm_provider_budget_states
+from intercal_shared.llm_runtime import (
+    FallbackLlm,
+    UsageRecordingLlm,
+    llm_daily_request_usage,
+    llm_provider_budget_states,
+)
 from intercal_shared.ports.llm import (
     LlmBudgetExceededError,
     LlmRateLimitError,
@@ -63,9 +68,11 @@ class _FakePool:
         *,
         rows: list[dict[str, Any]] | None = None,
         fail_fetch: bool = False,
+        usage_quantity: int = 0,
     ) -> None:
         self.rows = rows or []
         self.fail_fetch = fail_fetch
+        self.usage_quantity = usage_quantity
         self.executed: list[tuple[str, tuple[Any, ...]]] = []
 
     async def execute(self, sql: str, *args: Any) -> str:
@@ -76,6 +83,11 @@ class _FakePool:
         if self.fail_fetch:
             raise RuntimeError("view missing")
         return self.rows
+
+    async def fetchrow(self, sql: str, *args: Any) -> dict[str, Any]:
+        if self.fail_fetch:
+            raise RuntimeError("table missing")
+        return {"quantity_used": self.usage_quantity}
 
 
 @pytest.mark.asyncio
@@ -148,3 +160,13 @@ async def test_llm_provider_budget_states_returns_warning_and_exceeded() -> None
 @pytest.mark.asyncio
 async def test_llm_provider_budget_states_unavailable_is_empty() -> None:
     assert await llm_provider_budget_states(pool=_FakePool(fail_fetch=True)) == {}
+
+
+@pytest.mark.asyncio
+async def test_llm_daily_request_usage_reads_real_usage_rows() -> None:
+    assert await llm_daily_request_usage(pool=_FakePool(usage_quantity=17)) == 17
+
+
+@pytest.mark.asyncio
+async def test_llm_daily_request_usage_unavailable_is_zero() -> None:
+    assert await llm_daily_request_usage(pool=_FakePool(fail_fetch=True)) == 0

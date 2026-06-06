@@ -128,9 +128,9 @@ class InMemoryRequestBudget:
 
     __slots__ = ("_limit", "_used")
 
-    def __init__(self, limit: int) -> None:
+    def __init__(self, limit: int, *, used: int = 0) -> None:
         self._limit = limit
-        self._used = 0
+        self._used = max(0, used)
 
     @property
     def used(self) -> int:

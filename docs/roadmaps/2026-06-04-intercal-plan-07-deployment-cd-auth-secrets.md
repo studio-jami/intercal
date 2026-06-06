@@ -1,7 +1,7 @@
 # Deployment, CD, Auth & Secrets Implementation Plan
 
 Date: 2026-06-04
-Status: [ ] Active draft
+Status: [~] Implemented with operator-gated live proof remaining (2026-06-06)
 Source reports: `docs/research/2026-06-04-intercal-revisit-audit-and-dev-environment.md`; decisions `docs/decisions/0001-foundation-stack.md`, `0002-final-hosting-topology.md`; `docs/operations/resource-budget.md`
 Owner: Program orchestration
 Surface: secret management & fan-out, Vercel app+MCP deploy, GitHub Actions + Cloud Run pipeline CD, REST/MCP auth, backups, budget enforcement
@@ -111,7 +111,8 @@ Suggested verification: `node scripts/ops/secrets-fanout.mjs --dry-run`; confirm
 
 Goal: Dashboard + REST + MCP on one domain, with safe promotion/rollback.
 
-Status: [~] MCP mount complete (2026-06-05); deployment-runbook docs + rollback test pending.
+Status: [~] MCP mount and deployment-runbook docs complete (2026-06-06); live custom-domain smoke
+and rollback proof remain operator-gated.
 
 Implementation tasks:
 
@@ -124,14 +125,15 @@ Implementation tasks:
       added.
 - [x] Required runtime env: the route reads `DATABASE_URL` via `@intercal/core` `loadConfig` (same
       as REST); already set on Vercel. LLM/Upstash come with W5/W6 synthesis bodies.
-- [ ] Document preview-per-PR → prod-on-main flow, custom-domain cutover, and rollback in `docs/operations/deployment.md`.
+- [x] Document preview-per-PR → prod-on-main flow, custom-domain cutover, and rollback in `docs/operations/deployment.md`.
 
 Exit criteria:
 
 - [x] `/api/mcp` serves the V1 tools to a real MCP client — verified locally against production
       Neon (initialize + tools/list + `get_entity`/`search_evidence` returning real data); live on
       the deployed domain after the prod redeploy on push.
-- [ ] Prod promotion + rollback documented and tested.
+- [~] Prod promotion + rollback are documented; live proof requires Vercel project access and a
+      controlled deployed domain.
 
 Suggested verification: MCP client lists/calls tools against the deployed `/api/mcp` (e.g.
 `node scripts/dev/verify-mcp.mjs https://<domain>/api/mcp`); REST `/api/v1/*` unchanged.
@@ -398,12 +400,16 @@ Exit criteria:
 
 ## Acceptance Criteria
 
-- [ ] One-source secret fan-out to all four environments, scripted and value-safe.
-- [ ] App + MCP live on one domain with documented promotion/rollback.
-- [ ] Pipeline runs on Actions (scheduled) and Cloud Run (on-demand) from CI, within budget.
-- [ ] REST API keys + MCP OAuth enforced; usage + limits recorded.
-- [ ] Backups with a proven restore.
-- [ ] Budget throttles + cost monitoring active; free-tier allowances respected.
+- [x] One-source secret fan-out is scripted and value-safe for local `.env`, Vercel, GitHub Actions,
+      and Cloud Run/Secret Manager bindings.
+- [~] App + MCP are mounted for one-domain Vercel deployment with documented promotion/rollback;
+      live custom-domain smoke and rollback proof remain operator-gated.
+- [x] Pipeline runs on Actions (scheduled) and Cloud Run Jobs (on-demand) from CI, within budget.
+- [x] REST API keys + MCP OAuth are enforced; usage + limits are recorded on the implemented surfaces.
+- [~] Backups have a secret-safe runnable restore-proof path; real dump/restore/upload proof remains
+      gated on `pg_dump`/`pg_restore`, optional AWS CLI/R2 access, and a throwaway restore target.
+- [~] Budget throttles + cost monitoring are active in code/tests; paid provider calls, live DB writes,
+      and imported provider billing telemetry remain operator-gated.
 
 ## Implementation Order
 

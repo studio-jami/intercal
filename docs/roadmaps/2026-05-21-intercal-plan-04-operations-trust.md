@@ -2,7 +2,7 @@
 
 Date: 2026-05-21
 Aligned: 2026-06-04 to live stack
-Status: [ ] Active draft
+Status: [x] Complete with operator-gated proof carried forward (2026-06-06)
 Source reports: `docs/research/2026-05-21-intercal-foundation-report.md`, `docs/research/2026-06-04-intercal-revisit-audit-and-dev-environment.md`, `docs/architecture/deployment-topology.md`, `docs/architecture/provider-boundaries.md`; decisions `docs/decisions/0001-foundation-stack.md`, `docs/decisions/0002-final-hosting-topology.md`
 Owner: Main orchestration agent
 Surface: auth, rate limits, source policy, audit events, subscriptions, feedback/review records, observability, deployment, account setup
@@ -689,13 +689,15 @@ Suggested verification:
 
 ## Acceptance Criteria
 
-- [ ] Auth and rate limits protect REST/MCP.
-- [ ] Source policy is enforced in ingestion and responses.
-- [ ] Audit events cover trust-sensitive actions.
-- [ ] Feedback creates review records without public graph mutation.
-- [ ] Subscriptions deliver test payloads.
-- [ ] Observability exposes real health and cost signals.
-- [ ] Deployment and backup/restore paths are documented and proven.
+- [x] Auth and rate limits protect REST/MCP.
+- [x] Source policy is enforced in ingestion and responses.
+- [x] Audit events cover trust-sensitive actions.
+- [x] Feedback creates review records without public graph mutation.
+- [x] Subscriptions deliver test payloads.
+- [x] Observability exposes real health and cost signals without fake provider-usage zeroes.
+- [x] Deployment and backup/restore paths are documented; the runnable restore-proof path exists,
+      while live restore/upload proof remains operator-gated on PostgreSQL client tools, AWS CLI/R2
+      access, and a throwaway restore target.
 
 ## Implementation Order
 

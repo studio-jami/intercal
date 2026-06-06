@@ -25,9 +25,15 @@ Intercal is greenfield enough that arbitrary incrementalism is a liability. Exec
 
 ## Source Findings
 
-- The current built-in source adapters are `wikidata_changes_v1` and `github_releases_v1` in `services/shared/src/intercal_shared/source_registry.py`.
-- Current seed sources are Wikidata recent changes and featured GitHub releases in `db/seeds/0003_sources.sql`; they are useful but not enough for a GPT-era historical corpus.
-- `docs/research/2026-06-06-baseline-knowledge-seeding.md` correctly identifies the main gap: historical backfill adapters and backfill execution paths, not schema.
+- The built-in source adapters now include `wikidata_changes_v1`, `github_releases_v1`,
+  `registry_releases_v1`, `arxiv_v1`, `rss_feed_v1`, `wikidata_sparql_batch_v1`, and
+  `mediawiki_revisions_v1` in `services/shared/src/intercal_shared/source_registry.py`.
+- Current seed sources are still Wikidata recent changes and featured GitHub releases in
+  `db/seeds/0003_sources.sql`; source-row catalog expansion and execution belong to later
+  Workstream 3/4 passes, not this adapter-foundation slice.
+- `docs/research/2026-06-06-baseline-knowledge-seeding.md` correctly identified the main gap as
+  historical backfill adapters and backfill execution paths. Workstream 2 pass 1 adds the adapter
+  foundation; Workstream 3 still owns production backfill execution.
 - The first useful proof should validate GPT, Claude, Gemini, Llama, and MCP timeline queries from November 2022 onward, but the product target is broader AI-history coverage, not only those five spines.
 - The current dashboard has a home page, `/entity`, and `/entity/[name]` in `packages/dashboard/app`; it is a real SDK-backed shell, not the final public knowledge experience.
 - Plan 06 describes the needed public surface: entity/topic/claim/evidence pages, graph and timeline explorer, briefing/search/comparison, contradiction/freshness views, subscriptions, feedback/reporting, and operator/review surfaces.
@@ -154,6 +160,12 @@ The first proof consumes the same adapters, provenance rules, and public query p
   source registry, shared adapter tests, Workstream 2 roadmap status, and changelog. Scope is a
   commit-sized adapter-foundation slice; remaining Workstream 2 adapters may be carried into pass 2
   if the slice would otherwise become oversized. Next coordinator action: poll in short intervals.
+- 2026-06-06T12:06:46-04:00 — Workstream 2 pass 1 adapter-foundation slice implemented from the
+  live repository state. Added registry, arXiv, RSS/Atom, Wikidata SPARQL batch, and MediaWiki
+  revision adapters behind `SourcePort`; extended GitHub releases for historical date windows,
+  per-repo page cursors, and bounded per-run page walking; registered all adapters in
+  `SourceRegistry`; added focused adapter, cursor, SSRF, and source-policy ingestion tests. This
+  pass does not add source rows or backfill execution; those remain Workstream 3/4 responsibilities.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 
@@ -207,7 +219,7 @@ Depends on:
 
 Enables:
 
-- [ ] Workstream 3 backfill execution and Workstream 4 query proof.
+- [x] Workstream 3 backfill execution and Workstream 4 query proof.
 
 Repo guidance:
 
@@ -223,18 +235,24 @@ Primary areas:
 
 Implementation tasks:
 
-- [ ] Add `registry_releases_v1` for PyPI, npm, Hugging Face model registry, and comparable versioned registries.
-- [ ] Add `arxiv_v1` for bounded category/date search and abstract-first ingestion.
-- [ ] Add `rss_feed_v1` for lab blogs, standards feeds, changelogs, and project announcements.
-- [ ] Add `wikidata_sparql_batch_v1` for entity spine bootstrap.
-- [ ] Add `mediawiki_revisions_v1` for timestamped page revisions and diff-aware source documents.
-- [ ] Extend `github_releases_v1` only if the existing shape supports proper historical pagination and per-repo policy; otherwise replace the shape cleanly.
-- [ ] Add adapter conformance, SSRF/source-policy, pagination, dedup, and cursor tests.
+- [x] Add `registry_releases_v1` for PyPI, npm, and Hugging Face model registry; comparable registry variants remain per-origin follow-up work.
+- [x] Add `arxiv_v1` for bounded category/date search and abstract-first ingestion.
+- [x] Add `rss_feed_v1` for lab blogs, standards feeds, changelogs, and project announcements.
+- [x] Add `wikidata_sparql_batch_v1` for entity spine bootstrap.
+- [x] Add `mediawiki_revisions_v1` for timestamped page revisions and diff-aware source documents.
+- [x] Extend `github_releases_v1` only if the existing shape supports proper historical pagination and per-repo policy; otherwise replace the shape cleanly.
+- [x] Add adapter conformance, SSRF/source-policy, pagination, dedup, and cursor tests.
 
 Exit criteria:
 
-- [ ] Historical adapters can fetch November 2022 onward documents into the existing pipeline with source policy metadata intact.
-- [ ] No adapter writes canonical facts directly.
+- [x] Historical adapters can fetch November 2022 onward documents into the existing pipeline with source policy metadata intact.
+- [x] No adapter writes canonical facts directly.
+
+Pass 1 closeout note: the adapter foundation is in place and verified with focused Python tests.
+Comparable registry variants beyond PyPI/npm/Hugging Face remain follow-up adapter work if needed.
+No source catalog rows, backfill runner, Cloud Run job, or query-quality proof was added in this
+slice. Workstream 3 owns execution, budget, retries, and operator controls; Workstream 4 owns corpus
+coverage and query proof.
 
 Suggested verification:
 

@@ -16,6 +16,12 @@ adapter_config keys:
         ``"true"`` to include pre-releases.  Default: ``"false"``.
     per_page (int-string, optional):
         Releases per page (1-100).  Default: ``"30"``.
+    start_date / end_date (ISO date/datetime, optional):
+        Historical window bounds.  When either is present the adapter persists
+        a per-repo ``page_by_repo`` cursor in ``cursor_sink`` so long backfills
+        can resume GitHub pagination without skipping already-crawled pages.
+    max_pages_per_repo (int-string, optional):
+        Historical request cap per repo per run. Default: ``"10"``.
 
 Authentication: pass ``GITHUB_TOKEN`` in the environment for higher rate
 limits (5,000/hr authenticated vs 60/hr unauthenticated).  The adapter reads
@@ -35,6 +41,7 @@ import json
 import logging
 import os
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from typing import Any
 
 from intercal_shared.ports.source import RawDocument, SourceFetchError, SourceRateLimitError
@@ -71,9 +78,10 @@ class GitHubReleasesAdapter:
     ) -> AsyncIterator[RawDocument]:
         """Yield release documents from GitHub repositories.
 
-        Releases are fetched newest-first every run; idempotency is enforced
-        downstream by the ``content_hash`` dedup, so this adapter keeps no
-        cross-run cursor and leaves ``cursor_sink`` untouched.
+        Incremental runs fetch newest-first every run; idempotency is enforced
+        downstream by the ``content_hash`` dedup.  Historical date-window runs
+        additionally persist a per-repo page cursor so a bounded backfill can
+        resume across runs without re-walking earlier pages.
         """
         import httpx
 
@@ -122,6 +130,11 @@ class GitHubReleasesAdapter:
                 ) from exc
             include_pre = str(adapter_config.get("include_prereleases", "false")).lower() == "true"
             per_page = min(int(str(adapter_config.get("per_page", "30"))), 100)
+            start_date = _parse_date_bound(adapter_config.get("start_date"))
+            end_date = _parse_date_bound(adapter_config.get("end_date"), end_of_day=True)
+            historical_mode = start_date is not None or end_date is not None
+            cursor_page_by_repo = _cursor_page_by_repo(cursor_state or {})
+            max_pages_per_repo = max(int(str(adapter_config.get("max_pages_per_repo", "10"))), 1)
 
             repos_raw = adapter_config.get("repos", [])
             if not isinstance(repos_raw, list):
@@ -147,11 +160,13 @@ class GitHubReleasesAdapter:
                 if repo_budget <= 0:
                     continue
 
-                page = 1
+                page = int(cursor_page_by_repo.get(repo, 1)) if historical_mode else 1
 
                 yielded_for_repo = 0
+                repo_done = False
+                pages_fetched = 0
 
-                while yielded_for_repo < repo_budget:
+                while yielded_for_repo < repo_budget and pages_fetched < max_pages_per_repo:
                     url = f"{api_url}/repos/{repo}/releases"
                     params: dict[str, str | int] = {
                         "per_page": min(per_page, repo_budget - yielded_for_repo),
@@ -202,6 +217,7 @@ class GitHubReleasesAdapter:
                             f"GitHub API client error {response.status_code} for {repo}: "
                             f"{response.text[:200]}"
                         )
+                    pages_fetched += 1
 
                     try:
                         releases: list[dict[str, Any]] = response.json()
@@ -212,6 +228,7 @@ class GitHubReleasesAdapter:
                         ) from exc
 
                     if not releases:
+                        repo_done = True
                         break  # No more releases for this repo.
 
                     for release in releases:
@@ -223,6 +240,20 @@ class GitHubReleasesAdapter:
                             continue
                         # Skip drafts — they are not published.
                         if release.get("draft", False):
+                            continue
+                        published_dt = _parse_datetime(str(release.get("published_at", "") or ""))
+                        if (
+                            end_date is not None
+                            and published_dt is not None
+                            and published_dt > end_date
+                        ):
+                            continue
+                        if (
+                            start_date is not None
+                            and published_dt is not None
+                            and published_dt < start_date
+                        ):
+                            repo_done = True
                             continue
 
                         content_bytes = json.dumps(release, ensure_ascii=False).encode()
@@ -254,9 +285,58 @@ class GitHubReleasesAdapter:
                     page += 1
                     # Stop paging if GitHub signals no more pages via Link header.
                     link_header = response.headers.get("Link", "")
-                    if 'rel="next"' not in link_header:
+                    if repo_done or 'rel="next"' not in link_header:
                         break
+                if historical_mode:
+                    if repo_done:
+                        cursor_page_by_repo.pop(repo, None)
+                    else:
+                        cursor_page_by_repo[repo] = page
+
+            if historical_mode and cursor_sink is not None:
+                cursor_sink["page_by_repo"] = cursor_page_by_repo
 
         finally:
             if owns_client and client is not None:
                 await client.aclose()
+
+
+def _cursor_page_by_repo(cursor_state: dict[str, object]) -> dict[str, int]:
+    raw = cursor_state.get("page_by_repo", {})
+    if not isinstance(raw, dict):
+        return {}
+    return {str(repo): int(page) for repo, page in raw.items()}
+
+
+def _parse_date_bound(value: object, *, end_of_day: bool = False) -> datetime | None:
+    if not value:
+        return None
+    value_text = str(value)
+    if len(value_text) == 10 and value_text[4] == "-" and value_text[7] == "-":
+        date_value = datetime.fromisoformat(value_text).date()
+        time_value = datetime.max.time() if end_of_day else datetime.min.time()
+        return datetime.combine(date_value, time_value, tzinfo=UTC)
+    parsed = _parse_datetime(value_text)
+    if parsed is not None:
+        return parsed
+    try:
+        date_value = datetime.fromisoformat(value_text).date()
+    except ValueError:
+        return None
+    time_value = datetime.max.time() if end_of_day else datetime.min.time()
+    return datetime.combine(date_value, time_value, tzinfo=UTC)
+
+
+def _parse_datetime(value: str) -> datetime | None:
+    text = value.strip()
+    if not text:
+        return None
+    if text.endswith(("Z", "z")):
+        text = f"{text[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)

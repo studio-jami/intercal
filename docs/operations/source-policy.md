@@ -127,12 +127,13 @@ The guard is aligned with the **OWASP SSRF Prevention Cheat Sheet**. It enforces
 
 ### Where it is wired
 
-The built-in source adapters (`source_wikidata.py`, `source_github.py`) pre-validate their
-configured endpoint URLs through the guard **before any fetch fires**, and — when they own their
-HTTP client — build it via `create_guarded_client()` so every connection they open is IP-pinned and
-scheme-checked. A blocked URL surfaces as a `SourceFetchError` (the run is recorded failed; nothing
-is fetched). A **borrowed** client (injected by a caller or a test transport) is trusted as the
-caller's responsibility, but the configured URLs are still pre-validated.
+The built-in source adapters pre-validate their configured endpoint URLs through the guard **before
+any fetch fires**, including recent-change adapters, GitHub release history, registry release
+history, arXiv, RSS/Atom feeds, Wikidata SPARQL batches, and MediaWiki revisions. When an adapter
+owns its HTTP client, it builds the client via `create_guarded_client()` so every connection it opens
+is IP-pinned and scheme-checked. A blocked URL surfaces as a `SourceFetchError` (the run is recorded
+failed; nothing is fetched). A **borrowed** client (injected by a caller or a test transport) is
+trusted as the caller's responsibility, but configured URLs are still pre-validated.
 
 ### Deferred seam (no fake)
 

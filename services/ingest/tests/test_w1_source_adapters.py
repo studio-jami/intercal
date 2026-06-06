@@ -7,6 +7,7 @@ via httpx.MockTransport or a fake asyncpg pool.
 from __future__ import annotations
 
 import json
+import socket
 import uuid
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -56,12 +57,17 @@ def test_registry_all_names() -> None:
 
 
 def test_registry_register_all_defaults() -> None:
-    """register_all_defaults() loads Wikidata + GitHub adapters."""
+    """register_all_defaults() loads current built-in source adapters."""
     reg = SourceRegistry()
     reg.register_all_defaults()
     names = reg.all_names()
     assert "wikidata_changes_v1" in names
     assert "github_releases_v1" in names
+    assert "registry_releases_v1" in names
+    assert "arxiv_v1" in names
+    assert "rss_feed_v1" in names
+    assert "wikidata_sparql_batch_v1" in names
+    assert "mediawiki_revisions_v1" in names
 
 
 # ── SourcePort contract for built-in adapters ────────────────────────────────
@@ -720,8 +726,12 @@ async def test_ingest_source_persists_content_type_in_metadata() -> None:
         "query": {
             "recentchanges": [
                 {
-                    "rcid": 999, "revid": 9999, "title": "Q1", "ns": 0,
-                    "type": "edit", "timestamp": "2026-06-04T00:00:00Z",
+                    "rcid": 999,
+                    "revid": 9999,
+                    "title": "Q1",
+                    "ns": 0,
+                    "type": "edit",
+                    "timestamp": "2026-06-04T00:00:00Z",
                 }
             ]
         }
@@ -732,8 +742,12 @@ async def test_ingest_source_persists_content_type_in_metadata() -> None:
     reg.register_all_defaults()
 
     await ingest_source(
-        source_id=str(source_id), pool=pool, storage=None,
-        http_client=client, max_documents=5, registry=reg,
+        source_id=str(source_id),
+        pool=pool,
+        storage=None,
+        http_client=client,
+        max_documents=5,
+        registry=reg,
     )
     await client.aclose()
 
@@ -741,6 +755,101 @@ async def test_ingest_source_persists_content_type_in_metadata() -> None:
     metadata_json = insert_args[0][-1]  # last positional arg is the metadata JSON
     metadata = _json.loads(metadata_json)
     assert metadata.get("content_type") == "application/json"
+
+
+@pytest.mark.asyncio
+async def test_ingest_source_snapshots_policy_for_historical_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Historical adapters still enter through ingest_source and source policy.
+
+    The adapter fetches registry metadata only. Policy decisions come from the
+    source row and are snapshotted onto source_documents at ingest time.
+    """
+
+    import httpx
+
+    def fake_getaddrinfo(host: str, port: int, *args: Any, **kwargs: Any) -> list[Any]:
+        if host != "registry.example.com":
+            raise socket.gaierror(socket.EAI_NONAME, "Name or service not known")
+        return [
+            (
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+                socket.IPPROTO_TCP,
+                "",
+                ("93.184.216.34", port),
+            )
+        ]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+
+    source_id = uuid.uuid4()
+    row = _make_source_row(
+        source_id,
+        adapter_name="registry_releases_v1",
+        adapter_config={
+            "pypi_projects": ["openai"],
+            "pypi_api_url": "https://registry.example.com/pypi",
+            "start_date": "2023-01-01",
+        },
+    )
+    row["redistribution_allowed"] = False
+    row["summary_allowed"] = True
+    row["citation_only"] = True
+
+    insert_args: list[tuple[Any, ...]] = []
+    pool = MagicMock()
+
+    async def fake_fetchrow(query: str, *args: Any) -> Any:
+        if "FROM sources" in query:
+            return row
+        return None
+
+    async def fake_fetchval(query: str, *args: Any) -> Any:
+        if "INSERT INTO ingestion_runs" in query:
+            return uuid.uuid4()
+        if "INSERT INTO source_documents" in query:
+            insert_args.append(args)
+            return uuid.uuid4()
+        return None
+
+    pool.fetchrow = AsyncMock(side_effect=fake_fetchrow)
+    pool.fetchval = AsyncMock(side_effect=fake_fetchval)
+    pool.execute = AsyncMock(return_value="OK")
+    pool.fetch = AsyncMock(return_value=[])
+
+    response_payload = {
+        "info": {"name": "openai"},
+        "releases": {"1.0.0": [{"upload_time_iso_8601": "2023-01-01T00:00:00Z"}]},
+    }
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=response_payload))
+    )
+    reg = SourceRegistry()
+    reg.register_all_defaults()
+
+    result = await ingest_source(
+        source_id=str(source_id),
+        pool=pool,
+        storage=None,
+        http_client=client,
+        max_documents=5,
+        registry=reg,
+    )
+    await client.aclose()
+
+    assert result["new"] == 1
+    assert insert_args, "expected source_documents insert"
+    args = insert_args[0]
+    assert args[8] is None  # cleaned_text suppressed by citation_only.
+    assert args[9] is None
+    assert args[11] is False
+    assert args[12] is True
+    assert args[13] is True
+    metadata = json.loads(args[14])
+    assert metadata["adapter"] == "registry_releases_v1"
+    assert metadata["content_type"] == "application/json"
 
 
 @pytest.mark.asyncio

@@ -84,10 +84,22 @@ class SourceRegistry:
         loaded when the adapter is actually needed.
         """
         from intercal_shared.adapters.source_github import GitHubReleasesAdapter
+        from intercal_shared.adapters.source_historical import (
+            ArxivAdapter,
+            MediaWikiRevisionsAdapter,
+            RegistryReleasesAdapter,
+            RssFeedAdapter,
+            WikidataSparqlBatchAdapter,
+        )
         from intercal_shared.adapters.source_wikidata import WikidataChangesAdapter
 
         self.register(WikidataChangesAdapter())
         self.register(GitHubReleasesAdapter())
+        self.register(RegistryReleasesAdapter())
+        self.register(ArxivAdapter())
+        self.register(RssFeedAdapter())
+        self.register(WikidataSparqlBatchAdapter())
+        self.register(MediaWikiRevisionsAdapter())
         _log.debug("Registered all default source adapters: %s", self.all_names())
 
 

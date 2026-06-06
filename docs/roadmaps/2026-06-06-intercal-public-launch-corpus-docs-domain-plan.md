@@ -430,6 +430,11 @@ The first proof consumes the same adapters, provenance rules, and public query p
   meaningful live-full query-path proof tightening. Seeded, live-first, and live-full verifier modes
   passed with the new broad query checks. Next coordinator action: dispatch Workstream 4 pass 8
   strict quiet audit.
+- 2026-06-06T18:14:43-04:00 — Dispatched Workstream 4 pass 8 strict quiet audit to agent
+  `019e9f00-6674-77b3-b014-b7ea44174b81` (`Feynman`). Ownership boundary: corpus quality/query
+  proof surfaces, broad source rows/scripts/seeds, operations docs, related tests, Workstream 4
+  roadmap status, and changelog. Next coordinator action: poll in short intervals, record result,
+  then gate the pass 8 commit.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 

@@ -20,7 +20,6 @@ import { readFileSync } from 'node:fs';
 import { createDb } from '@intercal/core';
 import {
   buildProtectedResourceMetadata,
-  gateMcpRequest,
   handleMcpRequest,
   JwksTokenVerifier,
 } from '@intercal/mcp-server';

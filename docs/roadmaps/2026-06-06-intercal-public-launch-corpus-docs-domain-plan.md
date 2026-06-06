@@ -468,7 +468,7 @@ Implementation tasks:
 
 Exit criteria:
 
-- [~] A backfill run can be started, paused, resumed, audited, and repeated without duplicate facts or policy drift.
+- [x] A backfill run can be started, paused, resumed, audited, and repeated without duplicate facts or policy drift.
 
 Pass 1 closeout note: `intercal-pipeline backfill` now selects real active sources by repeated
 source ID/slug allowlists, source class, adapter name, date window, source cap, and per-source
@@ -491,6 +491,20 @@ remains an explicit limitation: pipeline backfill does not instantiate `QueuePor
 queue port/adapters do not emit command counts, so Upstash command usage must remain unavailable
 unless imported from real provider telemetry or added in a later queue-port change.
 
+Pass 3 closeout note: the quiet-confirmation audit found one remaining resume correctness gap and
+fixed it in scope. Backfill cursor lookup now scans recent successful `ingestion_runs` and reuses the
+newest cursor whose saved trigger/effective adapter-config scope matches the current run, so returning
+to a previous date window resumes that window instead of restarting after another window ran later.
+Changed date windows still restart cleanly, scheduled and backfill cursors stay separate, and duplicate
+documents/facts remain guarded by content-hash dedup plus the normal idempotent pipeline stages. Queue
+command accounting remains explicitly unavailable from this path because backfill does not use
+`QueuePort` and the queue adapters do not emit real command counts; do not infer Upstash usage from
+backfill runs.
+
+Workstream 3 is closed after pass 3 with one explicit accounting limitation: queue command usage must
+come from real provider telemetry or a later queue-port instrumentation change, not from inferred or
+zero-filled backfill metrics.
+
 Suggested verification:
 
 - `pnpm py:test services/pipeline services/ingest services/extract services/resolve services/synthesize`
@@ -503,7 +517,7 @@ Goal: Prove the first timeline, then expand to broad AI-history coverage with me
 
 Depends on:
 
-- [ ] Workstream 3 backfill execution.
+- [x] Workstream 3 backfill execution.
 - [ ] Plan 03 REST/MCP/SDK query surfaces.
 
 Enables:

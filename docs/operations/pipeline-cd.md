@@ -79,13 +79,14 @@ repeatable `--source-id` and `--source-slug` allowlists, plus `--adapter-name` f
 proofs. Date windows are passed as per-run adapter config overrides; the source row is not mutated.
 `ingest_source` persists backfill runs with `trigger='backfill'` and namespaces cursor state by the
 effective adapter config hash, so a changed date window restarts cleanly and scheduled cursors do not
-collide with historical cursors.
+collide with historical cursors. When operators return to a previous window, ingestion reuses the
+newest recent cursor whose saved scope matches that same effective adapter config.
 
 Pause/resume uses the existing source lifecycle and cursor rules:
 
 - Pause a source with `sources.is_paused=true` and a `pause_reason`; `backfill` skips paused rows.
 - Resume by clearing `is_paused`; the next matching backfill run resumes from the last succeeded
-  `backfill` cursor for the same effective adapter config.
+  recent `backfill` cursor for the same effective adapter config.
 - Roll back by pausing the source and restoring the database branch or backup. Canonical graph
   writes are append-only/idempotent; do not delete individual fact rows as an operational rollback.
 - Repeat a backfill with the same window to prove dedup: duplicate documents are skipped by

@@ -537,6 +537,7 @@ async def test_github_adapter_does_not_mutate_borrowed_client_headers() -> None:
 def _make_fake_pool(
     source_row: dict[str, Any] | None,
     last_run_row: dict[str, Any] | None = None,
+    last_run_rows: list[dict[str, Any]] | None = None,
     run_id: uuid.UUID | None = None,
 ) -> Any:
     """Build a minimal fake asyncpg pool for ingest_source tests."""
@@ -570,6 +571,11 @@ def _make_fake_pool(
         return "OK"
 
     async def fake_fetch(query: str, *args: Any) -> list[Any]:
+        if "ingestion_runs" in query and "cursor_state" in query:
+            if last_run_rows is not None:
+                return last_run_rows
+            if last_run_row is not None:
+                return [last_run_row]
         return []
 
     pool.fetchrow = AsyncMock(side_effect=fake_fetchrow)
@@ -888,6 +894,85 @@ async def test_ingest_source_backfill_cursor_is_scoped_to_effective_config() -> 
     assert persisted["offset"] == 1
     assert persisted["__intercal_cursor_scope"]["trigger"] == "backfill"
     assert persisted["__intercal_cursor_scope"]["adapter_config_hash"] != "old-window"
+
+
+@pytest.mark.asyncio
+async def test_ingest_source_reuses_matching_backfill_cursor_from_recent_history() -> None:
+    """Returning to an earlier backfill window resumes its scoped cursor.
+
+    A later successful run for a different date window must not hide the
+    newest matching cursor for this effective adapter config.
+    """
+    source_id = uuid.uuid4()
+    overrides: dict[str, object] = {
+        "start_date": "2022-11-01",
+        "end_date": "2022-11-30",
+    }
+    matching_scope = ingest_jobs._cursor_scope(  # pyright: ignore[reportPrivateUsage]
+        overrides,
+        trigger="backfill",
+    )
+    row = _make_source_row(source_id, adapter_name="fake_cursor_v1")
+    pool = _make_fake_pool(
+        source_row=row,
+        last_run_rows=[
+            {
+                "cursor_state": {
+                    "offset": 999,
+                    "__intercal_cursor_scope": {
+                        "trigger": "backfill",
+                        "adapter_config_hash": "newer-other-window",
+                    },
+                }
+            },
+            {
+                "cursor_state": {
+                    "offset": 200,
+                    "__intercal_cursor_scope": matching_scope,
+                }
+            },
+        ],
+    )
+    seen_cursor_state: list[dict[str, object] | None] = []
+
+    class FakeCursorAdapter:
+        adapter_name = "fake_cursor_v1"
+
+        async def fetch(
+            self,
+            *,
+            adapter_config: dict[str, object],
+            cursor_state: dict[str, object] | None = None,
+            max_documents: int = 200,
+            http_client: object | None = None,
+            cursor_sink: dict[str, object] | None = None,
+        ) -> Any:
+            seen_cursor_state.append(cursor_state)
+            if cursor_sink is not None:
+                cursor_sink["offset"] = 201
+            yield RawDocument(
+                content=b"resumed",
+                external_id="fake:resumed",
+                title="Fake resumed backfill doc",
+                published_at="2022-11-02T00:00:00Z",
+                content_type="text/plain",
+            )
+
+    reg = SourceRegistry()
+    reg.register(FakeCursorAdapter())
+
+    result = await ingest_source(
+        source_id=str(source_id),
+        pool=pool,
+        storage=None,
+        max_documents=1,
+        registry=reg,
+        adapter_config_overrides=overrides,
+        trigger="backfill",
+    )
+
+    assert result["new"] == 1
+    assert seen_cursor_state == [{"offset": 200, "__intercal_cursor_scope": matching_scope}]
 
 
 @pytest.mark.asyncio

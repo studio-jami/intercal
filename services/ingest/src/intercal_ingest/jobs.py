@@ -22,7 +22,7 @@ import json
 import logging
 import uuid
 from collections import Counter
-from typing import Any
+from typing import Any, cast
 
 _log = logging.getLogger(__name__)
 
@@ -131,25 +131,15 @@ async def ingest_source(
     # collides with a backfill cursor, and a changed backfill window restarts
     # cleanly instead of resuming from an incompatible token.
     cursor_scope = _cursor_scope(adapter_config, trigger=trigger)
-    last_run_row = await pool.fetchrow(
+    last_run_rows = await pool.fetch(
         "SELECT cursor_state FROM ingestion_runs "
         "WHERE source_id = $1 AND trigger = $2 AND status = 'succeeded' "
-        "ORDER BY started_at DESC LIMIT 1",
+        "  AND cursor_state IS NOT NULL "
+        "ORDER BY started_at DESC LIMIT 25",
         uuid.UUID(source_id),
         trigger,
     )
-    cursor_state: dict[str, object] | None = None
-    if last_run_row and last_run_row["cursor_state"]:
-        raw_cs = last_run_row["cursor_state"]
-        cursor_state = (
-            dict(raw_cs)
-            if isinstance(raw_cs, dict)
-            else json.loads(raw_cs)
-            if isinstance(raw_cs, str)
-            else None
-        )
-        if cursor_state and cursor_state.get("__intercal_cursor_scope") != cursor_scope:
-            cursor_state = None
+    cursor_state = _matching_cursor_state(last_run_rows, cursor_scope)
 
     # ── 4. Create ingestion_run row ───────────────────────────────────────────
     run_id: uuid.UUID = await pool.fetchval(
@@ -729,6 +719,38 @@ def _cursor_scope(adapter_config: dict[str, object], *, trigger: str) -> dict[st
         json.dumps(adapter_config, sort_keys=True, default=str).encode("utf-8")
     ).hexdigest()
     return {"trigger": trigger, "adapter_config_hash": config_hash}
+
+
+def _matching_cursor_state(
+    rows: list[Any],
+    cursor_scope: dict[str, str],
+) -> dict[str, object] | None:
+    """Return the newest saved cursor whose namespace matches this run.
+
+    Backfill operators often alternate date windows.  Looking only at the
+    newest successful run would restart an older window after another window
+    runs, even though its scoped cursor is still in recent history.
+    """
+    for row in rows:
+        cursor_state = _coerce_cursor_state(row["cursor_state"])
+        if cursor_state and cursor_state.get("__intercal_cursor_scope") == cursor_scope:
+            return cursor_state
+    return None
+
+
+def _coerce_cursor_state(raw_cursor_state: object) -> dict[str, object] | None:
+    """Normalize asyncpg/json cursor payloads into a typed dict."""
+    if isinstance(raw_cursor_state, dict):
+        parsed = cast(dict[object, object], raw_cursor_state)
+    elif isinstance(raw_cursor_state, str):
+        loaded: object = json.loads(raw_cursor_state)
+        if not isinstance(loaded, dict):
+            return None
+        parsed = cast(dict[object, object], loaded)
+    else:
+        return None
+
+    return {str(key): value for key, value in parsed.items()}
 
 
 async def _clear_chunks(pool: Any, doc_id: uuid.UUID) -> None:

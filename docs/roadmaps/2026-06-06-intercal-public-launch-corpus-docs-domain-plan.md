@@ -99,6 +99,13 @@ The first proof consumes the same adapters, provenance rules, and public query p
   Next coordinator action: poll in short intervals, record result in
   `docs/engineering/agents/orchestrator-logs/`, then dispatch Workstream 1 pass 2 after the pass 1
   commit/result lands.
+- 2026-06-06T11:42:00-04:00 — Workstream 1 pass 1 returned complete. Commit:
+  `29e67ebfc7b574c3c8655e321eb1fcfc773cbed1` (`chore(docs): define corpus
+  taxonomy source policy`), pushed to `origin/main`. Changed files: corpus taxonomy doc, source
+  policy doc, baseline seeding report, active roadmap, and one changelog fragment. Verification:
+  read back changed Markdown, `git diff --check`, and lightweight secret-pattern scan; `pnpm
+  docs:check` unavailable because no script exists. No blocker reported. Next coordinator action:
+  dispatch mandatory Workstream 1 pass 2 with fresh context.
 - 2026-06-06T12:08:00-04:00 — Workstream 1 pass 1 completed by this agent. Added the durable
   corpus taxonomy in `docs/architecture/corpus-taxonomy.md`, aligned source-policy class defaults
   and the baseline seeding report, and confirmed no seed or source-registry changes are required

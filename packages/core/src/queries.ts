@@ -139,11 +139,18 @@ export async function getEntity(db: Db, params: EntityParams): Promise<S['Entity
   }
   const relationships = await relQuery.orderBy('recorded_at', 'desc').limit(100).execute();
 
-  const facts = await db
+  let factQuery = db
     .selectFrom('claims')
     .selectAll()
     .where('subject_entity_id', '=', row.id)
-    .where('status', '=', 'active')
+    .where('status', '=', 'active');
+  if (params.at_date) {
+    const at = new Date(params.at_date);
+    factQuery = factQuery
+      .where((eb) => eb.or([eb('valid_from', 'is', null), eb('valid_from', '<=', at)]))
+      .where((eb) => eb.or([eb('valid_until', 'is', null), eb('valid_until', '>', at)]));
+  }
+  const facts = await factQuery
     // claims has no recorded_at column; created_at is the claim's transaction time.
     .orderBy('created_at', 'desc')
     .limit(25)

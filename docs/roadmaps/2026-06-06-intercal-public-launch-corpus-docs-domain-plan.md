@@ -405,6 +405,14 @@ The first proof consumes the same adapters, provenance rules, and public query p
   proof surfaces, broad source rows/scripts/seeds, operations docs, related tests, Workstream 4
   roadmap status, and changelog. Next coordinator action: poll in short intervals, record result,
   then gate the pass 6 commit.
+- 2026-06-06T15:45:00-04:00 — Workstream 4 pass 6 strict quiet audit returned complete. Found and
+  fixed one query-path proof gap: `get_entity(..., at_date=...)` now filters returned facts by claim
+  valid-time, and the corpus verifier now fails if the `get_entity ChatGPT as_of` proof includes any
+  fact outside the requested point-in-time window. `seeded-proof`, `live-first-proof`, and `live-full`
+  all pass on the configured Neon branch after the fix. No source rows, proof corpus rows, dashboard,
+  docs/Mintlify, marketing/SEO, domain routing, or release-audit work was added. Next coordinator
+  action: gate this small pass 6 commit; if accepted, Workstream 4 can close as quiet from the
+  corpus/query-proof boundary.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 
@@ -739,6 +747,17 @@ source classes plus all configured full-corpus topic clusters and date ranges. `
 `live-first-proof`, and `live-full` all pass against the configured Neon branch after applying the
 reviewed rows. This proves the broad taxonomy quality gate truthfully; it remains a bounded reviewed
 proof slice rather than a claim of continuous full-web saturation.
+
+Pass 6 closeout note: the strict quiet audit found one remaining query-path proof gap and fixed it
+in scope. `get_entity(..., at_date=...)` already filtered relationships by valid-time, but returned
+all active facts for the entity; it now applies the same valid-time window to claim facts. The
+corpus verifier now checks that `get_entity ChatGPT as_of` returns only facts whose `validFrom` /
+`validUntil` contain the requested date. `seeded-proof`, `live-first-proof`, and `live-full` all
+pass on the configured Neon branch after the fix, including the tightened `factsInWindow=true`
+assertion. No source catalog rows, proof corpus rows, source-policy loosening, raw source-text
+exposure, dashboard, docs/Mintlify, marketing/SEO, domain routing, or release-audit work was added.
+Workstream 4 is quiet from the corpus/query-proof boundary if the pass 6 gate accepts this small
+commit.
 
 ## Workstream 5: Public Intercal Knowledge Experience
 

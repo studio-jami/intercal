@@ -217,13 +217,20 @@ async function runQueryProofs(tx) {
   }
 
   await addProof('get_entity ChatGPT as_of', async () => {
+    const asOf = '2023-03-01T00:00:00Z';
     const entity = await core.getEntity(tx, {
       name_or_id: 'ChatGPT',
-      at_date: '2023-03-01T00:00:00Z',
+      at_date: asOf,
+    });
+    const asOfTime = new Date(asOf).getTime();
+    const factsInWindow = entity.facts.every((fact) => {
+      const validFromOk = !fact.validFrom || new Date(fact.validFrom).getTime() <= asOfTime;
+      const validUntilOk = !fact.validUntil || new Date(fact.validUntil).getTime() > asOfTime;
+      return validFromOk && validUntilOk;
     });
     return {
-      passed: entity.entity.displayName === 'ChatGPT' && entity.facts.length > 0,
-      detail: `${entity.entity.displayName}; facts=${entity.facts.length}`,
+      passed: entity.entity.displayName === 'ChatGPT' && entity.facts.length > 0 && factsInWindow,
+      detail: `${entity.entity.displayName}; facts=${entity.facts.length}; factsInWindow=${factsInWindow}`,
     };
   });
 

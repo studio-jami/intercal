@@ -1,0 +1,23 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "SubscriptionTarget.json",
+    "type": "object",
+    "properties": {
+        "kind": {
+            "$ref": "SubscriptionTargetKind.json"
+        },
+        "topicId": {
+            "type": "string"
+        },
+        "entityId": {
+            "type": "string"
+        },
+        "relationshipTypeId": {
+            "type": "string"
+        },
+        "claimPattern": {}
+    },
+    "required": [
+        "kind"
+    ]
+}

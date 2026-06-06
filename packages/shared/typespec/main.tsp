@@ -59,6 +59,44 @@ enum VerificationVerdict {
   unverified,
 }
 
+enum SubscriptionTargetKind {
+  topic,
+  entity,
+  relationship,
+  claim_pattern,
+}
+
+enum SubscriptionDeliveryMethod {
+  polling,
+  webhook,
+}
+
+enum FeedbackTargetType {
+  entity,
+  claim,
+  source,
+  digest,
+  freshness,
+  coverage,
+}
+
+enum FeedbackConcernType {
+  incorrect,
+  outdated,
+  missing_evidence,
+  missing_coverage,
+  source_quality,
+  contradiction,
+  other,
+}
+
+enum ReviewStatus {
+  received,
+  reviewing,
+  resolved,
+  rejected,
+}
+
 // ───────────────────────── Shared value types ─────────────────────────
 
 @doc("A confidence score in [0,1] with the method that produced it.")
@@ -218,6 +256,56 @@ model FreshnessQuery {
   @query topic_or_entity: string;
 }
 
+model SubscriptionTarget {
+  kind: SubscriptionTargetKind;
+  topicId?: string;
+  entityId?: string;
+  relationshipTypeId?: string;
+  claimPattern?: unknown;
+}
+
+model CreateSubscriptionRequest {
+  target: SubscriptionTarget;
+  deliveryMethod: SubscriptionDeliveryMethod;
+  webhookUrl?: string;
+  @doc("Plaintext webhook secret accepted only on create; the API stores a hash and never returns it.")
+  webhookSecret?: string;
+  @minValue(0) @maxValue(1) minImportance?: float32;
+  @minValue(200) @maxValue(8000) tokenBudget?: int32;
+  metadata?: unknown;
+}
+
+model PollSubscriptionRequest {
+  subscriptionId: string;
+  @minValue(1) @maxValue(100) limit?: int32;
+}
+
+model DeleteSubscriptionRequest {
+  subscriptionId: string;
+}
+
+model DispatchSubscriptionRequest {
+  changeKind: SubscriptionTargetKind;
+  topicId?: string;
+  entityId?: string;
+  relationshipTypeId?: string;
+  claimPattern?: unknown;
+  sinceDate: utcDateTime;
+  untilDate?: utcDateTime;
+}
+
+@doc("Bounded public feedback that creates a review record without mutating canonical knowledge.")
+model FeedbackRequest {
+  targetType: FeedbackTargetType;
+  @minLength(1) @maxLength(256)
+  targetId: string;
+  concernType: FeedbackConcernType;
+  @minLength(1) @maxLength(240)
+  summary: string;
+  @maxLength(4000)
+  details?: string;
+}
+
 // ───────────────────────── Tool responses (V1) ─────────────────────────
 
 model DeltaResponse {
@@ -262,6 +350,69 @@ model ClaimVerificationResponse {
 
 model SourcesResponse {
   sources: SourceDocument[];
+}
+
+model Subscription {
+  id: string;
+  target: SubscriptionTarget;
+  deliveryMethod: SubscriptionDeliveryMethod;
+  webhookUrl?: string;
+  @minValue(0) @maxValue(1) minImportance: float32;
+  tokenBudget: int32;
+  isActive: boolean;
+  lastDeliveredAt?: utcDateTime;
+  lastCheckedAt?: utcDateTime;
+  createdAt: utcDateTime;
+  updatedAt: utcDateTime;
+}
+
+model SubscriptionNotification {
+  id: string;
+  subscriptionId: string;
+  changeKind: SubscriptionTargetKind;
+  targetLabel: string;
+  since: utcDateTime;
+  until: utcDateTime;
+  @minValue(0) @maxValue(1) minImportance: float32;
+  @minValue(0) @maxValue(1) maxImportance: float32;
+  tokenBudget: int32;
+  payload: unknown;
+  status: string;
+  createdAt: utcDateTime;
+  deliveredAt?: utcDateTime;
+}
+
+model SubscriptionsResponse {
+  subscriptions: Subscription[];
+}
+
+model SubscriptionResponse {
+  subscription: Subscription;
+}
+
+model SubscriptionNotificationsResponse {
+  notifications: SubscriptionNotification[];
+}
+
+model DispatchSubscriptionResponse {
+  enqueued: int32;
+  skipped: int32;
+}
+
+@doc("A received review record created from public feedback.")
+model ReviewRecord {
+  id: string;
+  targetType: FeedbackTargetType;
+  targetId: string;
+  concernType: FeedbackConcernType;
+  status: ReviewStatus;
+  summary: string;
+  details?: string;
+  createdAt: utcDateTime;
+}
+
+model FeedbackResponse {
+  review: ReviewRecord;
 }
 
 @error
@@ -309,3 +460,39 @@ op getSources(...SourcesQuery): SourcesResponse | ApiError;
 @get
 @doc("Report how fresh Intercal's knowledge is for a topic or entity.")
 op getFreshness(...FreshnessQuery): FreshnessReport | ApiError;
+
+@tag("subscriptions")
+@route("/v1/subscriptions")
+@get
+@doc("List active subscriptions owned by the authenticated API key.")
+op listSubscriptions(): SubscriptionsResponse | ApiError;
+
+@tag("subscriptions")
+@route("/v1/subscriptions")
+@post
+@doc("Create a polling or webhook subscription for a topic, entity, relationship type, or claim pattern.")
+op createSubscription(@body body: CreateSubscriptionRequest): SubscriptionResponse | ApiError;
+
+@tag("subscriptions")
+@route("/v1/subscriptions/poll")
+@post
+@doc("Poll pending notifications for a subscription. Returned notifications are marked delivered.")
+op pollSubscriptionNotifications(@body body: PollSubscriptionRequest): SubscriptionNotificationsResponse | ApiError;
+
+@tag("subscriptions")
+@route("/v1/subscriptions/dispatch")
+@post
+@doc("Enqueue bounded notifications for matching subscriptions after a known knowledge change.")
+op dispatchSubscriptionNotifications(@body body: DispatchSubscriptionRequest): DispatchSubscriptionResponse | ApiError;
+
+@tag("subscriptions")
+@route("/v1/subscriptions/delete")
+@post
+@doc("Deactivate a subscription owned by the authenticated API key.")
+op deleteSubscription(@body body: DeleteSubscriptionRequest): SubscriptionResponse | ApiError;
+
+@tag("operations")
+@route("/v1/feedback")
+@post
+@doc("Submit bounded feedback for operator review. Creates a review record only; canonical graph state is unchanged.")
+op submitFeedback(@body body: FeedbackRequest): FeedbackResponse | ApiError;

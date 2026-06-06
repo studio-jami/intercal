@@ -258,6 +258,12 @@ source-policy changes (W2/Plan 06), entity merge / claim retraction / entity-res
 (Plan 02/Plan 06). Those surfaces will call the centralized emit helper with the reserved action
 strings rather than inventing their own.
 
+Orchestrator checkpoint (2026-06-06T05:18Z): prior P3 checkpoint had no resumable agent id from the
+Claude-side run. Replacement Codex confirm-quiet pass `019e9b5e-21c6-7880-82ec-ee61b34af2ef`
+returned commit `c4a2113` (6 files, +15/-10 docs/comment alignment only), with
+`pnpm --filter @intercal/core test -- auth/audit.test.ts`, `pnpm --filter @intercal/core typecheck`,
+and `git diff --cached --check` green. Numeric gate passed and this is class C; W3 is closed.
+
 Depends on:
 
 - [x] Plan 01 `audit_events` schema (migration 0022; append-only enforced by 0026 UPDATE/DELETE +
@@ -304,10 +310,44 @@ Suggested verification:
 
 Goal: Accept bounded feedback without public canonical mutations.
 
+Orchestrator checkpoint (2026-06-06T05:17Z): Codex P1 dispatched as agent
+`019e9b5d-9e84-7201-b48f-5ad044ec376a`. Ownership: bounded feedback/review records across
+contracts/API/core/db/docs/tests as required. A duplicate W4 dispatch
+`019e9b5e-826b-7483-91c9-c061f3c2c33d` was closed immediately; ignore it. Next coordinator action:
+poll P1 to terminal, checkpoint result, then dispatch fresh-context P2.
+
+Return checkpoint (2026-06-06): P1 implemented the feedback/review loop but did not commit because
+W4 and W5 both legitimately touch TypeSpec, generated contracts, and API shared files. Verification
+reported green for contracts build, lint/typecheck/test/build, Python gates, and diff-check; DB
+migration was not run because the shell had no verified `DATABASE_URL`. Next coordinator action:
+commit the combined W4/W5 contract/API state through a focused integration worker, then dispatch W4
+P2.
+
+Integration checkpoint (2026-06-06T06:09Z): combined W4/W5 integration/staging worker dispatched as
+agent `019e9bb8-e241-7221-9de5-44bf368be058`. Ownership: current interleaved W4 feedback + W5
+subscription WIP, generated contracts, tests/docs/checkpoints. Next coordinator action: poll to
+terminal; if it commits, dispatch W4 P2 from the integrated commit.
+
+Integration return (2026-06-06): combined W4/W5 commit completed. Verification passed for
+`pnpm contracts:build`, `pnpm contracts:check`, touched package typechecks/tests, full package
+`pnpm build`, `pnpm py:typecheck` (0 errors, existing warnings), scoped W4/W5 Biome checks, and
+`git diff --cached --check`. `pnpm db:check` was not run because there was no verified throwaway DB
+target: process `DATABASE_URL` was unset, Docker was not on PATH, and `.env` was intentionally not
+used as an unverified mutable database target. Next coordinator action: dispatch W4 P2.
+
+Status: [x] **Complete** (2026-06-06). Public feedback now creates bounded `review_records`
+through `POST /v1/feedback` and the SDK `submitFeedback` method. The API validates against the
+TypeSpec-derived `FeedbackRequest` contract, supports entity/claim/source/digest/freshness/coverage
+targets, and creates only `received` records. Entity, claim, source, and digest targets are checked
+before a review row is accepted; freshness and coverage are accepted as bounded query targets. Each
+accepted submission writes `feedback.submit` to `audit_events` in the same transaction as the review
+record. Focused API tests prove review/audit creation and canonical entity/claim/source/digest
+snapshots remain unchanged. Durable doc: `docs/operations/review-workflows.md`.
+
 Depends on:
 
-- [ ] Workstream 3 audit events.
-- [ ] Plan 03 claim/entity/source response IDs.
+- [x] Workstream 3 audit events.
+- [x] Plan 03 claim/entity/source response IDs.
 
 Enables:
 
@@ -325,28 +365,69 @@ Primary areas:
 
 Implementation tasks:
 
-- [ ] Add feedback/report issue endpoint.
-- [ ] Add review record schema if not already covered by audit/review tables.
-- [ ] Add targets for entity, claim, source, digest, freshness, and coverage concerns.
-- [ ] Add status workflow for received, reviewing, resolved, rejected.
-- [ ] Add tests proving feedback does not mutate canonical records.
+- [x] Add feedback/report issue endpoint.
+- [x] Add review record schema if not already covered by audit/review tables.
+- [x] Add targets for entity, claim, source, digest, freshness, and coverage concerns.
+- [x] Add status workflow for received, reviewing, resolved, rejected.
+- [x] Add tests proving feedback does not mutate canonical records.
 
 Exit criteria:
 
-- [ ] Public feedback creates audited review records and leaves canonical graph unchanged.
+- [x] Public feedback creates audited review records and leaves canonical graph unchanged.
 
 Suggested verification:
 
-- `pnpm test -- feedback`
+- `pnpm --filter @intercal/api test -- feedback`
+- `pnpm --filter @intercal/sdk test`
 
 ## Workstream 5: Subscriptions
 
 Goal: Notify interested consumers when relevant knowledge changes.
 
+Status: [x] **Complete** (2026-06-06). Subscription registration, polling, bounded notification
+outbox, webhook dispatch seam, retry/backoff state, delivery logs, and REST contract routes are
+implemented. Existing `subscriptions` registration schema is extended by
+`0029_subscription_notifications.sql` (`subscription_notifications` + `subscription_delivery_logs`).
+REST routes require the `manage:subscriptions` scope and use the shared auth/rate-limit middleware:
+`GET /v1/subscriptions`, `POST /v1/subscriptions`, `POST /v1/subscriptions/poll`,
+`POST /v1/subscriptions/dispatch`, and `POST /v1/subscriptions/delete`. Notifications are built
+from the shared Plan 03 delta service, copy `minImportance`/`tokenBudget` at enqueue time, store only
+public-contract-shaped payloads (summary, citations, IDs/summaries, confidence, freshness), and skip
+below-threshold changes. Webhook delivery is executable through `WebhookDeliveryPort` with exponential
+backoff and append-only delivery attempt logs; provider-specific HTTP logic stays outside the core
+query layer. Webhook secrets are accepted only at create time, stored as a hash, and never returned.
+Durable doc: `docs/operations/subscriptions.md`.
+
+Orchestrator checkpoint (2026-06-06T05:19Z): Codex P1 dispatched as agent
+`019e9b5f-191b-70c1-a1de-f1012c0a5ac1`. Ownership: subscription contracts/API/core/db/docs/tests;
+parallel agents are active on W3/W4 and Plan07 W7, so no same-stream overlap. Next coordinator
+action: poll P1 to terminal, checkpoint result, then dispatch fresh-context P2.
+
+Return checkpoint (2026-06-06): P1 implemented subscription registration, polling, webhook dispatch
+port, retry/backoff, delivery logs, token-budgeted notifications, secret-hash storage, and audit
+actions, but did not commit because W4 generated-contract/API edits are interleaved. Verification
+reported green for contracts build, TS checks/tests/builds, lint, and Python gates; `pnpm db:check`
+was not run to completion against an unknown DB target and `pnpm contracts:check` had expected
+pre-commit drift. Next coordinator action: commit the combined W4/W5 contract/API state through a
+focused integration worker, then dispatch W5 P2.
+
+Integration checkpoint (2026-06-06T06:09Z): combined W4/W5 integration/staging worker dispatched as
+agent `019e9bb8-e241-7221-9de5-44bf368be058`. Ownership: current interleaved W4 feedback + W5
+subscription WIP, generated contracts, tests/docs/checkpoints. Next coordinator action: poll to
+terminal; if it commits, dispatch W5 P2 from the integrated commit.
+
+Integration return (2026-06-06): combined W4/W5 commit completed with generated TypeSpec artifacts
+checked after staging. Verification passed for `pnpm contracts:build`, `pnpm contracts:check`,
+touched package typechecks/tests, full package `pnpm build`, `pnpm py:typecheck` (0 errors, existing
+warnings), scoped W4/W5 Biome checks, and `git diff --cached --check`. `pnpm db:check` was not run
+because there was no verified throwaway DB target: process `DATABASE_URL` was unset, Docker was not
+on PATH, and `.env` was intentionally not used as an unverified mutable database target. Next
+coordinator action: dispatch W5 P2.
+
 Depends on:
 
-- [ ] Plan 03 freshness/delta query services.
-- [ ] Workstream 1 auth.
+- [x] Plan 03 freshness/delta query services.
+- [x] Workstream 1 auth.
 
 Enables:
 
@@ -364,18 +445,24 @@ Primary areas:
 
 Implementation tasks:
 
-- [ ] Add topic, entity, relationship, and claim-pattern subscriptions.
-- [ ] Add polling and webhook delivery surfaces.
-- [ ] Add minimum importance thresholds and token-budgeted notification payloads.
-- [ ] Add retry/backoff and delivery logs.
+- [x] Add topic, entity, relationship, and claim-pattern subscriptions.
+- [x] Add polling and webhook delivery surfaces.
+- [x] Add minimum importance thresholds and token-budgeted notification payloads.
+- [x] Add retry/backoff and delivery logs.
 
 Exit criteria:
 
-- [ ] Fixture entity/topic changes produce expected subscription notifications.
+- [x] Fixture entity/topic changes produce expected subscription notifications through the
+      shared delta-backed enqueue path and scoped polling surface; webhook delivery attempts are
+      driven through a port and logged with retry/backoff state.
 
 Suggested verification:
 
-- `pnpm test -- subscriptions`
+- `pnpm --filter @intercal/core typecheck`
+- `pnpm --filter @intercal/api typecheck`
+- `pnpm --filter @intercal/core test`
+- `pnpm --filter @intercal/api test`
+- `pnpm contracts:check`
 
 ## Workstream 6: Observability
 

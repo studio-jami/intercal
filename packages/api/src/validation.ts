@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { getJsonSchema } from '@intercal/shared';
+import { getJsonSchema, getJsonSchemas } from '@intercal/shared';
 import type { ValidateFunction } from 'ajv';
 
 // ajv and ajv-formats are CJS; load them via createRequire so the constructor/callable
@@ -18,6 +18,16 @@ const ajv = new Ajv2020({ coerceTypes: true, strict: false, allErrors: true, use
 addFormats(ajv);
 
 const cache = new Map<string, ValidateFunction>();
+let registeredSchemas = false;
+
+function registerGeneratedSchemas(): void {
+  if (registeredSchemas) return;
+  for (const schema of Object.values(getJsonSchemas())) {
+    const id = typeof schema.$id === 'string' ? schema.$id : undefined;
+    if (id && !ajv.getSchema(id)) ajv.addSchema(schema, id);
+  }
+  registeredSchemas = true;
+}
 
 /**
  * Compile (and cache) a validator for a generated JSON-Schema query model, e.g. "DeltaQuery".
@@ -30,6 +40,7 @@ const cache = new Map<string, ValidateFunction>();
 export function validatorFor(modelName: string): ValidateFunction {
   const cached = cache.get(modelName);
   if (cached) return cached;
+  registerGeneratedSchemas();
   const schema = getJsonSchema(modelName);
   // Clone (do not mutate the shared generated artifact) and drop `$id`: Ajv would otherwise
   // register the same id twice across the two compile paths and throw.
@@ -37,6 +48,18 @@ export function validatorFor(modelName: string): ValidateFunction {
   const strictSchema = { ...rest, additionalProperties: false };
   const validate = ajv.compile(strictSchema);
   cache.set(modelName, validate);
+  return validate;
+}
+
+export function bodyValidatorFor(modelName: string): ValidateFunction {
+  const cacheKey = `body:${modelName}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+  registerGeneratedSchemas();
+  const { $id: _id, ...rest } = getJsonSchema(modelName);
+  const strictSchema = { ...rest, additionalProperties: false };
+  const validate = ajv.compile(strictSchema);
+  cache.set(cacheKey, validate);
   return validate;
 }
 

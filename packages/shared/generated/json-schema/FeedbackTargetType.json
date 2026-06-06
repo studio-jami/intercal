@@ -1,0 +1,13 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "FeedbackTargetType.json",
+    "type": "string",
+    "enum": [
+        "entity",
+        "claim",
+        "source",
+        "digest",
+        "freshness",
+        "coverage"
+    ]
+}

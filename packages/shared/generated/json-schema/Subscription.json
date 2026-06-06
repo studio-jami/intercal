@@ -1,0 +1,58 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "Subscription.json",
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "string"
+        },
+        "target": {
+            "$ref": "SubscriptionTarget.json"
+        },
+        "deliveryMethod": {
+            "$ref": "SubscriptionDeliveryMethod.json"
+        },
+        "webhookUrl": {
+            "type": "string"
+        },
+        "minImportance": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+        },
+        "tokenBudget": {
+            "type": "integer",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+        },
+        "isActive": {
+            "type": "boolean"
+        },
+        "lastDeliveredAt": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "lastCheckedAt": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "createdAt": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+        }
+    },
+    "required": [
+        "id",
+        "target",
+        "deliveryMethod",
+        "minImportance",
+        "tokenBudget",
+        "isActive",
+        "createdAt",
+        "updatedAt"
+    ]
+}

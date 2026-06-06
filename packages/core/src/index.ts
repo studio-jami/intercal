@@ -76,3 +76,33 @@ export {
   MemoryRateLimitStore,
   UpstashRateLimitStore,
 } from './ratelimit/index.js';
+export type {
+  FeedbackConcernType,
+  FeedbackResponse,
+  FeedbackTargetType,
+  ReviewRecord,
+  ReviewStatus,
+  SubmitFeedbackContext,
+  SubmitFeedbackParams,
+} from './review.js';
+export { submitFeedback } from './review.js';
+export type {
+  CreateSubscriptionInput,
+  EnqueueSubscriptionChangeInput,
+  PollSubscriptionInput,
+  SubscriptionDeliveryMethod,
+  SubscriptionNotificationRecord,
+  SubscriptionRecord,
+  SubscriptionTargetKind,
+  WebhookDeliveryPort,
+  WebhookDeliveryRequest,
+  WebhookDeliveryResult,
+} from './subscriptions.js';
+export {
+  createSubscription,
+  deactivateSubscription,
+  deliverDueWebhookNotifications,
+  enqueueSubscriptionNotifications,
+  listSubscriptions,
+  pollSubscriptionNotifications,
+} from './subscriptions.js';

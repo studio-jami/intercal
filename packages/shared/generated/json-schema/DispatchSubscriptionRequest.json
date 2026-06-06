@@ -1,0 +1,32 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "DispatchSubscriptionRequest.json",
+    "type": "object",
+    "properties": {
+        "changeKind": {
+            "$ref": "SubscriptionTargetKind.json"
+        },
+        "topicId": {
+            "type": "string"
+        },
+        "entityId": {
+            "type": "string"
+        },
+        "relationshipTypeId": {
+            "type": "string"
+        },
+        "claimPattern": {},
+        "sinceDate": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "untilDate": {
+            "type": "string",
+            "format": "date-time"
+        }
+    },
+    "required": [
+        "changeKind",
+        "sinceDate"
+    ]
+}

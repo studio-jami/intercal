@@ -146,3 +146,5 @@ For full responsibility descriptions and invariants, see `docs/architecture/data
 | `0025_source_documents_summary_policy.sql` | source document summary-policy snapshot |
 | `0026_audit_events_append_only.sql` | `audit_events` UPDATE/DELETE enforcement |
 | `0027_audit_events_forbid_truncate.sql` | `audit_events` TRUNCATE enforcement |
+| `0028_review_records.sql` | `review_records` |
+| `0029_subscription_notifications.sql` | `subscription_notifications`, `subscription_delivery_logs` |

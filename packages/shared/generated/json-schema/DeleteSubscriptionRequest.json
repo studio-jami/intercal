@@ -1,0 +1,13 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "DeleteSubscriptionRequest.json",
+    "type": "object",
+    "properties": {
+        "subscriptionId": {
+            "type": "string"
+        }
+    },
+    "required": [
+        "subscriptionId"
+    ]
+}

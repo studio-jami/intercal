@@ -27,6 +27,8 @@ import {
   type RateLimitStorePort,
   READ_SCOPE,
   recordUsageEvent,
+  SCOPES,
+  UnauthorizedError,
 } from '@intercal/core';
 import type { Context, MiddlewareHandler } from 'hono';
 
@@ -134,10 +136,22 @@ export function authMiddleware(opts: AuthMiddlewareOptions): MiddlewareHandler {
       c.set('apiKey', principal);
       principalId = principal?.id ?? null;
 
-      // 2. Authorize: keyed callers need READ for the read surface. (Anonymous read is allowed.)
-      if (principal && !hasScope(principal.scopes, READ_SCOPE)) {
-        throw new ForbiddenError('API key lacks the required scope: read', {
-          requiredScope: READ_SCOPE,
+      // 2. Authorize: keyed callers need the route's scope. Anonymous public reads/feedback are
+      // allowed under a tight per-IP limit; subscription management always requires a key.
+      const path = new URL(c.req.url).pathname;
+      const isSubscriptionRoute =
+        path.endsWith('/v1/subscriptions') || path.includes('/v1/subscriptions/');
+      const requiredScope = isSubscriptionRoute
+        ? SCOPES.MANAGE_SUBSCRIPTIONS
+        : c.req.method === 'POST' && path.endsWith('/v1/feedback')
+          ? SCOPES.SUBMIT_FEEDBACK
+          : READ_SCOPE;
+      if (!principal && isSubscriptionRoute) {
+        throw new UnauthorizedError('API key required for this operation.', { requiredScope });
+      }
+      if (principal && !hasScope(principal.scopes, requiredScope)) {
+        throw new ForbiddenError(`API key lacks the required scope: ${requiredScope}`, {
+          requiredScope,
         });
       }
 

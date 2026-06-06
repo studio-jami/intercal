@@ -1,0 +1,42 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "ReviewRecord.json",
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "string"
+        },
+        "targetType": {
+            "$ref": "FeedbackTargetType.json"
+        },
+        "targetId": {
+            "type": "string"
+        },
+        "concernType": {
+            "$ref": "FeedbackConcernType.json"
+        },
+        "status": {
+            "$ref": "ReviewStatus.json"
+        },
+        "summary": {
+            "type": "string"
+        },
+        "details": {
+            "type": "string"
+        },
+        "createdAt": {
+            "type": "string",
+            "format": "date-time"
+        }
+    },
+    "required": [
+        "id",
+        "targetType",
+        "targetId",
+        "concernType",
+        "status",
+        "summary",
+        "createdAt"
+    ],
+    "description": "A received review record created from public feedback."
+}

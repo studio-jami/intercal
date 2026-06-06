@@ -1,0 +1,68 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "SubscriptionNotification.json",
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "string"
+        },
+        "subscriptionId": {
+            "type": "string"
+        },
+        "changeKind": {
+            "$ref": "SubscriptionTargetKind.json"
+        },
+        "targetLabel": {
+            "type": "string"
+        },
+        "since": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "until": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "minImportance": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+        },
+        "maxImportance": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+        },
+        "tokenBudget": {
+            "type": "integer",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+        },
+        "payload": {},
+        "status": {
+            "type": "string"
+        },
+        "createdAt": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "deliveredAt": {
+            "type": "string",
+            "format": "date-time"
+        }
+    },
+    "required": [
+        "id",
+        "subscriptionId",
+        "changeKind",
+        "targetLabel",
+        "since",
+        "until",
+        "minImportance",
+        "maxImportance",
+        "tokenBudget",
+        "payload",
+        "status",
+        "createdAt"
+    ]
+}

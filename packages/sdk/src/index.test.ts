@@ -86,6 +86,41 @@ describe('IntercalClient — request building', () => {
     expect(headers.get('authorization')).toBe('Bearer secret-token');
     expect(headers.get('x-trace')).toBe('abc');
   });
+
+  it('POSTs feedback as bounded JSON with bearer auth', async () => {
+    const body = {
+      review: {
+        id: '11111111-1111-4111-8111-111111111111',
+        targetType: 'entity',
+        targetId: '22222222-2222-4222-8222-222222222222',
+        concernType: 'outdated',
+        status: 'received',
+        summary: 'Display name appears stale',
+        createdAt: '2026-06-06T12:00:00Z',
+      },
+    };
+    const { impl, lastCall } = stubFetch(200, body);
+    const client = new IntercalClient({ baseUrl: BASE, fetch: impl, apiKey: 'secret-token' });
+    const res = await client.submitFeedback({
+      targetType: 'entity',
+      targetId: '22222222-2222-4222-8222-222222222222',
+      concernType: 'outdated',
+      summary: 'Display name appears stale',
+    });
+
+    expect(res).toEqual(body);
+    const call = lastCall();
+    expect(call.url).toBe(`${BASE}/v1/feedback`);
+    expect(call.init?.method).toBe('POST');
+    const headers = new Headers(call.init?.headers);
+    expect(headers.get('accept')).toBe('application/json');
+    expect(headers.get('content-type')).toBe('application/json');
+    expect(headers.get('authorization')).toBe('Bearer secret-token');
+    expect(JSON.parse(String(call.init?.body))).toMatchObject({
+      targetType: 'entity',
+      concernType: 'outdated',
+    });
+  });
 });
 
 describe('IntercalClient — typed responses', () => {

@@ -1,0 +1,35 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "CreateSubscriptionRequest.json",
+    "type": "object",
+    "properties": {
+        "target": {
+            "$ref": "SubscriptionTarget.json"
+        },
+        "deliveryMethod": {
+            "$ref": "SubscriptionDeliveryMethod.json"
+        },
+        "webhookUrl": {
+            "type": "string"
+        },
+        "webhookSecret": {
+            "type": "string",
+            "description": "Plaintext webhook secret accepted only on create; the API stores a hash and never returns it."
+        },
+        "minImportance": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+        },
+        "tokenBudget": {
+            "type": "integer",
+            "minimum": 200,
+            "maximum": 8000
+        },
+        "metadata": {}
+    },
+    "required": [
+        "target",
+        "deliveryMethod"
+    ]
+}

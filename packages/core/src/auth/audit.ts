@@ -38,6 +38,9 @@ export type AuditSeverity = 'info' | 'low' | 'medium' | 'high' | 'critical';
 export const AUDIT_ACTIONS = {
   API_KEY_ISSUE: 'api_key.issue',
   API_KEY_REVOKE: 'api_key.revoke',
+  FEEDBACK_SUBMIT: 'feedback.submit',
+  SUBSCRIPTION_CREATE: 'subscription.create',
+  SUBSCRIPTION_DELETE: 'subscription.delete',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS] | (string & {});

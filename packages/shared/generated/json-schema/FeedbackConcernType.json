@@ -1,0 +1,14 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "FeedbackConcernType.json",
+    "type": "string",
+    "enum": [
+        "incorrect",
+        "outdated",
+        "missing_evidence",
+        "missing_coverage",
+        "source_quality",
+        "contradiction",
+        "other"
+    ]
+}

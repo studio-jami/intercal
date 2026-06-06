@@ -27,6 +27,11 @@ export function getJsonSchema(modelName: string): Record<string, unknown> {
   return schema;
 }
 
+/** All generated JSON Schemas keyed by TypeSpec model name. */
+export function getJsonSchemas(): Record<string, Record<string, unknown>> {
+  return jsonSchemas;
+}
+
 /**
  * The V1 agent-facing tool surface. Hand-authored, stable metadata that binds each MCP tool
  * to its REST route and its generated JSON-Schema input model. Response shapes come from the

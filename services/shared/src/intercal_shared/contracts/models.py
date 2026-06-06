@@ -6,7 +6,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Any
 
-from pydantic import AwareDatetime, BaseModel, Field, confloat
+from pydantic import AwareDatetime, BaseModel, Field, confloat, conint, constr
 
 
 class ApiError(BaseModel):
@@ -38,6 +38,15 @@ class ContradictionState(StrEnum):
     none = 'none'
     contested = 'contested'
     contradicted = 'contradicted'
+
+
+class DeleteSubscriptionRequest(BaseModel):
+    subscriptionId: str
+
+
+class DispatchSubscriptionResponse(BaseModel):
+    enqueued: int
+    skipped: int
 
 
 class EntityType(StrEnum):
@@ -73,6 +82,25 @@ class ExternalId(BaseModel):
     id: str
 
 
+class FeedbackConcernType(StrEnum):
+    incorrect = 'incorrect'
+    outdated = 'outdated'
+    missing_evidence = 'missing_evidence'
+    missing_coverage = 'missing_coverage'
+    source_quality = 'source_quality'
+    contradiction = 'contradiction'
+    other = 'other'
+
+
+class FeedbackTargetType(StrEnum):
+    entity = 'entity'
+    claim = 'claim'
+    source = 'source'
+    digest = 'digest'
+    freshness = 'freshness'
+    coverage = 'coverage'
+
+
 class FreshnessReport(BaseModel):
     target: str
     lastUpdated: AwareDatetime | None = None
@@ -83,10 +111,22 @@ class FreshnessReport(BaseModel):
     staleness: str | None = None
 
 
+class PollSubscriptionRequest(BaseModel):
+    subscriptionId: str
+    limit: conint(ge=1, le=100) | None = None
+
+
 class RelationshipStatus(StrEnum):
     active = 'active'
     ended = 'ended'
     proposed = 'proposed'
+
+
+class ReviewStatus(StrEnum):
+    received = 'received'
+    reviewing = 'reviewing'
+    resolved = 'resolved'
+    rejected = 'rejected'
 
 
 class SourceDocument(BaseModel):
@@ -103,6 +143,18 @@ class SourceDocument(BaseModel):
 
 class SourcesResponse(BaseModel):
     sources: list[SourceDocument]
+
+
+class SubscriptionDeliveryMethod(StrEnum):
+    polling = 'polling'
+    webhook = 'webhook'
+
+
+class SubscriptionTargetKind(StrEnum):
+    topic = 'topic'
+    entity = 'entity'
+    relationship = 'relationship'
+    claim_pattern = 'claim_pattern'
 
 
 class VerificationVerdict(StrEnum):
@@ -152,6 +204,16 @@ class Digest(BaseModel):
     generatedAt: AwareDatetime
 
 
+class DispatchSubscriptionRequest(BaseModel):
+    changeKind: SubscriptionTargetKind
+    topicId: str | None = None
+    entityId: str | None = None
+    relationshipTypeId: str | None = None
+    claimPattern: Any | None = None
+    sinceDate: AwareDatetime
+    untilDate: AwareDatetime | None = None
+
+
 class Entity(BaseModel):
     id: str
     type: EntityType
@@ -173,6 +235,14 @@ class EntitySummary(BaseModel):
     displayName: str
 
 
+class FeedbackRequest(BaseModel):
+    targetType: FeedbackTargetType
+    targetId: constr(min_length=1, max_length=256)
+    concernType: FeedbackConcernType
+    summary: constr(min_length=1, max_length=240)
+    details: constr(max_length=4000) | None = None
+
+
 class Relationship(BaseModel):
     id: str
     type: str
@@ -184,6 +254,58 @@ class Relationship(BaseModel):
     confidence: Confidence
     status: RelationshipStatus
     sourceDocumentIds: list[str]
+
+
+class ReviewRecord(BaseModel):
+    id: str
+    targetType: FeedbackTargetType
+    targetId: str
+    concernType: FeedbackConcernType
+    status: ReviewStatus
+    summary: str
+    details: str | None = None
+    createdAt: AwareDatetime
+
+
+class SubscriptionNotification(BaseModel):
+    id: str
+    subscriptionId: str
+    changeKind: SubscriptionTargetKind
+    targetLabel: str
+    since: AwareDatetime
+    until: AwareDatetime
+    minImportance: confloat(ge=0.0, le=1.0)
+    maxImportance: confloat(ge=0.0, le=1.0)
+    tokenBudget: int
+    payload: Any
+    status: str
+    createdAt: AwareDatetime
+    deliveredAt: AwareDatetime | None = None
+
+
+class SubscriptionNotificationsResponse(BaseModel):
+    notifications: list[SubscriptionNotification]
+
+
+class SubscriptionTarget(BaseModel):
+    kind: SubscriptionTargetKind
+    topicId: str | None = None
+    entityId: str | None = None
+    relationshipTypeId: str | None = None
+    claimPattern: Any | None = None
+
+
+class CreateSubscriptionRequest(BaseModel):
+    target: SubscriptionTarget
+    deliveryMethod: SubscriptionDeliveryMethod
+    webhookUrl: str | None = None
+    webhookSecret: str | None = Field(
+        None,
+        description='Plaintext webhook secret accepted only on create; the API stores a hash and never returns it.',
+    )
+    minImportance: confloat(ge=0.0, le=1.0) | None = None
+    tokenBudget: conint(ge=200, le=8000) | None = None
+    metadata: Any | None = None
 
 
 class DeltaResponse(BaseModel):
@@ -203,3 +325,29 @@ class EntityResponse(BaseModel):
     relationships: list[Relationship] | None = None
     facts: list[Claim] | None = None
     freshness: FreshnessReport
+
+
+class FeedbackResponse(BaseModel):
+    review: ReviewRecord
+
+
+class Subscription(BaseModel):
+    id: str
+    target: SubscriptionTarget
+    deliveryMethod: SubscriptionDeliveryMethod
+    webhookUrl: str | None = None
+    minImportance: confloat(ge=0.0, le=1.0)
+    tokenBudget: int
+    isActive: bool
+    lastDeliveredAt: AwareDatetime | None = None
+    lastCheckedAt: AwareDatetime | None = None
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
+
+
+class SubscriptionResponse(BaseModel):
+    subscription: Subscription
+
+
+class SubscriptionsResponse(BaseModel):
+    subscriptions: list[Subscription]

@@ -72,6 +72,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Submit bounded feedback for operator review. Creates a review record only; canonical graph state is unchanged. */
+        post: operations["submitFeedback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/freshness": {
         parameters: {
             query?: never;
@@ -100,6 +117,75 @@ export interface paths {
         get: operations["getSources"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description List active subscriptions owned by the authenticated API key. */
+        get: operations["listSubscriptions"];
+        put?: never;
+        /** @description Create a polling or webhook subscription for a topic, entity, relationship type, or claim pattern. */
+        post: operations["createSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/subscriptions/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Deactivate a subscription owned by the authenticated API key. */
+        post: operations["deleteSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/subscriptions/dispatch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Enqueue bounded notifications for matching subscriptions after a known knowledge change. */
+        post: operations["dispatchSubscriptionNotifications"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/subscriptions/poll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Poll pending notifications for a subscription. Returned notifications are marked delivered. */
+        post: operations["pollSubscriptionNotifications"];
         delete?: never;
         options?: never;
         head?: never;
@@ -168,6 +254,21 @@ export interface components {
         };
         /** @enum {string} */
         ContradictionState: "none" | "contested" | "contradicted";
+        CreateSubscriptionRequest: {
+            target: components["schemas"]["SubscriptionTarget"];
+            deliveryMethod: components["schemas"]["SubscriptionDeliveryMethod"];
+            webhookUrl?: string;
+            /** @description Plaintext webhook secret accepted only on create; the API stores a hash and never returns it. */
+            webhookSecret?: string;
+            /** Format: float */
+            minImportance?: number;
+            /** Format: int32 */
+            tokenBudget?: number;
+            metadata?: unknown;
+        };
+        DeleteSubscriptionRequest: {
+            subscriptionId: string;
+        };
         DeltaResponse: {
             topic: string;
             /** Format: date-time */
@@ -190,6 +291,23 @@ export interface components {
             freshness: components["schemas"]["FreshnessReport"];
             /** Format: date-time */
             generatedAt: string;
+        };
+        DispatchSubscriptionRequest: {
+            changeKind: components["schemas"]["SubscriptionTargetKind"];
+            topicId?: string;
+            entityId?: string;
+            relationshipTypeId?: string;
+            claimPattern?: unknown;
+            /** Format: date-time */
+            sinceDate: string;
+            /** Format: date-time */
+            untilDate?: string;
+        };
+        DispatchSubscriptionResponse: {
+            /** Format: int32 */
+            enqueued: number;
+            /** Format: int32 */
+            skipped: number;
         };
         /** @description A canonical thing: person, org, place, role/office, product, event, concept, etc. */
         Entity: {
@@ -240,6 +358,21 @@ export interface components {
             system: string;
             id: string;
         };
+        /** @enum {string} */
+        FeedbackConcernType: "incorrect" | "outdated" | "missing_evidence" | "missing_coverage" | "source_quality" | "contradiction" | "other";
+        /** @description Bounded public feedback that creates a review record without mutating canonical knowledge. */
+        FeedbackRequest: {
+            targetType: components["schemas"]["FeedbackTargetType"];
+            targetId: string;
+            concernType: components["schemas"]["FeedbackConcernType"];
+            summary: string;
+            details?: string;
+        };
+        FeedbackResponse: {
+            review: components["schemas"]["ReviewRecord"];
+        };
+        /** @enum {string} */
+        FeedbackTargetType: "entity" | "claim" | "source" | "digest" | "freshness" | "coverage";
         /** @description How fresh Intercal's knowledge is for a target. */
         FreshnessReport: {
             target: string;
@@ -253,6 +386,11 @@ export interface components {
              */
             coverage?: number;
             staleness?: string;
+        };
+        PollSubscriptionRequest: {
+            subscriptionId: string;
+            /** Format: int32 */
+            limit?: number;
         };
         /** @description A typed temporal edge between entities, derived from claims and evidence. */
         Relationship: {
@@ -272,6 +410,20 @@ export interface components {
         };
         /** @enum {string} */
         RelationshipStatus: "active" | "ended" | "proposed";
+        /** @description A received review record created from public feedback. */
+        ReviewRecord: {
+            id: string;
+            targetType: components["schemas"]["FeedbackTargetType"];
+            targetId: string;
+            concernType: components["schemas"]["FeedbackConcernType"];
+            status: components["schemas"]["ReviewStatus"];
+            summary: string;
+            details?: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        /** @enum {string} */
+        ReviewStatus: "received" | "reviewing" | "resolved" | "rejected";
         /** @description Immutable ingested evidence. */
         SourceDocument: {
             id: string;
@@ -288,6 +440,67 @@ export interface components {
         };
         SourcesResponse: {
             sources: components["schemas"]["SourceDocument"][];
+        };
+        Subscription: {
+            id: string;
+            target: components["schemas"]["SubscriptionTarget"];
+            deliveryMethod: components["schemas"]["SubscriptionDeliveryMethod"];
+            webhookUrl?: string;
+            /** Format: float */
+            minImportance: number;
+            /** Format: int32 */
+            tokenBudget: number;
+            isActive: boolean;
+            /** Format: date-time */
+            lastDeliveredAt?: string;
+            /** Format: date-time */
+            lastCheckedAt?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /** @enum {string} */
+        SubscriptionDeliveryMethod: "polling" | "webhook";
+        SubscriptionNotification: {
+            id: string;
+            subscriptionId: string;
+            changeKind: components["schemas"]["SubscriptionTargetKind"];
+            targetLabel: string;
+            /** Format: date-time */
+            since: string;
+            /** Format: date-time */
+            until: string;
+            /** Format: float */
+            minImportance: number;
+            /** Format: float */
+            maxImportance: number;
+            /** Format: int32 */
+            tokenBudget: number;
+            payload: unknown;
+            status: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            deliveredAt?: string;
+        };
+        SubscriptionNotificationsResponse: {
+            notifications: components["schemas"]["SubscriptionNotification"][];
+        };
+        SubscriptionResponse: {
+            subscription: components["schemas"]["Subscription"];
+        };
+        SubscriptionTarget: {
+            kind: components["schemas"]["SubscriptionTargetKind"];
+            topicId?: string;
+            entityId?: string;
+            relationshipTypeId?: string;
+            claimPattern?: unknown;
+        };
+        /** @enum {string} */
+        SubscriptionTargetKind: "topic" | "entity" | "relationship" | "claim_pattern";
+        SubscriptionsResponse: {
+            subscriptions: components["schemas"]["Subscription"][];
         };
         /** @enum {string} */
         VerificationVerdict: "supported" | "partially_supported" | "contradicted" | "unverified";
@@ -458,6 +671,39 @@ export interface operations {
             };
         };
     };
+    submitFeedback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackRequest"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackResponse"];
+                };
+            };
+            /** @description An unexpected error response. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     getFreshness: {
         parameters: {
             query: {
@@ -508,6 +754,167 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourcesResponse"];
+                };
+            };
+            /** @description An unexpected error response. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listSubscriptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionsResponse"];
+                };
+            };
+            /** @description An unexpected error response. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionResponse"];
+                };
+            };
+            /** @description An unexpected error response. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    deleteSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionResponse"];
+                };
+            };
+            /** @description An unexpected error response. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    dispatchSubscriptionNotifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DispatchSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DispatchSubscriptionResponse"];
+                };
+            };
+            /** @description An unexpected error response. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    pollSubscriptionNotifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PollSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionNotificationsResponse"];
                 };
             };
             /** @description An unexpected error response. */

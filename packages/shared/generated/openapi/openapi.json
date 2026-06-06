@@ -8,6 +8,12 @@
   "tags": [
     {
       "name": "knowledge"
+    },
+    {
+      "name": "subscriptions"
+    },
+    {
+      "name": "operations"
     }
   ],
   "paths": {
@@ -185,6 +191,48 @@
         ]
       }
     },
+    "/v1/feedback": {
+      "post": {
+        "operationId": "submitFeedback",
+        "description": "Submit bounded feedback for operator review. Creates a review record only; canonical graph state is unchanged.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "operations"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackRequest"
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/freshness": {
       "get": {
         "operationId": "getFreshness",
@@ -258,6 +306,204 @@
         "tags": [
           "knowledge"
         ]
+      }
+    },
+    "/v1/subscriptions": {
+      "get": {
+        "operationId": "listSubscriptions",
+        "description": "List active subscriptions owned by the authenticated API key.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "subscriptions"
+        ]
+      },
+      "post": {
+        "operationId": "createSubscription",
+        "description": "Create a polling or webhook subscription for a topic, entity, relationship type, or claim pattern.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "subscriptions"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSubscriptionRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/subscriptions/delete": {
+      "post": {
+        "operationId": "deleteSubscription",
+        "description": "Deactivate a subscription owned by the authenticated API key.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "subscriptions"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteSubscriptionRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/subscriptions/dispatch": {
+      "post": {
+        "operationId": "dispatchSubscriptionNotifications",
+        "description": "Enqueue bounded notifications for matching subscriptions after a known knowledge change.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispatchSubscriptionResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "subscriptions"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DispatchSubscriptionRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/subscriptions/poll": {
+      "post": {
+        "operationId": "pollSubscriptionNotifications",
+        "description": "Poll pending notifications for a subscription. Returned notifications are marked delivered.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionNotificationsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "subscriptions"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PollSubscriptionRequest"
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -610,6 +856,52 @@
           "contradicted"
         ]
       },
+      "CreateSubscriptionRequest": {
+        "type": "object",
+        "required": [
+          "target",
+          "deliveryMethod"
+        ],
+        "properties": {
+          "target": {
+            "$ref": "#/components/schemas/SubscriptionTarget"
+          },
+          "deliveryMethod": {
+            "$ref": "#/components/schemas/SubscriptionDeliveryMethod"
+          },
+          "webhookUrl": {
+            "type": "string"
+          },
+          "webhookSecret": {
+            "type": "string",
+            "description": "Plaintext webhook secret accepted only on create; the API stores a hash and never returns it."
+          },
+          "minImportance": {
+            "type": "number",
+            "format": "float",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "tokenBudget": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 200,
+            "maximum": 8000
+          },
+          "metadata": {}
+        }
+      },
+      "DeleteSubscriptionRequest": {
+        "type": "object",
+        "required": [
+          "subscriptionId"
+        ],
+        "properties": {
+          "subscriptionId": {
+            "type": "string"
+          }
+        }
+      },
       "DeltaResponse": {
         "type": "object",
         "required": [
@@ -691,6 +983,53 @@
           }
         },
         "description": "A token-budgeted synthesis built from evidence and graph state. A delivery artifact, not canonical."
+      },
+      "DispatchSubscriptionRequest": {
+        "type": "object",
+        "required": [
+          "changeKind",
+          "sinceDate"
+        ],
+        "properties": {
+          "changeKind": {
+            "$ref": "#/components/schemas/SubscriptionTargetKind"
+          },
+          "topicId": {
+            "type": "string"
+          },
+          "entityId": {
+            "type": "string"
+          },
+          "relationshipTypeId": {
+            "type": "string"
+          },
+          "claimPattern": {},
+          "sinceDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "untilDate": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DispatchSubscriptionResponse": {
+        "type": "object",
+        "required": [
+          "enqueued",
+          "skipped"
+        ],
+        "properties": {
+          "enqueued": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
       },
       "Entity": {
         "type": "object",
@@ -868,6 +1207,72 @@
         },
         "description": "An external identifier for an entity (e.g. a Wikidata QID)."
       },
+      "FeedbackConcernType": {
+        "type": "string",
+        "enum": [
+          "incorrect",
+          "outdated",
+          "missing_evidence",
+          "missing_coverage",
+          "source_quality",
+          "contradiction",
+          "other"
+        ]
+      },
+      "FeedbackRequest": {
+        "type": "object",
+        "required": [
+          "targetType",
+          "targetId",
+          "concernType",
+          "summary"
+        ],
+        "properties": {
+          "targetType": {
+            "$ref": "#/components/schemas/FeedbackTargetType"
+          },
+          "targetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "concernType": {
+            "$ref": "#/components/schemas/FeedbackConcernType"
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "details": {
+            "type": "string",
+            "maxLength": 4000
+          }
+        },
+        "description": "Bounded public feedback that creates a review record without mutating canonical knowledge."
+      },
+      "FeedbackResponse": {
+        "type": "object",
+        "required": [
+          "review"
+        ],
+        "properties": {
+          "review": {
+            "$ref": "#/components/schemas/ReviewRecord"
+          }
+        }
+      },
+      "FeedbackTargetType": {
+        "type": "string",
+        "enum": [
+          "entity",
+          "claim",
+          "source",
+          "digest",
+          "freshness",
+          "coverage"
+        ]
+      },
       "FreshnessReport": {
         "type": "object",
         "required": [
@@ -897,6 +1302,23 @@
           }
         },
         "description": "How fresh Intercal's knowledge is for a target."
+      },
+      "PollSubscriptionRequest": {
+        "type": "object",
+        "required": [
+          "subscriptionId"
+        ],
+        "properties": {
+          "subscriptionId": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 1,
+            "maximum": 100
+          }
+        }
       },
       "Relationship": {
         "type": "object",
@@ -958,6 +1380,55 @@
           "proposed"
         ]
       },
+      "ReviewRecord": {
+        "type": "object",
+        "required": [
+          "id",
+          "targetType",
+          "targetId",
+          "concernType",
+          "status",
+          "summary",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "targetType": {
+            "$ref": "#/components/schemas/FeedbackTargetType"
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "concernType": {
+            "$ref": "#/components/schemas/FeedbackConcernType"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReviewStatus"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "details": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "A received review record created from public feedback."
+      },
+      "ReviewStatus": {
+        "type": "string",
+        "enum": [
+          "received",
+          "reviewing",
+          "resolved",
+          "rejected"
+        ]
+      },
       "SourceDocument": {
         "type": "object",
         "required": [
@@ -1009,6 +1480,205 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SourceDocument"
+            }
+          }
+        }
+      },
+      "Subscription": {
+        "type": "object",
+        "required": [
+          "id",
+          "target",
+          "deliveryMethod",
+          "minImportance",
+          "tokenBudget",
+          "isActive",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "target": {
+            "$ref": "#/components/schemas/SubscriptionTarget"
+          },
+          "deliveryMethod": {
+            "$ref": "#/components/schemas/SubscriptionDeliveryMethod"
+          },
+          "webhookUrl": {
+            "type": "string"
+          },
+          "minImportance": {
+            "type": "number",
+            "format": "float",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "tokenBudget": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "lastDeliveredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastCheckedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SubscriptionDeliveryMethod": {
+        "type": "string",
+        "enum": [
+          "polling",
+          "webhook"
+        ]
+      },
+      "SubscriptionNotification": {
+        "type": "object",
+        "required": [
+          "id",
+          "subscriptionId",
+          "changeKind",
+          "targetLabel",
+          "since",
+          "until",
+          "minImportance",
+          "maxImportance",
+          "tokenBudget",
+          "payload",
+          "status",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "subscriptionId": {
+            "type": "string"
+          },
+          "changeKind": {
+            "$ref": "#/components/schemas/SubscriptionTargetKind"
+          },
+          "targetLabel": {
+            "type": "string"
+          },
+          "since": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "until": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "minImportance": {
+            "type": "number",
+            "format": "float",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "maxImportance": {
+            "type": "number",
+            "format": "float",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "tokenBudget": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "payload": {},
+          "status": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deliveredAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SubscriptionNotificationsResponse": {
+        "type": "object",
+        "required": [
+          "notifications"
+        ],
+        "properties": {
+          "notifications": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubscriptionNotification"
+            }
+          }
+        }
+      },
+      "SubscriptionResponse": {
+        "type": "object",
+        "required": [
+          "subscription"
+        ],
+        "properties": {
+          "subscription": {
+            "$ref": "#/components/schemas/Subscription"
+          }
+        }
+      },
+      "SubscriptionTarget": {
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/SubscriptionTargetKind"
+          },
+          "topicId": {
+            "type": "string"
+          },
+          "entityId": {
+            "type": "string"
+          },
+          "relationshipTypeId": {
+            "type": "string"
+          },
+          "claimPattern": {}
+        }
+      },
+      "SubscriptionTargetKind": {
+        "type": "string",
+        "enum": [
+          "topic",
+          "entity",
+          "relationship",
+          "claim_pattern"
+        ]
+      },
+      "SubscriptionsResponse": {
+        "type": "object",
+        "required": [
+          "subscriptions"
+        ],
+        "properties": {
+          "subscriptions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Subscription"
             }
           }
         }

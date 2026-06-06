@@ -173,6 +173,25 @@ export interface IngestionRunsTable {
   finished_at: Date | null;
 }
 
+export interface TopicsTable {
+  id: Generated<string>;
+  slug: string;
+  name: string;
+  description: string | null;
+  topic_type: Generated<string>;
+  last_updated_at: Date | null;
+  freshness_score: string | null;
+  is_public: Generated<boolean>;
+  is_archived: Generated<boolean>;
+  metadata: ColumnType<Json, string, string>;
+  created_at: DefaultedTimestamp;
+  updated_at: DefaultedTimestamp;
+}
+
+export interface DigestsTable {
+  id: string;
+}
+
 /**
  * API keys (db/migrations/0020_api_keys.sql). ONLY the hash is stored — the raw key is shown once
  * at issuance and never persisted. `scopes` is a jsonb array of scope strings. A key is usable only
@@ -250,6 +269,87 @@ export interface AuditEventsTable {
   created_at: DefaultedTimestamp;
 }
 
+/**
+ * Review records (db/migrations/0028_review_records.sql). Public feedback writes these rows for
+ * operator review only; they are not canonical graph state and do not mutate facts/entities/etc.
+ */
+export interface ReviewRecordsTable {
+  id: Generated<string>;
+  target_type: string;
+  target_id: string;
+  concern_type: string;
+  summary: string;
+  details: string | null;
+  status: Generated<string>;
+  reporter_type: Generated<string>;
+  reporter_id: string | null;
+  request_id: string | null;
+  metadata: ColumnType<Json, string, string>;
+  created_at: DefaultedTimestamp;
+  updated_at: DefaultedTimestamp;
+  reviewed_at: Date | null;
+  resolved_at: Date | null;
+}
+
+export interface SubscriptionsTable {
+  id: Generated<string>;
+  api_key_id: string | null;
+  topic_id: string | null;
+  entity_id: string | null;
+  relationship_type_id: string | null;
+  source_id: string | null;
+  claim_pattern: ColumnType<Json, string | null, string | null> | null;
+  min_importance: ColumnType<string, string | number | undefined, string | number>;
+  token_budget: number | null;
+  delivery_method: Generated<string>;
+  webhook_url: string | null;
+  webhook_secret_hash: string | null;
+  is_active: Generated<boolean>;
+  last_delivered_at: Date | null;
+  last_checked_at: Date | null;
+  metadata: ColumnType<Json, string, string>;
+  created_at: DefaultedTimestamp;
+  updated_at: DefaultedTimestamp;
+}
+
+export interface SubscriptionNotificationsTable {
+  id: Generated<string>;
+  subscription_id: string;
+  api_key_id: string | null;
+  change_kind: string;
+  target_label: string;
+  since_date: Date;
+  until_date: DefaultedTimestamp;
+  min_importance: ColumnType<string, string | number, string | number>;
+  token_budget: number;
+  max_importance: ColumnType<string, string | number, string | number>;
+  payload: ColumnType<Json, string, string>;
+  delivery_method: string;
+  status: Generated<string>;
+  attempt_count: Generated<number>;
+  next_attempt_at: Date | null;
+  last_attempt_at: Date | null;
+  delivered_at: Date | null;
+  error_code: string | null;
+  error_message: string | null;
+  created_at: DefaultedTimestamp;
+  updated_at: DefaultedTimestamp;
+}
+
+export interface SubscriptionDeliveryLogsTable {
+  id: Generated<string>;
+  notification_id: string;
+  subscription_id: string;
+  delivery_method: string;
+  attempt_number: number;
+  status: string;
+  http_status: number | null;
+  error_code: string | null;
+  error_message: string | null;
+  next_attempt_at: Date | null;
+  created_at: DefaultedTimestamp;
+}
+
 export interface Database {
   entities: EntitiesTable;
   entity_aliases: EntityAliasesTable;
@@ -262,7 +362,13 @@ export interface Database {
   source_documents: SourceDocumentsTable;
   sources: SourcesTable;
   ingestion_runs: IngestionRunsTable;
+  topics: TopicsTable;
+  digests: DigestsTable;
   api_keys: ApiKeysTable;
   usage_events: UsageEventsTable;
   audit_events: AuditEventsTable;
+  review_records: ReviewRecordsTable;
+  subscriptions: SubscriptionsTable;
+  subscription_notifications: SubscriptionNotificationsTable;
+  subscription_delivery_logs: SubscriptionDeliveryLogsTable;
 }

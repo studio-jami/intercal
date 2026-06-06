@@ -210,6 +210,40 @@ describe('scope enforcement → 403', () => {
     const { status } = await call(app, '/v1/freshness', { Authorization: `Bearer ${raw}` });
     expect(status).toBe(400);
   });
+
+  it('requires a key for subscription management routes', async () => {
+    const state: FakeState = { keys: [], usage: [] };
+    const app = appWith(state);
+    const { status, body } = await call(app, '/v1/subscriptions');
+    expect(status).toBe(401);
+    expect(body.code).toBe('unauthorized');
+    expect(body.details).toMatchObject({ requiredScope: 'manage:subscriptions' });
+  });
+
+  it('rejects a read-only key on subscription management routes', async () => {
+    const raw = 'ical_sk_read_only';
+    const state: FakeState = { keys: [keyRow(raw)], usage: [] };
+    const app = appWith(state);
+    const { status, body } = await call(app, '/v1/subscriptions', {
+      Authorization: `Bearer ${raw}`,
+    });
+    expect(status).toBe(403);
+    expect(body.code).toBe('forbidden');
+    expect(body.details).toMatchObject({ requiredScope: 'manage:subscriptions' });
+  });
+
+  it('admits a manage:subscriptions key to the subscription handler', async () => {
+    const raw = 'ical_sk_manage_subs';
+    const state: FakeState = {
+      keys: [keyRow(raw, { scopes: ['manage:subscriptions'] })],
+      usage: [],
+    };
+    const app = appWith(state);
+    const { status } = await call(app, '/v1/subscriptions', { Authorization: `Bearer ${raw}` });
+    // The fake DB intentionally only implements auth tables; a 500 proves auth/scope admitted the
+    // request and the real handler tried to read subscriptions.
+    expect(status).toBe(500);
+  });
 });
 
 describe('rate limiting → 429 + headers', () => {

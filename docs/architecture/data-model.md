@@ -246,7 +246,11 @@ Cached agent-facing syntheses. Delivery artifacts only — never used as evidenc
 
 **`subscriptions`** — `db/migrations/0019_subscriptions.sql`
 
-Interest registrations for entities, topics, relationship types, sources, or claim patterns. At least one target must be set. Supports polling now; webhook delivery planned for plan 04. `webhook_secret_hash` stores the HMAC secret hash — never the plaintext value. FK to `api_keys` for ownership.
+Interest registrations for entities, topics, relationship types, sources, or claim patterns. At least one target must be set. Owned by `api_keys` and gated by the `manage:subscriptions` scope. `webhook_secret_hash` stores only the create-time secret hash for trust posture — never the plaintext value, and webhook responses never echo secrets.
+
+**`subscription_notifications` / `subscription_delivery_logs`** — `db/migrations/0029_subscription_notifications.sql`
+
+Bounded notification outbox plus delivery-attempt ledger. Notification payloads are built from the public delta contract shape and carry changed claim IDs, changed entity summaries, confidence, freshness, citations, and the token-budgeted digest summary. They are not internal row snapshots. Polling delivery marks pending polling notifications delivered and writes a delivery log; webhook delivery is driven through a provider port with retry/backoff state and per-attempt logs.
 
 ---
 

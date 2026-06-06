@@ -36,6 +36,7 @@ export type EvidenceParams = Query<'searchEvidence'>;
 export type VerifyClaimParams = Query<'verifyClaim'>;
 export type SourcesParams = Query<'getSources'>;
 export type FreshnessParams = Query<'getFreshness'>;
+export type FeedbackRequest = Schemas['FeedbackRequest'];
 
 // Public response types — aliases over the generated contract.
 export type DeltaResponse = Ok<'getDelta'>;
@@ -44,6 +45,7 @@ export type EvidenceResponse = Ok<'searchEvidence'>;
 export type ClaimVerificationResponse = Ok<'verifyClaim'>;
 export type SourcesResponse = Ok<'getSources'>;
 export type FreshnessReport = Ok<'getFreshness'>;
+export type FeedbackResponse = Ok<'submitFeedback'>;
 
 /** The REST error taxonomy, as served in the `ApiError.code` field. */
 export type IntercalErrorCode =
@@ -265,6 +267,11 @@ export class IntercalClient {
     return this.get<FreshnessReport>('/v1/freshness', params, init);
   }
 
+  /** Submit bounded feedback for operator review. Does not mutate canonical graph state. */
+  submitFeedback(body: FeedbackRequest, init?: RequestInit): Promise<FeedbackResponse> {
+    return this.post<FeedbackResponse>('/v1/feedback', body, init);
+  }
+
   // --- internals -----------------------------------------------------------
 
   private buildUrl(path: string, params: Record<string, unknown>): string {
@@ -309,6 +316,46 @@ export class IntercalClient {
       }
 
       // Retry transient server errors only; client errors (4xx) and 501 are deterministic.
+      if (res.status >= 500 && res.status !== 501 && attempt < this.maxRetries) {
+        await this.backoff(attempt++);
+        continue;
+      }
+
+      throw errorFor(res.status, await this.parseError(res));
+    }
+  }
+
+  private async post<T>(path: string, body: unknown, init?: RequestInit): Promise<T> {
+    const url = this.baseUrl + path;
+    const headers = new Headers(init?.headers);
+    headers.set('accept', 'application/json');
+    headers.set('content-type', 'application/json');
+    for (const [k, v] of Object.entries(this.extraHeaders)) headers.set(k, v);
+    if (this.apiKey) headers.set('authorization', `Bearer ${this.apiKey}`);
+
+    let attempt = 0;
+    while (true) {
+      let res: Response;
+      try {
+        res = await this.fetchImpl(url, {
+          ...init,
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+        });
+      } catch (cause) {
+        if (attempt < this.maxRetries) {
+          await this.backoff(attempt++);
+          continue;
+        }
+        throw new IntercalNetworkError(
+          cause instanceof Error ? cause.message : 'Network request failed',
+          cause,
+        );
+      }
+
+      if (res.ok) return (await res.json()) as T;
+
       if (res.status >= 500 && res.status !== 501 && attempt < this.maxRetries) {
         await this.backoff(attempt++);
         continue;

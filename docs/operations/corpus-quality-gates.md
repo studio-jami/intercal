@@ -71,6 +71,11 @@ Turbo claim is unverified before supporting evidence exists and later returns ci
 seeded proof mode. The adversarial 1M-context claim must not return `supported`, and the corpus
 quality report separately requires at least one open contradiction row.
 
+Seeded mode also inserts a rollback-scoped source-policy sentinel document whose searchable body is
+`citation_only` and not summary-allowed. The `search_evidence` proof requires the hit to return
+only citation metadata/title text, never the restricted body marker. This proves the evidence query
+path does not leak raw source text when the source policy forbids derived body snippets.
+
 ## Live Backfill Prerequisites
 
 `live-first-proof` needs real source rows before a backfill can produce evidence. The source catalog
@@ -140,6 +145,12 @@ As of the 2026-06-06 Workstream 4 pass 7 proof, `live-full` also exercises broad
 state-space sequence model architecture", as_of_date before and after evidence)`, and
 `search_evidence("Executive Order 14110")`. The full gate is therefore a broad taxonomy and query
 proof, not only an aggregate row-count check.
+
+As of the 2026-06-06 Workstream 4 pass 8 proof, `seeded-proof` additionally exercises the
+source-policy no-body-leak sentinel described above. `seeded-proof`, `live-first-proof`, and
+`live-full` all pass against the configured Neon branch; the seeded policy check remains
+rollback-scoped because live source-policy coverage depends on whatever restricted sources the
+operator has added.
 
 ## Live Verification Remaining
 

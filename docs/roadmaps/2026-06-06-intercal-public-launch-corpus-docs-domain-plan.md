@@ -791,13 +791,22 @@ layer rather than aggregate row counts alone. No source catalog rows, proof corp
 source-policy loosening, raw source-text exposure, dashboard, docs/Mintlify, marketing/SEO, domain
 routing, or release-audit work was added.
 
+Pass 8 closeout note: the strict quiet audit found one remaining seeded verifier proof gap and fixed
+it in scope. `seeded-proof` now inserts a rollback-scoped citation-only, summary-forbidden source
+document whose body contains a searchable sentinel and proves `search_evidence` returns only the
+title fallback rather than leaking the restricted body marker. `seeded-proof`, `live-first-proof`,
+and `live-full` all pass against the configured Neon branch after the fix, including the pass 7
+broad query proofs and the pass 8 source-policy redaction proof. No source catalog rows, proof
+corpus rows, source-policy loosening, dashboard, docs/Mintlify, marketing/SEO, domain routing, or
+release-audit work was added. Workstream 4 is quiet from the corpus/query-proof boundary.
+
 ## Workstream 5: Public Intercal Knowledge Experience
 
 Goal: Replace the thin dashboard shell with the full read-only public product surface.
 
 Depends on:
 
-- [ ] Workstream 4 quality gates.
+- [x] Workstream 4 quality gates.
 - [ ] Plan 06 route/workflow ownership.
 
 Enables:
@@ -842,7 +851,7 @@ Goal: Publish docs that are useful to humans and agents, with source-owned conte
 
 Depends on:
 
-- [ ] Workstream 4 query proof.
+- [x] Workstream 4 query proof.
 - [ ] Workstream 5 public route ownership.
 
 Enables:

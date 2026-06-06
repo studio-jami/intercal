@@ -67,6 +67,7 @@ const IDS = {
     meta: '00000000-0000-4000-8000-000000000104',
     mcp: '00000000-0000-4000-8000-000000000105',
     openaiRelease: '00000000-0000-4000-8000-000000000106',
+    sourcePolicy: '00000000-0000-4000-8000-000000000107',
   },
   docs: {
     chatgpt: '00000000-0000-4000-8000-000000000201',
@@ -75,6 +76,7 @@ const IDS = {
     llama: '00000000-0000-4000-8000-000000000204',
     mcp: '00000000-0000-4000-8000-000000000205',
     turbo: '00000000-0000-4000-8000-000000000206',
+    sourcePolicy: '00000000-0000-4000-8000-000000000207',
   },
   entities: {
     chatgpt: '00000000-0000-4000-8000-000000000301',
@@ -122,7 +124,8 @@ async function seedProof(tx) {
       (${IDS.sources.google}, 'w4-proof-google', 'Workstream 4 proof Google', 'api', 'proof_seed_v1', '{"source_class":"research"}', true, true, false),
       (${IDS.sources.meta}, 'w4-proof-meta', 'Workstream 4 proof Meta', 'registry', 'proof_seed_v1', '{"source_class":"registry"}', true, true, false),
       (${IDS.sources.mcp}, 'w4-proof-mcp', 'Workstream 4 proof MCP', 'release_notes', 'proof_seed_v1', '{"source_class":"protocol"}', true, true, false),
-      (${IDS.sources.openaiRelease}, 'w4-proof-openai-release-notes', 'Workstream 4 proof OpenAI release notes', 'release_notes', 'proof_seed_v1', '{"source_class":"release_notes"}', true, true, false)
+      (${IDS.sources.openaiRelease}, 'w4-proof-openai-release-notes', 'Workstream 4 proof OpenAI release notes', 'release_notes', 'proof_seed_v1', '{"source_class":"release_notes"}', true, true, false),
+      (${IDS.sources.sourcePolicy}, 'w4-proof-source-policy', 'Workstream 4 proof source policy', 'api', 'proof_seed_v1', '{"source_class":"model_provider"}', false, false, true)
   `.execute(tx);
 
   await sql`
@@ -134,7 +137,8 @@ async function seedProof(tx) {
       (${IDS.docs.gemini}, ${IDS.sources.google}, 'w4-proof-gemini', 'gemini', 'https://example.invalid/gemini', 'Gemini proof', '2023-12-06T00:00:00Z', 'Gemini is a frontier LLM family with multimodal releases.', 'paper_abstract', '{"source_class":"research"}', true, true, false),
       (${IDS.docs.llama}, ${IDS.sources.meta}, 'w4-proof-llama', 'llama', 'https://example.invalid/llama', 'Llama proof', '2024-04-18T00:00:00Z', 'Llama is an open-weight model family in the AI-history corpus.', 'api_record', '{"source_class":"registry"}', true, true, false),
       (${IDS.docs.mcp}, ${IDS.sources.mcp}, 'w4-proof-mcp', 'mcp', 'https://example.invalid/mcp', 'MCP protocol proof', '2024-11-25T00:00:00Z', 'The MCP protocol connects models to tools and context.', 'release_notes', '{"source_class":"protocol"}', true, true, false),
-      (${IDS.docs.turbo}, ${IDS.sources.openaiRelease}, 'w4-proof-turbo', 'gpt-4-turbo', 'https://example.invalid/gpt-4-turbo', 'GPT-4 Turbo context proof', '2023-11-06T00:00:00Z', 'GPT-4 Turbo supports a 128k context window, not a 1M context window.', 'release_notes', '{"source_class":"release_notes"}', true, true, false)
+      (${IDS.docs.turbo}, ${IDS.sources.openaiRelease}, 'w4-proof-turbo', 'gpt-4-turbo', 'https://example.invalid/gpt-4-turbo', 'GPT-4 Turbo context proof', '2023-11-06T00:00:00Z', 'GPT-4 Turbo supports a 128k context window, not a 1M context window.', 'release_notes', '{"source_class":"release_notes"}', true, true, false),
+      (${IDS.docs.sourcePolicy}, ${IDS.sources.sourcePolicy}, 'w4-proof-source-policy', 'source-policy-sentinel', 'https://example.invalid/source-policy', 'Source policy sentinel title', '2024-01-01T00:00:00Z', 'W4_SOURCE_POLICY_DO_NOT_LEAK appears only in restricted body text.', 'article', '{"source_class":"model_provider"}', false, false, true)
   `.execute(tx);
 
   await sql`
@@ -205,7 +209,7 @@ function proof(name, passed, detail) {
   return { name, passed, detail };
 }
 
-async function runQueryProofs(tx) {
+async function runQueryProofs(tx, options = {}) {
   const proofs = [];
   async function addProof(name, run) {
     try {
@@ -289,6 +293,22 @@ async function runQueryProofs(tx) {
     });
     return { passed: evidence.hits.length > 0, detail: `hits=${evidence.hits.length}` };
   });
+
+  if (options.includeSourcePolicySentinel) {
+    await addProof('search_evidence source-policy body redaction', async () => {
+      const evidence = await core.searchEvidence(tx, {
+        query: 'W4_SOURCE_POLICY_DO_NOT_LEAK',
+        from_date: '2024-01-01T00:00:00Z',
+        to_date: '2024-12-31T00:00:00Z',
+      });
+      const hit = evidence.hits.find((item) => item.documentId === IDS.docs.sourcePolicy);
+      const snippet = hit?.snippet ?? '';
+      return {
+        passed: Boolean(hit) && snippet === 'Source policy sentinel title',
+        detail: `hits=${evidence.hits.length}; snippet=${JSON.stringify(snippet)}`,
+      };
+    });
+  }
   return proofs;
 }
 
@@ -374,7 +394,7 @@ try {
           await seedProof(tx);
           const report = await core.queryCorpusQualityReport(tx, firstProofConfig);
           const evaluation = core.evaluateCorpusQualityReport(report, firstProofConfig);
-          const queryProofs = await runQueryProofs(tx);
+          const queryProofs = await runQueryProofs(tx, { includeSourcePolicySentinel: true });
           result = {
             mode,
             passed: evaluation.passed && queryProofs.every((item) => item.passed),

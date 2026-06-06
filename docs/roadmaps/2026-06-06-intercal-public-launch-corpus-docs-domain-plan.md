@@ -124,6 +124,10 @@ The first proof consumes the same adapters, provenance rules, and public query p
   beyond the first proof, seed-vocabulary conclusion, first-proof query set, and full-corpus
   acceptance query set without claiming unimplemented adapters or seeded topic coverage. Remaining
   implementation belongs to Workstreams 2 through 4.
+- 2026-06-06T12:15:00-04:00 — Applied second-pass gate for Workstream 1. Commit
+  `d7923948c33554c7bf9c3268aa04aa040e07f486` changed 2 files and 61 LOC, so it passed the
+  numeric gate. Contents classified as C — tests/checks plus small doc/orchestration cleanup.
+  Workstream 1 is closed; Workstream 2 dependency is satisfied.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 
@@ -135,7 +139,7 @@ Depends on:
 
 Enables:
 
-- [ ] Workstreams 2, 3, 4, 5, and public coverage claims.
+- [x] Workstreams 2, 3, 4, 5, and public coverage claims.
 
 Repo guidance:
 
@@ -173,7 +177,7 @@ Goal: Add first-class historical backfill adapters that populate source document
 
 Depends on:
 
-- [ ] Workstream 1 source taxonomy.
+- [x] Workstream 1 source taxonomy.
 
 Enables:
 

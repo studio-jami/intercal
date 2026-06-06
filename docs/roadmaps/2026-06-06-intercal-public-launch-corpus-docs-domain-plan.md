@@ -128,6 +128,12 @@ The first proof consumes the same adapters, provenance rules, and public query p
   `d7923948c33554c7bf9c3268aa04aa040e07f486` changed 2 files and 61 LOC, so it passed the
   numeric gate. Contents classified as C — tests/checks plus small doc/orchestration cleanup.
   Workstream 1 is closed; Workstream 2 dependency is satisfied.
+- 2026-06-06T11:46:46-04:00 — Dispatched Workstream 2 pass 1 to agent
+  `019e9d9d-4c64-7993-ae9b-0717e42574c8` (`Tesla`). Ownership boundary: historical source
+  adapters, source registry, closely related ingest/pipeline registration if required, shared
+  Python tests, Workstream 2 roadmap status, and changelog. Next coordinator action: poll in short
+  intervals, record result in `docs/engineering/agents/orchestrator-logs/`, then dispatch mandatory
+  Workstream 2 pass 2 after pass 1 lands.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 

@@ -129,7 +129,12 @@ Sequence: Plan 07 W1 (secrets) first → then auth cluster (Plan04 W1 + Plan07 W
 | t79 | 07/W4 | P2 | Opus | a9e2b7d97ed63bed0 | returned OK; CRITICAL: pass1 proof ran pre-redaction image → leaked Neon DSN to Cloud Logging (shared neondb_owner pw). PURGED logs, re-verified clean, re-ran fixed image hnwdm (redacted). All else clean. Recommends pw rotation | ae56e37 | 2 docs +105/-7 | ROTATE creds → then W4 P3 |
 | t80 | SEC/rotate | P1 | Opus | ae087e378a6c3263f | DONE; Neon pw rotated in place, re-fanned all targets (Vercel/Actions/SecretMgr v2), OLD CRED DEAD, LIVE REST/MCP/pipeline green on new creds; runbook doc | 1ea3120 | 1 doc | exposure CLOSED → W4 P3 |
 | t81 | 07/W4 | P3 | Opus | aae4b1a34c327ff27 | QUIET → **W4 CLOSED** (Cloud Run Jobs CD secret-safe, redaction complete, SA least-priv, no double-schedule; live redacted+green) | (none) | 0 | **WORKER CD DONE** → Plan04 W2 |
-| t82 | 04/W2 | P1 | Opus | — | dispatched (source policy + SSRF) | — | — | gate → P2 |
+| t82 | 04/W2 | P1 | Opus | a2102e62d74513a52 | returned OK; SSRF guard (hostile matrix, DNS-rebind socket-pin, redirect re-validate, body cap) + source policy (summary_allowed gate, mig 0025); 41 SSRF tests; live github 200 / metadata+private blocked; 419 py tests | cb0307a | 14f +1192/-27 | gate P2: SSRF bypass + policy e2e |
+| t83 | 04/W2 | P2 | Opus | af5b0c7a2bd3e82b0 | returned OK; fixed SSRF body-cap-not-enforced-on-adapter-path (mem exhaustion); cap in transport stream+CL; 52 SSRF tests; policy e2e + live snippet-gate 5/5; no bypass found | 73ce036 | 6f +457/-15 | security fix → P3 confirm-quiet |
+| t84 | 04/W2 | P3 | Opus | abfb60fe1bb26d475 | QUIET → **W2 CLOSED** (SSRF no-bypass adversarial-verified; source policy e2e; live snippet-gate) | (none) | 0 | Plan04 W3 audit |
+| t85 | 04/W3 | P1 | Opus | — | dispatched (audit events) | — | — | gate → P2 |
+
+**Phase D progress:** Plan07 W1✅,W3✅,W4✅,W5/04W1-REST✅,W6✅ · Plan04 W2✅ | remaining: Plan04 W3 audit, W4 feedback, W5 subs, W6 observability, W7 deploy-paths/backups(+Plan07 W7), W8 runbook; Plan07 W8 budget.
 
 **Phase D progress:** Plan07 W1✅ secrets · REST-auth✅ · W6✅ MCP OAuth · W3✅ Actions CD · W4✅ Cloud Run | remaining: Plan07 W7 backups, W8 budget; Plan04 W2 source-policy/SSRF, W3 audit, W4 feedback, W5 subs, W6 observability, W7 deploy-paths/backups, W8 runbook.
 

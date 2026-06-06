@@ -114,6 +114,24 @@ function normalizeText(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
 }
 
+function normalizeRequestId(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  const requestId = value.trim();
+  if (requestId.length === 0) return null;
+  if (requestId.length > 128) {
+    throw new InvalidRequestError('x-request-id exceeds 128 characters');
+  }
+  if (
+    [...requestId].some((ch) => {
+      const code = ch.charCodeAt(0);
+      return code <= 0x1f || code === 0x7f;
+    })
+  ) {
+    throw new InvalidRequestError('x-request-id must not contain control characters');
+  }
+  return requestId;
+}
+
 function toReview(row: {
   id: string;
   target_type: string;
@@ -144,6 +162,7 @@ export async function submitFeedback(
   const summary = normalizeText(params.summary);
   const details = params.details === undefined ? null : params.details.trim();
   const targetId = normalizeText(params.targetId);
+  const requestId = normalizeRequestId(context.requestId);
 
   if (summary.length === 0) throw new InvalidRequestError('feedback summary must not be empty');
   if (summary.length > 240)
@@ -166,7 +185,7 @@ export async function submitFeedback(
         details,
         reporter_type: context.reporter.type,
         reporter_id: context.reporter.type === 'api_key' ? context.reporter.id : null,
-        request_id: context.requestId ?? null,
+        request_id: requestId,
         metadata: JSON.stringify({ source: 'public_api' }),
       })
       .returning([
@@ -193,7 +212,7 @@ export async function submitFeedback(
         concernType: row.concern_type,
         status: row.status,
       },
-      requestId: context.requestId ?? null,
+      requestId,
       severity: 'low',
       metadata: {
         targetType: row.target_type,

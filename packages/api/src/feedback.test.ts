@@ -298,6 +298,30 @@ describe('POST /v1/feedback', () => {
     expect(state.auditEvents).toHaveLength(0);
   });
 
+  it('rejects unbounded request ids before storing review or audit rows', async () => {
+    const state = initialState();
+    const app = createApp(makeFakeDb(state), {
+      rateLimitStore: new MemoryRateLimitStore(),
+      anonPerMinute: 1000,
+    });
+
+    const { res, body } = await postFeedback(
+      app,
+      {
+        targetType: 'entity',
+        targetId: '22222222-2222-4222-8222-222222222222',
+        concernType: 'outdated',
+        summary: 'Display name appears stale',
+      },
+      { 'x-request-id': 'r'.repeat(129) },
+    );
+
+    expect(res.status).toBe(400);
+    expect(body.code).toBe('invalid_request');
+    expect(state.reviewRecords).toHaveLength(0);
+    expect(state.auditEvents).toHaveLength(0);
+  });
+
   it('rejects off-contract bodies', async () => {
     const state = initialState();
     const app = createApp(makeFakeDb(state), {

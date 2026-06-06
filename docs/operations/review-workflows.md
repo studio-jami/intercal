@@ -24,6 +24,9 @@ The SDK sends feedback submissions once and does not apply automatic transient r
 POST. A retry after an ambiguous network failure is an explicit caller choice, because successful
 submissions create review records.
 
+If supplied, `x-request-id` is stored only as correlation metadata after trimming. Empty values are
+ignored; values longer than 128 characters or containing control characters are rejected.
+
 ## Stored Records
 
 Submissions create one `review_records` row with status `received`. Entity, claim, source, and

@@ -344,6 +344,14 @@ The first proof consumes the same adapters, provenance rules, and public query p
   API/MCP/SDK quality-gate surfaces, scripts/dev proof tooling, operations docs, related tests,
   Workstream 4 roadmap status, and changelog. Next coordinator action: poll in short intervals,
   record result, then apply the second-pass gate.
+- 2026-06-06T14:35:00-04:00 — Workstream 4 pass 2 returned complete. Commit:
+  `3223eac854c225ccf5a81c9f42bf899b916f9f6a` (`fix(dev): align corpus quality seeded verifier`),
+  pushed to `origin/main`. Gate result: 4 files and 37 LOC passes the numeric gate, but contents
+  are meaningful seeded-verifier fixes plus DB-backed proof evidence. `seeded-proof` passed with
+  rollback cleanup; `live-first-proof` and `live-full` failed truthfully because the DB lacks live
+  GPT/Claude/Gemini/Llama/MCP backfilled claims, topic clusters, and open contradiction rows. Next
+  coordinator action: dispatch Workstream 4 pass 3 to pursue real live corpus proof/backfill or
+  identify the exact remaining external execution requirement.
 - 2026-06-06T14:20:42-04:00 — Workstream 4 pass 2 fresh-context audit found executable verifier
   drift and fixed it in scope. The rollback seeded proof now satisfies the live `claims.extractor`
   schema, reads `get_delta` citations from the contracted `summary.citations` shape, and no longer

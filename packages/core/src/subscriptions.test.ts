@@ -47,6 +47,33 @@ describe('subscription target validation', () => {
     ).rejects.toBeInstanceOf(InvalidRequestError);
   });
 
+  it('rejects off-contract nested subscription target fields before writing', async () => {
+    await expect(
+      createSubscription(dbStub(), {
+        apiKeyId: 'key-1',
+        actor: { type: 'api_key', id: 'key-1' },
+        target: {
+          kind: 'topic',
+          topicId: '11111111-1111-4111-8111-111111111111',
+          sourceId: '55555555-5555-4555-8555-555555555555',
+        } as Parameters<typeof createSubscription>[1]['target'],
+        deliveryMethod: 'polling',
+      }),
+    ).rejects.toBeInstanceOf(InvalidRequestError);
+  });
+
+  it('rejects webhook secrets on polling subscriptions before writing', async () => {
+    await expect(
+      createSubscription(dbStub(), {
+        apiKeyId: 'key-1',
+        actor: { type: 'api_key', id: 'key-1' },
+        target: { kind: 'topic', topicId: '11111111-1111-4111-8111-111111111111' },
+        deliveryMethod: 'polling',
+        webhookSecret: 'polling-secret-should-not-persist',
+      }),
+    ).rejects.toBeInstanceOf(InvalidRequestError);
+  });
+
   it('rejects malformed UUID entity dispatch targets before querying the database', async () => {
     await expect(
       enqueueSubscriptionNotifications(dbStub(), {
@@ -56,6 +83,19 @@ describe('subscription target validation', () => {
         entityId: 'not-a-uuid',
         sinceDate: '2026-06-01T00:00:00.000Z',
       }),
+    ).rejects.toBeInstanceOf(InvalidRequestError);
+  });
+
+  it('rejects off-contract dispatch fields before querying the database', async () => {
+    await expect(
+      enqueueSubscriptionNotifications(dbStub(), {
+        actor: { type: 'api_key', id: 'key-1' },
+        dispatchScope: { type: 'api_key', apiKeyId: 'key-1' },
+        changeKind: 'topic',
+        topicId: '11111111-1111-4111-8111-111111111111',
+        sourceId: '55555555-5555-4555-8555-555555555555',
+        sinceDate: '2026-06-01T00:00:00.000Z',
+      } as Parameters<typeof enqueueSubscriptionNotifications>[1]),
     ).rejects.toBeInstanceOf(InvalidRequestError);
   });
 

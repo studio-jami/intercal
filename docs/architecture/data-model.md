@@ -246,7 +246,7 @@ Cached agent-facing syntheses. Delivery artifacts only — never used as evidenc
 
 **`subscriptions`** — `db/migrations/0019_subscriptions.sql`
 
-Interest registrations for entities, topics, relationship types, sources, or claim patterns. At least one target must be set. Owned by `api_keys` and gated by the `manage:subscriptions` scope. `webhook_secret_hash` stores only the create-time secret hash for trust posture — never the plaintext value, and webhook responses never echo secrets.
+Interest registrations for the W5 public REST target set: entities, topics, relationship types, or claim patterns. The legacy `source_id` column is present in the table but is not exposed by the W5 public contract. At least one target must be set. Owned by `api_keys` and gated by the `manage:subscriptions` scope. `webhook_secret_hash` stores only create-time webhook-delivery secret hashes — never the plaintext value, and webhook responses never echo secrets.
 
 **`subscription_notifications` / `subscription_delivery_logs`** — `db/migrations/0029_subscription_notifications.sql`
 

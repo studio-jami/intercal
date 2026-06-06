@@ -269,6 +269,18 @@ async function targetLabelForSubscription(db: Db, row: SubscriptionRow): Promise
 }
 
 function validateCreate(input: CreateSubscriptionInput): void {
+  const allowedTargetKeys = new Set([
+    'kind',
+    'topicId',
+    'entityId',
+    'relationshipTypeId',
+    'claimPattern',
+  ]);
+  for (const key of Object.keys(input.target as Record<string, unknown>)) {
+    if (!allowedTargetKeys.has(key)) {
+      throw new InvalidRequestError(`Unknown subscription target field: ${key}.`);
+    }
+  }
   const targetFields = {
     topic: input.target.topicId,
     entity: input.target.entityId,
@@ -289,6 +301,9 @@ function validateCreate(input: CreateSubscriptionInput): void {
   }
   if (input.target.kind === 'claim_pattern' && !isNonEmptyPattern(input.target.claimPattern)) {
     throw new InvalidRequestError('claimPattern must be a non-empty object.');
+  }
+  if (input.deliveryMethod === 'polling' && (input.webhookUrl || input.webhookSecret)) {
+    throw new InvalidRequestError('Webhook URL and secret are only accepted for webhook delivery.');
   }
   if (input.deliveryMethod === 'webhook') {
     if (!input.webhookUrl)
@@ -318,6 +333,22 @@ function validateDispatch(input: EnqueueSubscriptionChangeInput): void {
     !isNonEmptyString(input.dispatchScope.reason)
   ) {
     throw new InvalidRequestError('Internal all-active dispatch scope requires a reason.');
+  }
+  const allowedDispatchKeys = new Set([
+    'actor',
+    'dispatchScope',
+    'changeKind',
+    'topicId',
+    'entityId',
+    'relationshipTypeId',
+    'claimPattern',
+    'sinceDate',
+    'untilDate',
+  ]);
+  for (const key of Object.keys(input as unknown as Record<string, unknown>)) {
+    if (!allowedDispatchKeys.has(key)) {
+      throw new InvalidRequestError(`Unknown subscription dispatch field: ${key}.`);
+    }
   }
   const targetFields = {
     topic: input.topicId,

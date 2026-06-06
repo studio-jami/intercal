@@ -118,6 +118,29 @@ const sourcesGuard: Guard = (params) => {
   }
 };
 
+function validateSubscriptionCreateBody(body: {
+  target: Record<string, unknown>;
+  deliveryMethod: 'polling' | 'webhook';
+  webhookUrl?: string;
+  webhookSecret?: string;
+}): void {
+  const allowedTargetKeys = new Set([
+    'kind',
+    'topicId',
+    'entityId',
+    'relationshipTypeId',
+    'claimPattern',
+  ]);
+  for (const key of Object.keys(body.target)) {
+    if (!allowedTargetKeys.has(key)) {
+      throw new InvalidRequestError(`Unknown subscription target field: ${key}.`);
+    }
+  }
+  if (body.deliveryMethod === 'polling' && (body.webhookUrl || body.webhookSecret)) {
+    throw new InvalidRequestError('Webhook URL and secret are only accepted for webhook delivery.');
+  }
+}
+
 export interface CreateAppOptions {
   /**
    * Rate-limit counter store (port). Defaults to `createRateLimitStore()` which selects Upstash
@@ -229,6 +252,7 @@ export function createApp(db: Db, options: CreateAppOptions = {}): Hono {
         tokenBudget?: number;
         metadata?: Record<string, unknown>;
       };
+      validateSubscriptionCreateBody(body);
       const subscription = await createSubscription(database, {
         apiKeyId: principal.id,
         actor: { type: 'api_key', id: principal.id },

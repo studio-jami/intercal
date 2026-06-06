@@ -30,9 +30,11 @@ A subscription has exactly one target:
 - `relationshipTypeId`
 - `claimPattern`
 
-The API rejects registrations with no target or multiple targets. Topic/entity notifications reuse
-the shared delta service; relationship and claim-pattern dispatch are matched through the same
-notification outbox path and should stay grounded in public response shapes.
+The public W5 REST contract does not expose source subscriptions. The API rejects registrations
+with no target, multiple targets, a target field that does not match `target.kind`, or unknown
+nested target fields. Topic/entity notifications reuse the shared delta service; relationship and
+claim-pattern dispatch are matched through the same notification outbox path and should stay
+grounded in public response shapes.
 
 ## Payload Bounds
 
@@ -54,7 +56,8 @@ threshold are skipped.
 ## Webhooks
 
 Webhook subscriptions accept `webhookUrl` only over HTTPS. `webhookSecret` is accepted only at
-create time and stored as a SHA-256 hash; the plaintext is never persisted or returned.
+create time for webhook delivery and stored as a SHA-256 hash; the plaintext is never persisted or
+returned. Polling subscriptions reject webhook-only fields so unused secrets are not persisted.
 
 Delivery is executed through `WebhookDeliveryPort` in `@intercal/core`, not by embedding provider
 logic in the query layer. The port receives only the webhook URL, notification/subscription IDs, and

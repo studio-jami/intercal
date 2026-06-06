@@ -372,4 +372,72 @@ describe('POST /v1/subscriptions', () => {
     expect(res.status).toBe(400);
     expect(body.code).toBe('invalid_request');
   });
+
+  it('rejects off-contract nested target fields before writing a subscription', async () => {
+    const raw = 'ical_sk_manage_subscriptions';
+    const state = initialState();
+    state.keys.push({
+      id: '55555555-5555-4555-8555-555555555555',
+      key_hash: hashApiKey(raw),
+      scopes: ['manage:subscriptions'],
+      is_active: true,
+      revoked_at: null,
+      expires_at: null,
+      requests_per_minute: null,
+    });
+    const app = createApp(makeFakeDb(state), {
+      rateLimitStore: new MemoryRateLimitStore(),
+      anonPerMinute: 1000,
+    });
+
+    const { res, body } = await postSubscription(
+      app,
+      {
+        target: {
+          kind: 'topic',
+          topicId: '22222222-2222-4222-8222-222222222222',
+          sourceId: '55555555-5555-4555-8555-555555555555',
+        },
+        deliveryMethod: 'polling',
+      },
+      { authorization: `Bearer ${raw}` },
+    );
+
+    expect(res.status).toBe(400);
+    expect(body.code).toBe('invalid_request');
+  });
+
+  it('rejects webhook-only fields on polling subscriptions', async () => {
+    const raw = 'ical_sk_manage_subscriptions';
+    const state = initialState();
+    state.keys.push({
+      id: '55555555-5555-4555-8555-555555555555',
+      key_hash: hashApiKey(raw),
+      scopes: ['manage:subscriptions'],
+      is_active: true,
+      revoked_at: null,
+      expires_at: null,
+      requests_per_minute: null,
+    });
+    const app = createApp(makeFakeDb(state), {
+      rateLimitStore: new MemoryRateLimitStore(),
+      anonPerMinute: 1000,
+    });
+
+    const { res, body } = await postSubscription(
+      app,
+      {
+        target: {
+          kind: 'topic',
+          topicId: '22222222-2222-4222-8222-222222222222',
+        },
+        deliveryMethod: 'polling',
+        webhookSecret: 'polling-secret-should-not-persist',
+      },
+      { authorization: `Bearer ${raw}` },
+    );
+
+    expect(res.status).toBe(400);
+    expect(body.code).toBe('invalid_request');
+  });
 });

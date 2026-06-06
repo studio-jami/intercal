@@ -90,6 +90,16 @@ Corpus architecture -> historical adapters -> backfill execution -> query qualit
 
 The first proof consumes the same adapters, provenance rules, and public query paths as the full corpus. It does not introduce a disposable data path.
 
+## Orchestration Checkpoints
+
+- 2026-06-06T11:33:19-04:00 — Dispatched Workstream 1 pass 1 to agent
+  `019e9d90-f975-7b60-8f19-55813c32ff71` (`Wegener`). Ownership boundary:
+  corpus taxonomy/source-policy docs, baseline seeding report alignment, seed vocabularies only if
+  required by taxonomy, and small source-registry alignment only if source-truth drift is found.
+  Next coordinator action: poll in short intervals, record result in
+  `docs/engineering/agents/orchestrator-logs/`, then dispatch Workstream 1 pass 2 after the pass 1
+  commit/result lands.
+
 ## Workstream 1: Corpus Scope And Source Taxonomy
 
 Goal: Define the final AI-history corpus taxonomy and source policy before adding adapters or pages.

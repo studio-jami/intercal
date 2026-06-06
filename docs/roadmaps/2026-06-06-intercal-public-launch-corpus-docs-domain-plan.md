@@ -160,6 +160,14 @@ The first proof consumes the same adapters, provenance rules, and public query p
   source registry, shared adapter tests, Workstream 2 roadmap status, and changelog. Scope is a
   commit-sized adapter-foundation slice; remaining Workstream 2 adapters may be carried into pass 2
   if the slice would otherwise become oversized. Next coordinator action: poll in short intervals.
+- 2026-06-06T12:12:00-04:00 — Workstream 2 pass 1 replacement returned complete. Commit:
+  `a387755976cad39dee1cfe210b16b4d53d07137c` (`feat(shared): add historical source adapters`),
+  pushed to `origin/main`. Changed files: historical adapters, GitHub source pagination/date-window
+  support, source registry, source-policy docs, active roadmap, changelog, and focused shared/ingest
+  tests. Verification reported: focused `pnpm py:test` passed 40 tests, `pnpm py:lint` passed,
+  `pnpm py:typecheck` passed with warning-only existing type debt, diff checks passed, and changed
+  file secret scan passed. Next coordinator action: dispatch mandatory Workstream 2 pass 2 with
+  fresh context.
 - 2026-06-06T12:06:46-04:00 — Workstream 2 pass 1 adapter-foundation slice implemented from the
   live repository state. Added registry, arXiv, RSS/Atom, Wikidata SPARQL batch, and MediaWiki
   revision adapters behind `SourcePort`; extended GitHub releases for historical date windows,

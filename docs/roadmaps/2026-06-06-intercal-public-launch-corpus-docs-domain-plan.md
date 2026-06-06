@@ -330,6 +330,15 @@ The first proof consumes the same adapters, provenance rules, and public query p
   API/MCP/SDK quality-gate surfaces, scripts/dev proof tooling, operations docs, related tests,
   Workstream 4 roadmap status, and changelog. Next coordinator action: poll in short intervals,
   record result, then dispatch mandatory Workstream 4 pass 2 after pass 1 lands.
+- 2026-06-06T14:20:00-04:00 — Workstream 4 replacement pass 1 returned complete. Commit:
+  `a17f9307c0317d0b6af0c9e81369d529269b600d` (`feat(core): add corpus quality gates`), pushed to
+  `origin/main`. Changed files: core corpus-quality evaluator/tests/types export, dev verifier,
+  operations quality-gates doc, active roadmap, and changelog. Verification reported: core
+  test/typecheck/build, repo `pnpm test`, `pnpm typecheck`, `pnpm build`, touched-file Biome check,
+  diff checks, and staged secret scan passed. Not run: DB-backed verifier modes because
+  `DATABASE_URL` was not set in that worker shell; full `pnpm lint` blocked by existing unrelated
+  Biome schema/version and `mcps/Neon` formatting diagnostics. Next coordinator action: dispatch
+  mandatory Workstream 4 pass 2 with fresh context.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 

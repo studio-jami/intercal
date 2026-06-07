@@ -6,10 +6,9 @@
  * The SDK declares no domain shapes of its own — it only adds transport concerns (URL building,
  * fetch injection, retries) and a typed error model that mirrors the REST error taxonomy.
  *
- * Deferred surface: `getDelta` and `verifyClaim` are real, typed methods, but their server-side
- * bodies are owned by later workstreams (Plan 03 W5/W6). Until those land, the live API answers
- * `501 not_implemented`; the SDK surfaces that as a typed {@link IntercalNotImplementedError}
- * rather than faking a result.
+ * `getDelta` and `verifyClaim` are live, typed methods backed by the shared query layer. The SDK
+ * still preserves the `not_implemented` error type because future contracted surfaces may use that
+ * honest-defer path, but these V1 query methods no longer do.
  */
 import type { components, operations } from '@intercal/shared';
 
@@ -230,11 +229,7 @@ export class IntercalClient {
 
   // --- V1 operations -------------------------------------------------------
 
-  /**
-   * What changed about a topic since a date. Deferred body (Plan 03 W5): the live API currently
-   * answers `501`, surfaced here as {@link IntercalNotImplementedError}. `token_budget` is part of
-   * the contract signature; the server applies it once the digest body lands.
-   */
+  /** What changed about a topic since a date, returned as a cited, token-budgeted digest. */
   getDelta(params: DeltaParams, init?: RequestInit): Promise<DeltaResponse> {
     return this.get<DeltaResponse>('/v1/delta', params, init);
   }
@@ -249,10 +244,7 @@ export class IntercalClient {
     return this.get<EvidenceResponse>('/v1/evidence', params, init);
   }
 
-  /**
-   * Verify a free-text claim against recorded evidence. Deferred body (Plan 03 W6): the live API
-   * currently answers `501`, surfaced here as {@link IntercalNotImplementedError}.
-   */
+  /** Verify a free-text claim against recorded evidence, optionally at a point in time. */
   verifyClaim(params: VerifyClaimParams, init?: RequestInit): Promise<ClaimVerificationResponse> {
     return this.get<ClaimVerificationResponse>('/v1/claims/verify', params, init);
   }

@@ -467,6 +467,12 @@ The first proof consumes the same adapters, provenance rules, and public query p
   surfaces, broad source rows/scripts/seeds, operations docs, related tests, Workstream 4 roadmap
   status, and changelog. Next coordinator action: poll in short intervals, record result, then gate
   the pass 11 commit.
+- 2026-06-06T21:45:00-04:00 — Workstream 4 pass 11 strict quiet audit returned complete. Found no
+  remaining corpus/query proof behavior gap. Seeded, live-first, and live-full verifier modes all
+  passed against the configured database. Only stale SDK wording still described `getDelta` and
+  `verifyClaim` as deferred 501 surfaces; it was aligned to the live shared query-layer behavior.
+  Next coordinator action: gate this small pass 11 cleanup commit and close Workstream 4 as quiet if
+  accepted.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 
@@ -848,6 +854,18 @@ the requested valid-world window. No source catalog rows, proof corpus rows, sou
 raw source-text exposure, dashboard, docs/Mintlify, marketing/SEO, domain routing, or release-audit
 work was added. Workstream 4 is quiet from the corpus/query-proof boundary after pass 10
 verification.
+
+Pass 11 closeout note: the strict quiet audit found no remaining corpus/query proof behavior gap.
+Seeded, live-first, and live-full verifier modes all pass against the configured database, including
+rollback cleanup, source-policy restricted-body search gating, delta citations, first-proof
+ChatGPT/Claude/Gemini/Llama entity `as_of` fact-window checks, first-proof and broad
+`verify_claim as_of` before/after behavior, broad source-class/topic/date/entity coverage,
+contradiction coverage, and review-needed thresholds. The only drift found was stale SDK wording
+that still described `getDelta` and `verifyClaim` as deferred 501 surfaces; that wording is now
+aligned to the live shared query-layer behavior. No source catalog rows, proof corpus rows,
+source-policy loosening, raw source-text exposure, dashboard, docs/Mintlify, marketing/SEO, domain
+routing, or release-audit work was added. Workstream 4 is quiet from the corpus/query-proof
+boundary after pass 11 verification.
 
 ## Workstream 5: Public Intercal Knowledge Experience
 

@@ -1426,13 +1426,19 @@ dependency for later audit work, not a Workstream 8 domain routing blocker. No a
 contracts, Cloudflare Workers/Pages compute, Workstream 9 release audit, or unrelated Jami Studio
 routing was changed. Gate result: C - quiet tests/docs/cleanup. Workstream 8 is ready for closeout.
 
+Coordinator closeout: Workstream 8 is closed. Pass 2 met the numeric and content gate for C-class
+quiet tests/docs/cleanup, and the active roadmap, operations runbooks, changelog fragment, and
+orchestrator logs now reflect the verified domain posture. Remaining Cloudflare dashboard/API
+metadata access and the broader live REST/SDK assertion are dependency notes for later audit work,
+not Workstream 8 blockers.
+
 ## Workstream 9: Release Audit And Provider Posture
 
 Goal: Confirm the public launch stack is coherent, portable, and not blocked by avoidable host decisions.
 
 Depends on:
 
-- [ ] Workstreams 1 through 8.
+- [x] Workstreams 1 through 8.
 
 Enables:
 
@@ -1468,6 +1474,16 @@ Suggested verification:
 - full browser verification
 - secret scan over tracked files
 - provider smoke checks where operator access is available
+
+Pass 1 dispatch note:
+
+- 2026-06-07T01:05:00-04:00 — Dispatched Workstream 9 pass 1 to fresh-context thread
+  `019ea078-21bc-7121-aa12-020d5d2bd797`. Active stream: Workstream 9 only. Workstreams 1
+  through 8 are closed. Ownership boundary: release/provider posture audit across Vercel-specific
+  dependencies, Hono/API/MCP portability, R2/S3-adapter evidence, public source-text and marketing
+  claim checks, and explicit future domain/Cloudflare-compute decisions. Next action: wait for pass
+  1, inspect commit stats/body, then dispatch mandatory pass 2 regardless of whether pass 1 is
+  clean.
 
 ## Final Verification And Closeout
 

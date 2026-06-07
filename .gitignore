@@ -17,7 +17,9 @@ build/
 .next/
 out/
 *.tsbuildinfo
-coverage/
+/coverage/
+/packages/*/coverage/
+/services/*/coverage/
 .turbo/
 
 # Env / secrets (never commit; .env.example is the only tracked env file)

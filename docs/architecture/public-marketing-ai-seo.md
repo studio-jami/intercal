@@ -30,4 +30,5 @@ Marketing copy must stay bounded by implemented behavior:
 ## Drift Checks
 
 Route and metadata expectations are tested in `packages/dashboard/lib/seo.test.ts`. Public docs and
-route inventory remain checked by `pnpm docs:check`.
+route inventory remain checked by `pnpm docs:check`, including a guard that manifest-owned
+dashboard routes cannot be masked by git-ignored page files.

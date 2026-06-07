@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +29,19 @@ function fail(message) {
 
 function assertExists(relativePath, label = relativePath) {
   if (!existsSync(repoPath(relativePath))) fail(`${label} is missing: ${relativePath}`);
+}
+
+function isGitIgnored(relativePath) {
+  try {
+    execFileSync('git', ['check-ignore', '--quiet', relativePath], {
+      cwd: repoRoot,
+      stdio: 'ignore',
+    });
+    return true;
+  } catch (error) {
+    if (typeof error?.status === 'number') return false;
+    return false;
+  }
 }
 
 function routeToFile(route) {
@@ -276,7 +290,11 @@ assertSameSet(
 );
 
 for (const route of manifest.dashboardRoutes) {
-  assertExists(routeToFile(route), `dashboard route ${route}`);
+  const routeFile = routeToFile(route);
+  assertExists(routeFile, `dashboard route ${route}`);
+  if (isGitIgnored(routeFile)) {
+    fail(`dashboard route ${route} is ignored by git: ${routeFile}`);
+  }
 }
 
 assertExists('packages/dashboard/app/llms.txt/route.ts', 'llms.txt route');

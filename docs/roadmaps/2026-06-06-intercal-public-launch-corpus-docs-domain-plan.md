@@ -1280,6 +1280,18 @@ Pass 2 dispatch note:
   result, record it in `docs/engineering/agents/orchestrator-logs/`, then apply the second-pass
   gate.
 
+Pass 2 closeout note: the fresh-context audit found one real SEO/docs-readiness gap from pass 1 and
+fixed it narrowly. `/coverage` was referenced by the home page, docs manifest, AI exports, sitemap,
+structured data, and metadata helpers, but its route file was masked by the broad `coverage/`
+ignore rule and was not tracked. The route is now tracked, coverage-output ignores are narrowed to
+actual output locations, and `pnpm docs:check` fails if a manifest-owned dashboard route is
+git-ignored. The audit did not find generic landing-page drift, Jami Studio dependency, docs-export
+duplication, route noindex drift, or overclaims beyond the live corpus/API/MCP posture. No
+Workstream 8 domain verification, Vercel project wiring, Cloudflare DNS, redirects, TLS, production
+account changes, generated contract edits, or Jami Studio site implementation was added. Because
+this pass landed a meaningful route/readiness fix plus a regression check, it likely gates as B
+rather than C.
+
 ## Workstream 8: Domain Routing, Vercel Projects, And Cloudflare DNS
 
 Goal: Verify and document the Intercal domain without moving compute prematurely or depending on unrelated studio-site work.

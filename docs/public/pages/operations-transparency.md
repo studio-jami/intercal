@@ -10,13 +10,16 @@ The accepted hosted topology is:
 - Neon Postgres with pgvector for canonical storage.
 - GitHub Actions for routine scheduled pipeline runs.
 - Cloud Run Jobs for heavy or on-demand pipeline execution.
-- Cloudflare R2 behind the S3 storage adapter.
+- Cloudflare R2 as the accepted object-storage target behind the S3 storage adapter.
 - Upstash Redis behind queue/cache and rate-limit ports.
 
 Storage, queue/cache, LLM, embeddings, and database provider swaps should be configuration and
 adapter changes, not schema rewrites. Front-door compute swaps are separate release proofs: the
 current launch uses Vercel-specific route mounts and trusted client-IP header assumptions that must
 be revalidated before moving production traffic to Cloudflare Workers or Pages.
+
+Live R2 bucket proof is operator-gated unless the shell has Cloudflare account access or R2 S3
+credentials plus an S3 client. Missing provider telemetry is reported as unavailable, not guessed.
 
 ## Budgets
 

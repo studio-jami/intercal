@@ -42,7 +42,7 @@ Intercal is greenfield enough that arbitrary incrementalism is a liability. Exec
   `/docs`, checked `llms.txt` / `llms-full.txt` exports, and a `pnpm docs:check` drift checker.
 - `docs/README.md` does not yet list the baseline seeding report.
 - The accepted hosted topology is Vercel for dashboard/REST/MCP, Neon for Postgres, GitHub Actions and Cloud Run Jobs for pipeline execution, Upstash for queue/cache, and Cloudflare R2 behind the S3 adapter.
-- `jami.studio` is already connected to Cloudflare DNS and R2 is live. Bluehost remains the registrar only while Cloudflare nameservers are authoritative.
+- `jami.studio` is already connected to Cloudflare DNS. R2 is the accepted object-storage target behind the S3 adapter, but live bucket proof remains operator-gated until Cloudflare account access or R2 S3 credentials are available in the shell. Bluehost remains the registrar only while Cloudflare nameservers are authoritative.
 - `intercal.jami.studio` is attached to the Intercal Vercel project, verified live, and is now the official Intercal public domain. Existing Vercel/legacy domain redirects remain in place to avoid breaking current links.
 - `www.jami.studio` has no live site in this repo and is not an Intercal blocker. Future studio-site work belongs outside this repo.
 - Domain routing should keep Cloudflare as DNS/R2/control layer and Vercel as app host for now. Moving compute to Cloudflare Workers is a later provider swap, not a prerequisite.
@@ -1522,6 +1522,18 @@ Pass 2 dispatch note:
   Active stream: Workstream 9 only. Workstreams 1 through 8 are closed. Next action: wait for pass
   2, inspect commit stats/body, and close Workstream 9 only if the result is C-class quiet
   tests/docs/cleanup.
+
+Pass 2 closeout note: fresh-context audit rechecked the pass 1 provider posture against code,
+public docs, generated exports, live official-domain routes, and available provider tooling. One
+non-critical wording drift was fixed: the high-level roadmap and public operations page now say R2
+is the accepted S3-adapter object-storage target, while live bucket proof remains operator-gated
+until Cloudflare account access or R2 S3 credentials are available in the shell. Vercel-specific
+launch behavior remains limited to `hono/vercel`, `VERCEL_URL`, Next.js Node runtime settings, MCP
+`maxDuration`, and REST trusted client-IP header assumptions; Cloudflare compute remains separate
+future decision work. Live smokes passed for public pages, docs, OpenAPI, REST freshness/evidence,
+and MCP initialize on `https://intercal.jami.studio`. No code, generated contracts,
+Cloudflare Workers/Pages compute, domain purchase, DNS change, or unrelated Jami Studio routing was
+changed. Gate result: C - quiet docs/audit cleanup.
 
 ## Final Verification And Closeout
 

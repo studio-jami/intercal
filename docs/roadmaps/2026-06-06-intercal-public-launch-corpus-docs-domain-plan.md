@@ -538,6 +538,12 @@ The first proof consumes the same adapters, provenance rules, and public query p
   domain-routing work was added. Workstream 5 is quiet from the public knowledge experience
   closeout boundary; the remaining follow-ups stay contracted source-document metadata lookup,
   relationship-edge graph controls, audited operator mutations, and deeper accessibility coverage.
+- 2026-06-06T23:30:00-04:00 — Dispatched Workstream 6 pass 1 to fresh-context thread
+  `019ea006-43c3-7f02-ba01-3b13ef408bdf`. Active streams: Workstream 6 only. Ownership boundary:
+  docs IA, Mintlify/source-owned docs config if selected, `/docs` or equivalent docs rendering,
+  `llms.txt`/`llms-full.txt`, copy/export strategy, generated OpenAPI placement, SDK/MCP examples,
+  docs drift checks, `docs/README.md`, active roadmap, and changelog. Next coordinator action: poll
+  to terminal result, then dispatch mandatory Workstream 6 pass 2.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 

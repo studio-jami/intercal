@@ -127,10 +127,11 @@ Current proof from 2026-06-07:
   `/api/v1/freshness?topic_or_entity=MCP%20protocol`, and MCP initialize/tools calls at `/api/mcp`.
 - `vercel domains inspect jami.studio` warns about the parent apex configuration. That is external
   Jami Studio site work and does not block the Intercal subdomain.
-- Wrangler auth is available for Cloudflare account `jami-studio`, but the current token could not
-  read DNS records through the Cloudflare REST DNS endpoint. If dashboard-side record metadata is
-  required, use Cloudflare Dashboard > `jami.studio` > DNS > Records, or issue an operator token with
-  `Zone.DNS Read` for the `jami.studio` zone.
+- Pass 1 found Wrangler auth for Cloudflare account `jami-studio`, but that token could not read DNS
+  records through the Cloudflare REST DNS endpoint. Pass 2 did not have a `wrangler` executable or
+  Cloudflare token env in the shell, so dashboard/API-side record metadata remains operator-gated.
+  If dashboard-side record metadata is required, use Cloudflare Dashboard > `jami.studio` > DNS >
+  Records, or issue an operator token with `Zone.DNS Read` for the `jami.studio` zone.
 
 ## SSH Keys And VPS
 

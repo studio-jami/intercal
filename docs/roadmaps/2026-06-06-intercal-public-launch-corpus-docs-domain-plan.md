@@ -1388,10 +1388,10 @@ returned `200` for `/`, `/docs`, `/api/openapi.json`, `/api/v1/freshness?topic_o
 and MCP Streamable HTTP initialize POST to `/api/mcp`; an SDK MCP smoke from `packages/mcp-server`
 listed six tools and successfully called `get_entity` and `search_evidence`. A plain GET to
 `/api/mcp` returns `406`, which is expected for a browser-style request without Streamable HTTP
-headers. The current Cloudflare token can authenticate as account `jami-studio` through Wrangler
-but cannot read DNS records through the REST DNS endpoint; if pass 2 needs dashboard-side record
-metadata, use Cloudflare Dashboard > `jami.studio` > DNS > Records or a token with `Zone.DNS Read`
-for the zone. `vercel domains inspect jami.studio` still warns that the parent apex is not routed to
+headers. Pass 1 found Cloudflare Wrangler auth for account `jami-studio`, but that token could not
+read DNS records through the REST DNS endpoint; if dashboard-side record metadata is needed, use
+Cloudflare Dashboard > `jami.studio` > DNS > Records or a token with `Zone.DNS Read` for the zone.
+`vercel domains inspect jami.studio` still warns that the parent apex is not routed to
 Vercel; that belongs to external `jami.studio`/`www.jami.studio` site work and is not an Intercal
 subdomain blocker. Updated operations runbooks and changelog only; no app code, generated
 contracts, Cloudflare Workers/Pages compute, or unrelated studio-site routing was changed.
@@ -1405,6 +1405,26 @@ Pass 2 dispatch note:
   Active stream: Workstream 8 only. Workstreams 1 through 7 are closed; Workstream 9 remains out of
   scope except dependency notes. Next action: wait for pass 2, inspect the commit stats/body, and
   close Workstream 8 only if the result is C-class quiet tests/docs/cleanup.
+
+Pass 2 closeout note: strict Workstream 8 audit independently rechecked the official domain after a
+new Ready Vercel production deployment. Vercel still reports account scope `studio-jami`, project
+`intercal`, Root Directory `packages/dashboard`, Node.js `24.x`, and latest production URL
+`https://intercal.jami.studio`; `vercel inspect https://intercal.jami.studio` reports a Ready
+production deployment with the official and compatibility aliases. Cloudflare authoritative
+nameservers remain `elliott.ns.cloudflare.com` and `irena.ns.cloudflare.com`; both answer
+`intercal.jami.studio CNAME 25b8236304cda166.vercel-dns-017.com` with TTL `600`, and the target
+resolves to Vercel edge addresses. TLS is live for `CN=intercal.jami.studio` with a Let's Encrypt
+certificate valid 2026-06-06 through 2026-09-04. Official-domain smokes returned `200` for `/`,
+`/docs`, `/api/openapi.json`, and `/api/v1/freshness?topic_or_entity=MCP%20protocol`; MCP plain GET
+returned the expected `406`, while Streamable HTTP initialize POST returned `200` and an SDK smoke
+from `packages/mcp-server` listed all six tools and called `get_entity` plus `search_evidence`.
+Cloudflare dashboard/API metadata was not available in this pass because neither `wrangler` nor
+Cloudflare token env was present; authoritative DNS was still verified directly through Cloudflare
+nameservers. The broader env-gated live MCP-server test failed only on a point-in-time REST/SDK
+query assertion (`supported` versus expected `unverified`), which is a corpus/query-semantics
+dependency for later audit work, not a Workstream 8 domain routing blocker. No app code, generated
+contracts, Cloudflare Workers/Pages compute, Workstream 9 release audit, or unrelated Jami Studio
+routing was changed. Gate result: C - quiet tests/docs/cleanup. Workstream 8 is ready for closeout.
 
 ## Workstream 9: Release Audit And Provider Posture
 

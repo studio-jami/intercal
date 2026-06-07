@@ -1,0 +1,108 @@
+{
+  "title": "Intercal Docs",
+  "baseUrl": "https://intercal.jami.studio",
+  "pages": [
+    {
+      "slug": "introduction",
+      "title": "Introduction",
+      "description": "What Intercal is and which public surfaces exist today.",
+      "source": "docs/public/pages/introduction.md"
+    },
+    {
+      "slug": "concepts",
+      "title": "Concepts",
+      "description": "Sources, claims, entities, relationships, fact versions, and bitemporal reads.",
+      "source": "docs/public/pages/concepts.md"
+    },
+    {
+      "slug": "quickstart",
+      "title": "Quickstart",
+      "description": "Use the public UI, REST, SDK, and MCP surfaces from the same domain.",
+      "source": "docs/public/pages/quickstart.md"
+    },
+    {
+      "slug": "mcp",
+      "title": "MCP",
+      "description": "Connect agents to the Streamable HTTP MCP endpoint.",
+      "source": "docs/public/pages/mcp.md"
+    },
+    {
+      "slug": "rest",
+      "title": "REST",
+      "description": "Call the generated V1 REST contract.",
+      "source": "docs/public/pages/rest.md"
+    },
+    {
+      "slug": "sdk",
+      "title": "SDK",
+      "description": "Use the typed TypeScript SDK over the generated contract.",
+      "source": "docs/public/pages/sdk.md"
+    },
+    {
+      "slug": "authentication",
+      "title": "Authentication",
+      "description": "REST API-key posture, MCP OAuth resource-server posture, and subscription scopes.",
+      "source": "docs/public/pages/authentication.md"
+    },
+    {
+      "slug": "examples",
+      "title": "Examples",
+      "description": "Verified REST, SDK, and MCP examples for the live V1 query surface.",
+      "source": "docs/public/pages/examples.md"
+    },
+    {
+      "slug": "source-policy",
+      "title": "Source Policy",
+      "description": "Fetch, storage, citation, summary, and raw-body exposure rules.",
+      "source": "docs/public/pages/source-policy.md"
+    },
+    {
+      "slug": "provenance",
+      "title": "Provenance",
+      "description": "How public facts trace back to claims, evidence, source documents, and fact versions.",
+      "source": "docs/public/pages/provenance.md"
+    },
+    {
+      "slug": "corpus-coverage",
+      "title": "Corpus And Backfill Coverage",
+      "description": "Current proof coverage, quality gates, backfill posture, and coverage limits.",
+      "source": "docs/public/pages/corpus-coverage.md"
+    },
+    {
+      "slug": "operations-transparency",
+      "title": "Operations Transparency",
+      "description": "Budgets, health checks, observability, deployments, and unavailable provider telemetry.",
+      "source": "docs/public/pages/operations-transparency.md"
+    }
+  ],
+  "dashboardRoutes": [
+    "/",
+    "/entity",
+    "/entity/[name]",
+    "/claim/[id]",
+    "/source/[id]",
+    "/topic",
+    "/topic/[name]",
+    "/graph",
+    "/search",
+    "/compare",
+    "/delta",
+    "/verify",
+    "/freshness",
+    "/coverage",
+    "/subscriptions",
+    "/feedback",
+    "/operator",
+    "/docs",
+    "/docs/[slug]"
+  ],
+  "api": {
+    "openapiSource": "packages/shared/generated/openapi/openapi.json",
+    "publicOpenapiRoute": "/api/openapi.json",
+    "mcpRoute": "/api/mcp"
+  },
+  "exports": {
+    "index": "llms.txt",
+    "full": "llms-full.txt"
+  }
+}

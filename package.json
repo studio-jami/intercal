@@ -19,6 +19,7 @@
     "lint:fix": "biome check --write .",
     "typecheck": "pnpm -r --filter \"./packages/**\" typecheck",
     "test": "pnpm -r --filter \"./packages/**\" test",
+    "docs:check": "node scripts/docs/check-public-docs.mjs",
     "contracts:build": "pnpm --filter @intercal/shared contracts:build",
     "contracts:check": "pnpm --filter @intercal/shared contracts:check",
     "db:migrate:clean": "node scripts/dev/migrate.mjs --fresh",

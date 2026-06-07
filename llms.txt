@@ -1,0 +1,24 @@
+# Intercal
+
+Intercal is an open, provenance-backed temporal knowledge substrate for agents and LLM apps. It serves public docs, REST, generated OpenAPI, and MCP from https://intercal.jami.studio.
+
+## Docs
+
+- [Introduction](https://intercal.jami.studio/docs/introduction): What Intercal is and which public surfaces exist today.
+- [Concepts](https://intercal.jami.studio/docs/concepts): Sources, claims, entities, relationships, fact versions, and bitemporal reads.
+- [Quickstart](https://intercal.jami.studio/docs/quickstart): Use the public UI, REST, SDK, and MCP surfaces from the same domain.
+- [MCP](https://intercal.jami.studio/docs/mcp): Connect agents to the Streamable HTTP MCP endpoint.
+- [REST](https://intercal.jami.studio/docs/rest): Call the generated V1 REST contract.
+- [SDK](https://intercal.jami.studio/docs/sdk): Use the typed TypeScript SDK over the generated contract.
+- [Authentication](https://intercal.jami.studio/docs/authentication): REST API-key posture, MCP OAuth resource-server posture, and subscription scopes.
+- [Examples](https://intercal.jami.studio/docs/examples): Verified REST, SDK, and MCP examples for the live V1 query surface.
+- [Source Policy](https://intercal.jami.studio/docs/source-policy): Fetch, storage, citation, summary, and raw-body exposure rules.
+- [Provenance](https://intercal.jami.studio/docs/provenance): How public facts trace back to claims, evidence, source documents, and fact versions.
+- [Corpus And Backfill Coverage](https://intercal.jami.studio/docs/corpus-coverage): Current proof coverage, quality gates, backfill posture, and coverage limits.
+- [Operations Transparency](https://intercal.jami.studio/docs/operations-transparency): Budgets, health checks, observability, deployments, and unavailable provider telemetry.
+
+## Machine-readable surfaces
+
+- [OpenAPI](https://intercal.jami.studio/api/openapi.json)
+- [MCP](https://intercal.jami.studio/api/mcp)
+- [Full docs export](https://intercal.jami.studio/llms-full.txt)

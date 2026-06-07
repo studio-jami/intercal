@@ -18,6 +18,13 @@ flow, decisions, and how to operate Intercal safely.
 - [`architecture/provider-boundaries.md`](architecture/provider-boundaries.md) — the adapter ports and what sits behind each.
 - [`architecture/deployment-topology.md`](architecture/deployment-topology.md) — local / pilot (free-tier) / managed paths.
 
+## Public docs and AI exports
+
+- [`public/manifest.json`](public/manifest.json) — source-owned public docs inventory, dashboard route inventory, OpenAPI placement, and export targets.
+- [`public/pages/`](public/pages/) — Markdown source pages rendered at `/docs` and exported to `llms.txt` / `llms-full.txt`.
+- [`../docs.json`](../docs.json) — Mintlify-compatible navigation that points at source Markdown and the generated OpenAPI document.
+- [`../llms.txt`](../llms.txt) and [`../llms-full.txt`](../llms-full.txt) — checked AI-friendly exports. Run `pnpm docs:check` after public docs edits.
+
 ## Decisions
 
 - [`decisions/`](decisions/) — durable decision records (D1–D16 from the June-2026 revisit, and onward).

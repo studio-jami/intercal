@@ -1,0 +1,49 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "Intercal",
+  "theme": "mint",
+  "colors": {
+    "primary": "#111827",
+    "light": "#f8fafc",
+    "dark": "#020617"
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Start",
+        "pages": [
+          "docs/public/pages/introduction",
+          "docs/public/pages/concepts",
+          "docs/public/pages/quickstart"
+        ]
+      },
+      {
+        "group": "Use Intercal",
+        "pages": [
+          "docs/public/pages/mcp",
+          "docs/public/pages/rest",
+          "docs/public/pages/sdk",
+          "docs/public/pages/authentication",
+          "docs/public/pages/examples"
+        ]
+      },
+      {
+        "group": "Trust And Operations",
+        "pages": [
+          "docs/public/pages/source-policy",
+          "docs/public/pages/provenance",
+          "docs/public/pages/corpus-coverage",
+          "docs/public/pages/operations-transparency"
+        ]
+      },
+      {
+        "group": "REST Reference",
+        "openapi": "packages/shared/generated/openapi/openapi.json"
+      }
+    ]
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  }
+}

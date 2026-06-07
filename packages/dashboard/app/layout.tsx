@@ -11,6 +11,7 @@ const nav = [
   ['Topics', '/topic'],
   ['Graph', '/graph'],
   ['Search', '/search'],
+  ['Docs', '/docs'],
   ['Compare', '/compare'],
   ['Delta', '/delta'],
   ['Verify', '/verify'],

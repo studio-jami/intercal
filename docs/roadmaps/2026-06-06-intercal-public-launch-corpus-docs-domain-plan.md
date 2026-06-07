@@ -37,7 +37,9 @@ Intercal is greenfield enough that arbitrary incrementalism is a liability. Exec
 - The first useful proof should validate GPT, Claude, Gemini, Llama, and MCP timeline queries from November 2022 onward, but the product target is broader AI-history coverage, not only those five spines.
 - The current dashboard has a home page, `/entity`, and `/entity/[name]` in `packages/dashboard/app`; it is a real SDK-backed shell, not the final public knowledge experience.
 - Plan 06 describes the needed public surface: entity/topic/claim/evidence pages, graph and timeline explorer, briefing/search/comparison, contradiction/freshness views, subscriptions, feedback/reporting, and operator/review surfaces.
-- Docs are useful for engineering but not ready as a public Mintlify/docs surface. There is no current `docs.json`, `llms.txt`, `llms-full.txt`, MDX docs app, public docs IA, docs copy pipeline, or per-page LLM text export.
+- Public docs now have a first source-owned IA in `docs/public/manifest.json` and
+  `docs/public/pages/`, a Mintlify-compatible root `docs.json`, same-origin dashboard rendering at
+  `/docs`, checked `llms.txt` / `llms-full.txt` exports, and a `pnpm docs:check` drift checker.
 - `docs/README.md` does not yet list the baseline seeding report.
 - The accepted hosted topology is Vercel for dashboard/REST/MCP, Neon for Postgres, GitHub Actions and Cloud Run Jobs for pipeline execution, Upstash for queue/cache, and Cloudflare R2 behind the S3 adapter.
 - `jami.studio` is already connected to Cloudflare DNS and R2 is live. Bluehost remains the registrar only while Cloudflare nameservers are authoritative.
@@ -87,7 +89,9 @@ Intercal public launch has:
 - `get_delta`, `verify_claim`, `get_entity`, `search_evidence`, `get_freshness`, and source coverage working against the broad corpus over REST, SDK, and MCP.
 - Public pages at `intercal.jami.studio` for landing, entities, topics, claims, evidence, graph/timeline, briefings, deltas, freshness, subscriptions, feedback, source coverage, docs, API examples, OpenAPI, and MCP connection guidance.
 - Non-blocking outbound/inbound link slots for a future Jami Studio site, without requiring that site to exist before Intercal ships.
-- AI-friendly docs with `llms.txt`, `llms-full.txt`, page-level copyable Markdown, generated OpenAPI access, canonical examples, sitemap, robots, metadata, and drift checks.
+- AI-friendly docs with `llms.txt`, `llms-full.txt`, page-level source Markdown, generated OpenAPI
+  access, canonical examples, and drift checks. Sitemap, robots, and richer metadata remain
+  Workstream 7 public marketing/SEO scope.
 - Cloudflare DNS records for `intercal`, Vercel domain verification, TLS, old Intercal domain redirects, and canonical redirect behavior documented.
 
 ## Cross-Stream Dependency Map
@@ -938,6 +942,16 @@ source-policy loosening, raw source-text exposure, dashboard, docs/Mintlify, mar
 routing, or release-audit work was added. Workstream 4 is quiet from the corpus/query-proof
 boundary after pass 11 verification.
 
+- 2026-06-06T23:04:00-04:00 — Dispatched Workstream 6 pass 1 to agent
+  `019ea009-058a-70e1-8884-82ac4483befe` (`Galileo`). Ownership boundary:
+  public docs IA, Mintlify-compatible source config, same-origin `/docs` rendering if appropriate,
+  `llms.txt`/`llms-full.txt`, Markdown/text exports, generated OpenAPI/example references, docs
+  drift checks, `docs/README.md`, active-roadmap status, and changelog. Workstreams 1 through 5
+  are treated as closed; Workstreams 7 through 9 remain out of scope except dependency notes. Next
+  coordinator action: poll for the pass 1 result, record it in
+  `docs/engineering/agents/orchestrator-logs/`, then dispatch mandatory Workstream 6 pass 2 after
+  the pass 1 commit/result lands.
+
 ## Workstream 5: Public Intercal Knowledge Experience
 
 Goal: Replace the thin dashboard shell with the full read-only public product surface.
@@ -1049,11 +1063,11 @@ Goal: Publish docs that are useful to humans and agents, with source-owned conte
 Depends on:
 
 - [x] Workstream 4 query proof.
-- [ ] Workstream 5 public route ownership.
+- [x] Workstream 5 public route ownership.
 
 Enables:
 
-- [ ] Workstream 7 Intercal marketing and AI SEO.
+- [x] Workstream 7 Intercal marketing and AI SEO.
 
 Repo guidance:
 
@@ -1068,18 +1082,29 @@ Primary areas:
 
 Implementation tasks:
 
-- [ ] Define public docs IA for introduction, concepts, quickstart, MCP, REST, SDK, authentication, examples, source policy, provenance, backfill/corpus coverage, and operations transparency.
-- [ ] Add Mintlify-compatible `docs.json` or equivalent source-owned config if Mintlify is selected.
-- [ ] Add `/docs` route or docs package rendering at `intercal.jami.studio/docs`.
-- [ ] Add `llms.txt` and `llms-full.txt`.
-- [ ] Add copyable Markdown or text export for every public docs page.
-- [ ] Add generated OpenAPI placement and SDK/MCP examples that are verified against contracts.
-- [ ] Add docs drift checks for route inventory, OpenAPI availability, examples, links, and AI export coverage.
-- [ ] Update `docs/README.md` with the baseline seeding report and this roadmap.
+- [x] Define public docs IA for introduction, concepts, quickstart, MCP, REST, SDK, authentication, examples, source policy, provenance, backfill/corpus coverage, and operations transparency.
+- [x] Add Mintlify-compatible `docs.json` or equivalent source-owned config if Mintlify is selected.
+- [x] Add `/docs` route or docs package rendering at `intercal.jami.studio/docs`.
+- [x] Add `llms.txt` and `llms-full.txt`.
+- [x] Add copyable Markdown or text export for every public docs page.
+- [x] Add generated OpenAPI placement and SDK/MCP examples that are verified against contracts.
+- [x] Add docs drift checks for route inventory, OpenAPI availability, examples, links, and AI export coverage.
+- [x] Update `docs/README.md` with the baseline seeding report and this roadmap.
 
 Exit criteria:
 
-- [ ] Docs are ready to connect to Mintlify or serve from the Intercal app without losing source ownership or AI-readable exports.
+- [x] Docs are ready to connect to Mintlify or serve from the Intercal app without losing source ownership or AI-readable exports.
+
+Pass 1 closeout note: `docs/public/manifest.json` now owns the public docs page inventory, public
+dashboard route inventory, generated OpenAPI placement, MCP route, and AI export targets. Source
+Markdown in `docs/public/pages/` covers introduction, concepts, quickstart, MCP, REST, SDK,
+authentication, examples, source policy, provenance, corpus/backfill coverage, and operations
+transparency. The dashboard renders that source at `/docs` and `/docs/[slug]`, serves
+`/llms.txt` and `/llms-full.txt` from the same source, and keeps the route reachable from the main
+navigation. The root `docs.json` is Mintlify-compatible and points at the generated OpenAPI source
+instead of copying schemas. `pnpm docs:check` verifies docs route inventory, generated OpenAPI
+availability, checked REST/SDK/MCP examples, Mintlify navigation coverage, links, and AI export
+drift. Sitemap, robots, canonical metadata, and broader marketing/SEO polish remain Workstream 7.
 
 Suggested verification:
 
@@ -1094,7 +1119,7 @@ Goal: Launch Intercal product marketing and AI SEO surfaces without turning prod
 Depends on:
 
 - [ ] Workstream 5 Intercal public surface shape.
-- [ ] Workstream 6 docs/export shape.
+- [x] Workstream 6 docs/export shape.
 
 Enables:
 

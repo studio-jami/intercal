@@ -44,6 +44,11 @@ export default function HomePage() {
       body: 'Review the public corpus-quality gate snapshot.',
     },
     {
+      title: 'Docs',
+      href: '/docs',
+      body: 'Read source-owned docs, generated OpenAPI guidance, and AI-friendly exports.',
+    },
+    {
       title: 'Subscriptions',
       href: '/subscriptions',
       body: 'Manage authenticated change notifications without mutating graph state.',

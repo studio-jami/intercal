@@ -984,6 +984,17 @@ query layer returns a claim without citations. No contracts, generated artifacts
 semantics, subscription secret handling, operator mutations, docs/Mintlify, marketing/SEO, or domain
 routing work was added.
 
+Pass 4 quiet-confirmation note: strict citation/source-policy audit found one remaining route-level
+linking inconsistency and fixed it narrowly. `/claim/[id]` source-document metadata now uses the same
+`http`/`https` outbound citation allowlist as shared evidence chips; invalid, relative, or non-web
+source URLs stay as internal source-record state instead of public outbound links. Feedback and
+subscription server actions still redirect after successful SDK calls without catching successful
+redirects as errors, subscription API keys remain password-only form inputs with no persistence or
+echo, and the documented remaining Workstream 5 gaps remain contracted source-document metadata
+lookup, relationship-edge graph controls, audited operator mutations, and deeper accessibility
+coverage. No contracts, generated artifacts, source lookup semantics, raw source-text exposure,
+operator mutations, docs/Mintlify, marketing/SEO, or domain routing work was added.
+
 Suggested verification:
 
 - `pnpm --filter @intercal/dashboard test`

@@ -8,6 +8,7 @@ import {
   SourcePolicyNote,
   SubmitButton,
 } from '../../../components/ui';
+import { safeCitationHref } from '../../../lib/citations';
 import { apiClient } from '../../../lib/client';
 import { describeError, formatDateTime } from '../../../lib/format';
 
@@ -51,31 +52,35 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
         >
           {data.sources.length ? (
             <ul className="space-y-3">
-              {data.sources.map((source) => (
-                <li
-                  key={source.id}
-                  className="rounded-md border border-neutral-200 p-3 text-sm dark:border-neutral-800"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium">{source.title ?? 'Untitled source'}</p>
-                      <p className="mt-1 text-neutral-600 dark:text-neutral-400">
-                        source {source.sourceId}; published {formatDateTime(source.publishedAt)}
-                      </p>
-                      <p className="mt-1 text-xs text-neutral-500">
-                        ingested {formatDateTime(source.ingestedAt)}
-                      </p>
-                    </div>
-                    {source.url ? (
+              {data.sources.map((source) => {
+                const citationHref = safeCitationHref(source.url);
+
+                return (
+                  <li
+                    key={source.id}
+                    className="rounded-md border border-neutral-200 p-3 text-sm dark:border-neutral-800"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium">{source.title ?? 'Untitled source'}</p>
+                        <p className="mt-1 text-neutral-600 dark:text-neutral-400">
+                          source {source.sourceId}; published {formatDateTime(source.publishedAt)}
+                        </p>
+                        <p className="mt-1 text-xs text-neutral-500">
+                          ingested {formatDateTime(source.ingestedAt)}
+                        </p>
+                      </div>
                       <div className="flex flex-wrap gap-2">
-                        <Link
-                          href={source.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="underline"
-                        >
-                          Open citation
-                        </Link>
+                        {citationHref ? (
+                          <Link
+                            href={citationHref}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="underline"
+                          >
+                            Open citation
+                          </Link>
+                        ) : null}
                         <Link
                           href={`/source/${encodeURIComponent(source.id)}`}
                           className="underline"
@@ -83,14 +88,10 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
                           Source record
                         </Link>
                       </div>
-                    ) : (
-                      <Link href={`/source/${encodeURIComponent(source.id)}`} className="underline">
-                        Source record
-                      </Link>
-                    )}
-                  </div>
-                </li>
-              ))}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <EmptyState title="No source documents returned">

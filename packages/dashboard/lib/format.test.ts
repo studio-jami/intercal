@@ -24,6 +24,8 @@ describe('dashboard format helpers', () => {
     expect(safeCitationHref('https://example.com/path')).toBe('https://example.com/path');
     expect(safeCitationHref('http://example.com/path')).toBe('http://example.com/path');
     expect(safeCitationHref('javascript:alert(1)')).toBeUndefined();
+    expect(safeCitationHref('mailto:source@example.com')).toBeUndefined();
+    expect(safeCitationHref('/source/local-record')).toBeUndefined();
     expect(safeCitationHref('not a url')).toBeUndefined();
     expect(citationLabel('javascript:alert(1)', id)).toBe('12345678...abcdef');
   });

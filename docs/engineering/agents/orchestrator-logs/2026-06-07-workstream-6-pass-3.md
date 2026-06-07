@@ -2,7 +2,7 @@
 
 - Thread: local quiet-confirmation audit
 - Status: complete
-- Commit: pending
+- Commit: `14acd0ce42c878f92e218d5216047af8ad039fdf`
 - Classification: C - quiet tests/docs/cleanup
 
 ## Changed files

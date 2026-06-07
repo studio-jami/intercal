@@ -569,6 +569,18 @@ The first proof consumes the same adapters, provenance rules, and public query p
   broken Mintlify asset reference. Verification passed docs check, whitespace check, targeted Biome,
   dashboard typecheck/test/build, contracts check, and targeted secret scan. Next coordinator action:
   dispatch Workstream 6 pass 3 as a strict quiet confirmation.
+- 2026-06-07T00:25:00-04:00 — Dispatched Workstream 6 pass 3 strict quiet confirmation to
+  fresh-context thread `019ea02a-1ea8-7381-a748-311188f07550`. Active streams: Workstream 6 only.
+  Ownership boundary: quiet closeout confirmation for docs IA, Mintlify config, `/docs` rendering,
+  LLM exports, generated snapshot coverage, docs drift checks, examples, roadmap/changelog/README
+  accuracy, and no feature expansion. Next coordinator action: poll to terminal result and gate as
+  potential class C closeout.
+- 2026-06-07T00:43:00-04:00 — Workstream 6 pass 3 quiet confirmation returned complete. The audit
+  found no docs-facing closeout blocker across source-owned docs, Mintlify config, same-origin
+  `/docs` rendering, LLM exports, generated dashboard docs snapshot, generated OpenAPI placement,
+  SDK/MCP examples, docs README, changelog, or `scripts/docs/check-public-docs.mjs`. Verification:
+  `pnpm docs:check` and `git diff --check` passed. Gate result: C — quiet tests/docs/cleanup.
+  Workstream 6 is closed; preserve Workstream 7 through 9 dependency notes without starting them.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 
@@ -989,6 +1001,26 @@ boundary after pass 11 verification.
   Workstreams 1 through 5 are closed; Workstreams 7 through 9 remain out of scope except
   dependency notes. Next coordinator action: poll for the pass 2 result, record it in
   `docs/engineering/agents/orchestrator-logs/`, then apply the second-pass gate.
+- 2026-06-06T23:46:00-04:00 — Workstream 6 pass 2 returned complete. Commits:
+  `992b67292b511dc050f9237a42322fef120ab042` (`docs: harden public docs drift checks`)
+  and `fccb3381d8f632d3264ca2f9ab3ab04d4a5d64f1` (`chore(docs): record workstream 6
+  pass 2`), pushed to `origin/main`. Verification reported: `pnpm docs:check`,
+  `git diff --check`, dashboard typecheck/test/build, `pnpm lint`, `pnpm contracts:check`,
+  and a touched-file secret-pattern scan passed. Gate result: the implementation commit changed 6
+  files and 174 LOC, so it passed the numeric gate, but contents are B — completion plus focused
+  drift-check hardening. Next coordinator action: dispatch one more fresh-context quiet-confirmation
+  pass before closing Workstream 6.
+- 2026-06-06T23:48:00-04:00 — Dispatched Workstream 6 pass 3 quiet-confirmation to agent
+  `019ea02a-9956-7213-95c1-2feaad76190b` (`Lorentz`). Ownership boundary:
+  strict quiet audit of the Workstream 6 docs/export/check implementation, with fixes limited to
+  real docs-facing closeout blockers or concrete drift issues. Next coordinator action: poll for
+  the pass 3 result, record it in `docs/engineering/agents/orchestrator-logs/`, then gate for
+  C-class closeout.
+- 2026-06-07T00:43:00-04:00 — Workstream 6 pass 3 quiet-confirmation returned complete. No
+  implementation blocker or docs drift issue remained after auditing the source-owned docs, Mintlify
+  config, `/docs` routes, LLM exports, generated docs snapshot, generated OpenAPI placement,
+  SDK/MCP examples, `docs/README.md`, changelog, and docs checker. Verification: `pnpm docs:check`
+  and `git diff --check` passed. Gate result: C — quiet tests/docs/cleanup. Workstream 6 is closed.
 
 ## Workstream 5: Public Intercal Knowledge Experience
 
@@ -1155,6 +1187,14 @@ yet. The checked `llms.txt` export now includes the `/docs` index route in addit
 source-owned docs page. Public examples and prose remain contract-aligned and continue to describe
 bounded proof coverage, unpublished SDK posture, source-policy limits, and unavailable operational
 telemetry honestly.
+
+Pass 3 quiet-confirmation note: strict Workstream 6 audit found no remaining docs-facing closeout
+blocker. The source-owned docs IA, Mintlify config, same-origin `/docs` routes, `llms.txt` /
+`llms-full.txt`, generated dashboard docs snapshot, generated OpenAPI placement, SDK/MCP examples,
+`docs/README.md`, changelog fragment, and docs drift checker remain aligned to live code/contracts.
+No implementation files, generated contracts, generated docs exports, public docs source pages,
+marketing, domain routing, or Workstreams 7 through 9 scope were changed. Workstream 6 is closed as
+C-class quiet tests/docs/cleanup.
 
 Suggested verification:
 

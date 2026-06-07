@@ -562,6 +562,13 @@ The first proof consumes the same adapters, provenance rules, and public query p
   audit/harden source-owned docs IA, Mintlify config, `/docs` routes, LLM exports, generated docs
   snapshot, docs drift checks, contract-aligned examples, `docs/README.md`, active roadmap, and
   changelog. Next coordinator action: poll to terminal result and gate the pass 2 commit.
+- 2026-06-07T00:19:00-04:00 — Workstream 6 pass 2 returned complete. Commit:
+  `992b672 docs: harden public docs drift checks`, pushed to `origin/main`. Summary gate:
+  6 files changed, 174 insertions, 5 deletions; numeric gate passes. Contents classification:
+  **B — Completion + tests** because the pass materially hardened docs drift checks and removed a
+  broken Mintlify asset reference. Verification passed docs check, whitespace check, targeted Biome,
+  dashboard typecheck/test/build, contracts check, and targeted secret scan. Next coordinator action:
+  dispatch Workstream 6 pass 3 as a strict quiet confirmation.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 

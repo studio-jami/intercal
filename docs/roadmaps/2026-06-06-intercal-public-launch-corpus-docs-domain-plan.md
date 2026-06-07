@@ -478,6 +478,14 @@ The first proof consumes the same adapters, provenance rules, and public query p
   routes, SDK/dashboard integration, relevant architecture docs, related tests, Workstream 5 roadmap
   status, and changelog. Next coordinator action: poll in short intervals, record result, then
   dispatch mandatory Workstream 5 pass 2 after pass 1 lands.
+- 2026-06-06T22:04:49-04:00 — Workstream 5 pass 1 returned complete. Commit:
+  `e51e995 feat(dashboard): add public knowledge experience`, pushed to `origin/main`. Summary gate:
+  23 files changed, 1,540 insertions, 74 deletions. This is a substantial first product-surface
+  slice, not closeout-eligible. Verified by worker: dashboard test/typecheck/build, dashboard Biome
+  check, `pnpm contracts:check`, whitespace checks, browser smoke, and tracked-diff secret scan.
+  Root `pnpm lint` remains blocked by unrelated pre-existing `mcps/Neon` formatting drift plus a
+  Biome schema-version warning. Next coordinator action: dispatch mandatory Workstream 5 pass 2 with
+  fresh context.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 

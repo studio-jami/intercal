@@ -505,6 +505,12 @@ The first proof consumes the same adapters, provenance rules, and public query p
   boundary: closeout-readiness audit for the dashboard public knowledge surface, SDK/dashboard
   subscription handling, source-policy/evidence correctness, tests/docs/roadmap/changelog, and
   narrow cleanup only. Next coordinator action: poll to terminal result, then gate the pass 3 commit.
+- 2026-06-06T22:51:00-04:00 — Workstream 5 pass 3 returned complete. Commit:
+  `599dac9 fix(dashboard): tighten public citation states`, pushed to `origin/main`. Summary gate:
+  7 files changed, 59 insertions, 15 deletions; numeric gate passes. Contents classification:
+  **B — Completion + tests** because the pass fixed real citation URL and empty-evidence state gaps,
+  then proved them with tests/docs/smoke. Next coordinator action: dispatch one more fresh-context
+  Workstream 5 pass 4 quiet confirmation before closeout.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 

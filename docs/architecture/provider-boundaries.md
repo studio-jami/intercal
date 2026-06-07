@@ -1,9 +1,11 @@
 # Provider Boundaries (Adapters)
 
 Every external dependency sits behind a port. Provider logic never crosses the port boundary,
-so Intercal is **deploy-target agnostic and provider-swappable without a migration**. Selection
-is by environment (see `.env.example`); the Python `intercal_shared.factory` returns the
-configured adapter for each port.
+so Intercal's storage, queue/cache, embeddings, LLM, scheduler, and database providers are
+swappable without a migration. Front-door compute is narrower: REST/MCP semantics are portable by
+contract, but each host must prove its mount adapter, runtime, routing, and trusted-header behavior
+before production traffic moves there. Selection is by environment (see `.env.example`); the Python
+`intercal_shared.factory` returns the configured adapter for each port.
 
 | Port | Interface (Python) | Default adapter | Other adapters | Selected by |
 | --- | --- | --- | --- | --- |
@@ -80,9 +82,11 @@ lockstep — the invariant W5 sizes its pgvector columns against.
   changes the vector space; it requires a re-embed and (for a different dimension) a new
   column/table. The adapter alone does not protect against this — see
   [`data-model.md`](data-model.md).
-- **TS deploy portability.** The REST API uses Hono (Node/Vercel/Cloudflare/Bun) and the MCP
-  server uses the standard Streamable HTTP transport, so the front door is a deploy target, not
-  an architectural dependency.
+- **TS deploy portability.** The REST API is a Hono app factory and the MCP server uses the standard
+  Streamable HTTP transport, so the query semantics do not depend on Vercel. The current public
+  front door is still the proven Next.js/Vercel mount; Cloudflare Workers/Pages or another host
+  requires a separate proof for the adapter, runtime, routing, and trusted client-IP headers before
+  production traffic moves there.
 
 See [`../decisions/0001-foundation-stack.md`](../decisions/0001-foundation-stack.md) for the
 provider choices and their rationale, and [`deployment-topology.md`](deployment-topology.md)

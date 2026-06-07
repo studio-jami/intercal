@@ -1593,6 +1593,17 @@ Pass 5 dispatch note:
   found, pass 5 should make no changes and report no-change evidence; if it finds a real issue, it
   should fix narrowly, verify, commit, and push. Active stream: Workstream 9 only.
 
+Pass 5 closeout note: strict quiet-confirmation audit found one remaining older durable-doc wording
+overclaim outside the pass 4 file set. `docs/architecture/provider-boundaries.md` and decision
+`0001` now defer front-door compute portability to host-specific proof, matching decision `0003`:
+adapter-backed dependencies remain provider-swappable by port/config, REST/MCP semantics are
+portable by contract, and the current public front door remains the proven Vercel/Next.js mount
+until another provider proves mount, runtime, routing, and trusted-header behavior. Public docs
+source/exports already used the precise wording, and R2 wording still claims only Wrangler bucket
+metadata proof, not fresh source-document object IO through the S3 adapter. No code behavior,
+generated contracts, Cloudflare Workers/Pages compute, domain purchase, DNS change, or unrelated
+Jami Studio routing was changed.
+
 ## Final Verification And Closeout
 
 - `pnpm format:check`

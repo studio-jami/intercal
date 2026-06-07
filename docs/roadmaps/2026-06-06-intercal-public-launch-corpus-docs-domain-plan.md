@@ -1396,6 +1396,16 @@ Vercel; that belongs to external `jami.studio`/`www.jami.studio` site work and i
 subdomain blocker. Updated operations runbooks and changelog only; no app code, generated
 contracts, Cloudflare Workers/Pages compute, or unrelated studio-site routing was changed.
 
+Pass 2 dispatch note:
+
+- 2026-06-07T00:52:00-04:00 — Coordinator gate confirmed Workstream 8 pass 1 as B:
+  4 files changed with 146 insertions and 29 deletions, all docs/changelog, but contents are
+  production-meaningful provider proof plus operations runbook/status updates. Dispatched mandatory
+  Workstream 8 pass 2 to fresh-context thread `019ea06c-3eed-79f2-bcb3-4ba431700d5c`.
+  Active stream: Workstream 8 only. Workstreams 1 through 7 are closed; Workstream 9 remains out of
+  scope except dependency notes. Next action: wait for pass 2, inspect the commit stats/body, and
+  close Workstream 8 only if the result is C-class quiet tests/docs/cleanup.
+
 ## Workstream 9: Release Audit And Provider Posture
 
 Goal: Confirm the public launch stack is coherent, portable, and not blocked by avoidable host decisions.

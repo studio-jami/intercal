@@ -491,6 +491,15 @@ The first proof consumes the same adapters, provenance rules, and public query p
   dashboard public routes, public knowledge evidence/source-policy correctness, dashboard helpers,
   related tests, durable docs, active roadmap status, and changelog. Next coordinator action: poll
   the thread to terminal result, then gate the pass 2 commit using summary-level stat/body.
+- 2026-06-06T22:33:00-04:00 — Workstream 5 pass 2 returned complete. Commit:
+  `4ba5f8e feat(dashboard): harden public knowledge experience`, pushed to `origin/main`. Summary
+  gate: 16 files changed, 826 insertions, 27 deletions, so this is not closeout-eligible. The pass
+  added graph/timeline, comparison, source-record, and subscription management routes, SDK
+  subscription methods, source-policy citation hardening, server-action redirect fixes, docs, roadmap
+  status, and changelog. Worker verification passed SDK/dashboard tests, SDK/dashboard typecheck,
+  SDK/dashboard builds, `pnpm contracts:check`, targeted Biome, whitespace checks, Playwright smoke,
+  and changed-file secret scan. Next coordinator action: dispatch Workstream 5 pass 3 as a strict
+  quiet audit focused on closeout readiness and remaining narrow gaps.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 

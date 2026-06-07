@@ -6,8 +6,8 @@ import { buildMcpServer } from './server.js';
 /**
  * Handle one MCP Streamable HTTP request using the Web-standard transport.
  *
- * Returns a Web `Response`, so it drops straight into a Next.js App Router route handler, a
- * Hono handler, or any Web-standard runtime (Vercel functions, Cloudflare Workers, Deno, Bun).
+ * Returns a Web `Response`, so it drops straight into the current Next.js App Router route handler
+ * or another Web-standard host adapter after that host has proven the required DB/runtime behavior.
  *
  * OAuth 2.1 resource-server protection (Plan 07 W6) runs FIRST, before any JSON-RPC handling:
  *  - When an Authorization Server is configured (`MCP_OAUTH_ISSUER`), bearer access tokens are

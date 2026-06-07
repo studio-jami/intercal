@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Intercal REST API (Hono) — deploy-agnostic: runs on Node, Vercel, Cloudflare Workers, Bun.",
+  "description": "Intercal REST API (Hono) app factory for the current Node/Vercel launch posture.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

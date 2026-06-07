@@ -34,12 +34,13 @@ alternative for **other people** — it is not the maintainers' dev flow.
 
 ## Go-live
 
-- The app is deploy-target agnostic (Hono runs on Node/Vercel/Cloudflare/Bun; MCP uses
-  standard Streamable HTTP). The official Intercal public domain is `intercal.jami.studio`,
-  attached to the Vercel project with legacy Vercel/domain redirects preserved for compatibility.
-  New hosted environments still follow the same path: connect the GitHub repo to Vercel, set env
-  vars (Neon `DATABASE_URL`, R2, Upstash, LLM keys), set the Vercel Root Directory to
-  `packages/dashboard`, and attach the target domain.
+- The REST/MCP semantics are portable by contract: Hono owns the REST app factory and MCP uses
+  standard Streamable HTTP. The current public deployment is still a Vercel/Next.js front door until
+  another host proves its mount adapter, runtime, and trusted-header behavior. The official Intercal
+  public domain is `intercal.jami.studio`, attached to the Vercel project with legacy Vercel/domain
+  redirects preserved for compatibility. New Vercel hosted environments still follow the same path:
+  connect the GitHub repo to Vercel, set env vars (Neon `DATABASE_URL`, R2, Upstash, LLM keys), set
+  the Vercel Root Directory to `packages/dashboard`, and attach the target domain.
 - The Vercel-specific code found in the release audit is limited to the current Next.js mount
   (`hono/vercel`), the dashboard's `VERCEL_URL` same-deployment fallback, route-level Node runtime
   settings for `pg`, Vercel function duration for MCP, and REST rate-limit trust in Vercel-managed

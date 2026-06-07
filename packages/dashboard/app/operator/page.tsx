@@ -3,7 +3,9 @@ import { headers } from 'next/headers';
 import { EmptyState, Field, PageHeader, Panel, SubmitButton } from '../../components/ui';
 import { dashboardDb } from '../../lib/db';
 import { compactId, formatDateTime } from '../../lib/format';
+import { publicPageMetadata } from '../../lib/seo';
 
+export const metadata = publicPageMetadata('/operator');
 export const dynamic = 'force-dynamic';
 
 export default async function OperatorPage({

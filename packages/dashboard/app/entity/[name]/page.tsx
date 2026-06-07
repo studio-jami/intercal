@@ -3,10 +3,21 @@ import Link from 'next/link';
 import { EmptyState, EvidenceLink, PageHeader, Panel } from '../../../components/ui';
 import { apiClient } from '../../../lib/client';
 import { formatDate, formatPercent } from '../../../lib/format';
+import { dynamicPageMetadata } from '../../../lib/seo';
 
 type EntityResponse = Awaited<ReturnType<ReturnType<typeof apiClient>['getEntity']>>;
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({ params }: { params: Promise<{ name: string }> }) {
+  const { name } = await params;
+  const decoded = decodeURIComponent(name);
+  return dynamicPageMetadata({
+    title: `${decoded} entity evidence`,
+    description: `Cited facts, relationships, freshness, and evidence paths for ${decoded} in the Intercal temporal knowledge substrate.`,
+    pathname: `/entity/${encodeURIComponent(decoded)}`,
+  });
+}
 
 export default async function EntityPage({ params }: { params: Promise<{ name: string }> }) {
   const { name } = await params;

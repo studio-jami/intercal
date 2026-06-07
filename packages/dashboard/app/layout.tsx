@@ -1,13 +1,12 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { buildWebsiteJsonLd, publicPageMetadata } from '../lib/seo';
 import './globals.css';
 
-export const metadata = {
-  title: 'Intercal',
-  description: 'An open, provenance-backed temporal knowledge substrate for agents.',
-};
+export const metadata = publicPageMetadata('/');
 
 const nav = [
+  ['AI History', '/ai-history'],
   ['Topics', '/topic'],
   ['Graph', '/graph'],
   ['Search', '/search'],
@@ -23,9 +22,15 @@ const nav = [
 ] as const;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
+  const websiteJsonLd = buildWebsiteJsonLd();
+
   return (
     <html lang="en">
       <body>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
+        />
         <div className="min-h-screen">
           <header className="border-b border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
             <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">

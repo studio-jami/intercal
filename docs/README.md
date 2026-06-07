@@ -15,6 +15,7 @@ flow, decisions, and how to operate Intercal safely.
 - [`architecture/pipeline.md`](architecture/pipeline.md) — source → claim → entity → relationship → fact version.
 - [`architecture/mcp-api.md`](architecture/mcp-api.md) — the MCP tool + REST contract surface.
 - [`architecture/public-knowledge-experience.md`](architecture/public-knowledge-experience.md) — dashboard route/data ownership and public evidence rules.
+- [`architecture/public-marketing-ai-seo.md`](architecture/public-marketing-ai-seo.md) — Intercal public marketing, canonical metadata, sitemap/robots, share-image, and AI SEO boundaries.
 - [`architecture/provider-boundaries.md`](architecture/provider-boundaries.md) — the adapter ports and what sits behind each.
 - [`architecture/deployment-topology.md`](architecture/deployment-topology.md) — local / pilot (free-tier) / managed paths.
 

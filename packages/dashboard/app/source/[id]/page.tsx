@@ -1,8 +1,20 @@
 import Link from 'next/link';
 import { Field, PageHeader, Panel, SourcePolicyNote, SubmitButton } from '../../../components/ui';
 import { compactId } from '../../../lib/format';
+import { dynamicPageMetadata } from '../../../lib/seo';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const decoded = decodeURIComponent(id);
+  return dynamicPageMetadata({
+    title: `Source record ${compactId(decoded)}`,
+    description:
+      'Source-document identifier, public citation state, and source-policy explanation without raw body exposure.',
+    pathname: `/source/${encodeURIComponent(decoded)}`,
+  });
+}
 
 export default async function SourceRecordPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

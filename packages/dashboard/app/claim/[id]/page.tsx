@@ -11,8 +11,20 @@ import {
 import { safeCitationHref } from '../../../lib/citations';
 import { apiClient } from '../../../lib/client';
 import { describeError, formatDateTime } from '../../../lib/format';
+import { dynamicPageMetadata } from '../../../lib/seo';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const decoded = decodeURIComponent(id);
+  return dynamicPageMetadata({
+    title: `Claim evidence ${decoded}`,
+    description:
+      'Claim-level source documents, citation metadata, and source-policy state from Intercal.',
+    pathname: `/claim/${encodeURIComponent(decoded)}`,
+  });
+}
 
 export default async function ClaimPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

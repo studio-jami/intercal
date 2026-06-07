@@ -77,6 +77,7 @@
   ],
   "dashboardRoutes": [
     "/",
+    "/ai-history",
     "/entity",
     "/entity/[name]",
     "/claim/[id]",

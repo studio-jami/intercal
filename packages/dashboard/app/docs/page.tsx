@@ -2,7 +2,9 @@ import Link from 'next/link';
 import { Markdown } from '../../components/markdown';
 import { PageHeader, Panel } from '../../components/ui';
 import { getPublicDocs } from '../../lib/public-docs';
+import { publicPageMetadata } from '../../lib/seo';
 
+export const metadata = publicPageMetadata('/docs');
 export const dynamic = 'force-static';
 
 export default function DocsIndexPage() {

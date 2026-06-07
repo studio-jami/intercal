@@ -8,7 +8,9 @@ import {
   SubmitButton,
 } from '../../components/ui';
 import { apiClient } from '../../lib/client';
+import { publicPageMetadata } from '../../lib/seo';
 
+export const metadata = publicPageMetadata('/feedback');
 export const dynamic = 'force-dynamic';
 
 async function submitFeedbackAction(formData: FormData) {

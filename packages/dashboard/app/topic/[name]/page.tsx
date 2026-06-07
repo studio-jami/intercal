@@ -2,8 +2,19 @@ import Link from 'next/link';
 import { EmptyState, ErrorState, EvidenceLink, PageHeader, Panel } from '../../../components/ui';
 import { apiClient } from '../../../lib/client';
 import { describeError, formatDate, formatPercent } from '../../../lib/format';
+import { dynamicPageMetadata } from '../../../lib/seo';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({ params }: { params: Promise<{ name: string }> }) {
+  const { name } = await params;
+  const topic = decodeURIComponent(name);
+  return dynamicPageMetadata({
+    title: `${topic} topic timeline`,
+    description: `Crawlable topic page for ${topic} with freshness, evidence search, and cited cutoff deltas from Intercal.`,
+    pathname: `/topic/${encodeURIComponent(topic)}`,
+  });
+}
 
 export default async function TopicPage({ params }: { params: Promise<{ name: string }> }) {
   const { name } = await params;

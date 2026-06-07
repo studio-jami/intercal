@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { Markdown } from '../../../components/markdown';
 import { PageHeader, Panel } from '../../../components/ui';
 import { getPublicDoc, getPublicDocs } from '../../../lib/public-docs';
+import { dynamicPageMetadata } from '../../../lib/seo';
 
 export const dynamic = 'force-static';
 export const dynamicParams = false;
@@ -15,10 +16,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const page = getPublicDoc(slug);
   if (!page) return {};
-  return {
-    title: `${page.title} - Intercal Docs`,
+  return dynamicPageMetadata({
+    title: `${page.title} docs`,
     description: page.description,
-  };
+    pathname: page.href,
+  });
 }
 
 export default async function DocsPage({ params }: { params: Promise<{ slug: string }> }) {

@@ -1208,7 +1208,7 @@ Goal: Launch Intercal product marketing and AI SEO surfaces without turning prod
 
 Depends on:
 
-- [ ] Workstream 5 Intercal public surface shape.
+- [x] Workstream 5 Intercal public surface shape.
 - [x] Workstream 6 docs/export shape.
 
 Enables:
@@ -1226,15 +1226,15 @@ Primary areas:
 
 Implementation tasks:
 
-- [ ] Build Intercal marketing copy around temporal knowledge substrate, cutoff deltas, claim verification as of a date, provenance, MCP, REST, and broad AI-history corpus.
-- [ ] Add non-blocking link/copy slots for a future Jami Studio site without requiring `www.jami.studio` to be live.
-- [ ] Add sitemap, robots, canonical metadata, OpenGraph/Twitter metadata, structured data where useful, and stable share images.
-- [ ] Add AI SEO surfaces: `llms.txt`, copyable page text, canonical docs examples, public entity/topic pages, and crawlable public explanations.
-- [ ] Add route and metadata tests for public pages.
+- [x] Build Intercal marketing copy around temporal knowledge substrate, cutoff deltas, claim verification as of a date, provenance, MCP, REST, and broad AI-history corpus.
+- [x] Add non-blocking link/copy slots for a future Jami Studio site without requiring `www.jami.studio` to be live.
+- [x] Add sitemap, robots, canonical metadata, OpenGraph/Twitter metadata, structured data where useful, and stable share images.
+- [x] Add AI SEO surfaces: `llms.txt`, copyable page text, canonical docs examples, public entity/topic pages, and crawlable public explanations.
+- [x] Add route and metadata tests for public pages.
 
 Exit criteria:
 
-- [ ] `intercal.jami.studio` has a crawlable, canonical public Intercal role, and any future Jami Studio references are non-blocking.
+- [~] `intercal.jami.studio` has a crawlable, canonical public Intercal role, and any future Jami Studio references are non-blocking. Pass 1 implemented the source-owned surfaces; Workstream 7 remains open for the orchestrator-required fresh-context pass 2 audit.
 
 Suggested verification:
 
@@ -1253,6 +1253,20 @@ Pass 1 dispatch note:
   production account changes, or Jami Studio site implementation. Next coordinator action: poll to
   terminal result, record it in `docs/engineering/agents/orchestrator-logs/`, then dispatch the
   mandatory Workstream 7 pass 2 after pass 1 lands.
+
+Pass 1 closeout note: the dashboard now owns Intercal public marketing/AI SEO surfaces without
+turning the product app into a generic landing page. The home page and new `/ai-history` route
+describe the real product as a temporal knowledge substrate for cutoff deltas, claim verification
+as of a date, provenance, MCP, REST, and bounded AI-history corpus coverage. `packages/dashboard`
+now serves `/sitemap.xml`, `/robots.txt`, canonical metadata, OpenGraph/Twitter metadata,
+schema.org JSON-LD, and a source-owned OpenGraph share image route. Dynamic entity/topic/claim/docs
+metadata has route-specific canonical URLs, while operator/subscription/feedback workflows are
+marked noindex. The Jami Studio copy is a non-blocking hook only and does not require
+`www.jami.studio` to be live. `docs/architecture/public-marketing-ai-seo.md` records the durable
+claim boundaries, and focused dashboard SEO tests cover route metadata, sitemap entries, robots
+policy, dynamic canonical metadata, and structured data. No Workstream 8 domain routing, Vercel
+project wiring, Cloudflare DNS, redirects, TLS, production account changes, generated contract
+edits, docs-export duplication, or Jami Studio site implementation was added.
 
 ## Workstream 8: Domain Routing, Vercel Projects, And Cloudflare DNS
 

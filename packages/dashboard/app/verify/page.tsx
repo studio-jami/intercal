@@ -9,7 +9,9 @@ import {
 } from '../../components/ui';
 import { apiClient } from '../../lib/client';
 import { describeError, formatPercent } from '../../lib/format';
+import { publicPageMetadata } from '../../lib/seo';
 
+export const metadata = publicPageMetadata('/verify');
 export const dynamic = 'force-dynamic';
 
 export default async function VerifyPage({

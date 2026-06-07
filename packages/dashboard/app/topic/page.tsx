@@ -1,5 +1,8 @@
 import { redirect } from 'next/navigation';
 import { Field, PageHeader, Panel, SubmitButton } from '../../components/ui';
+import { publicPageMetadata } from '../../lib/seo';
+
+export const metadata = publicPageMetadata('/topic');
 
 export default async function TopicSearch({
   searchParams,

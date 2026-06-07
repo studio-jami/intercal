@@ -9,7 +9,9 @@ import {
 } from '../../components/ui';
 import { apiClient } from '../../lib/client';
 import { describeError, formatDate, formatPercent } from '../../lib/format';
+import { publicPageMetadata } from '../../lib/seo';
 
+export const metadata = publicPageMetadata('/compare');
 export const dynamic = 'force-dynamic';
 
 type Delta = Awaited<ReturnType<ReturnType<typeof apiClient>['getDelta']>>;

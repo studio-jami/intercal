@@ -9,7 +9,9 @@ import {
 } from '../../components/ui';
 import { apiClient } from '../../lib/client';
 import { compactId } from '../../lib/format';
+import { publicPageMetadata } from '../../lib/seo';
 
+export const metadata = publicPageMetadata('/subscriptions');
 export const dynamic = 'force-dynamic';
 
 type TargetKind = 'topic' | 'entity' | 'relationship' | 'claim_pattern';

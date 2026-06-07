@@ -557,6 +557,11 @@ The first proof consumes the same adapters, provenance rules, and public query p
   whitespace checks, format check, lint, dashboard typecheck/test/build, contracts check, and
   changed-file secret scan. Next coordinator action: dispatch mandatory Workstream 6 pass 2 with
   fresh context.
+- 2026-06-07T00:08:00-04:00 — Dispatched mandatory Workstream 6 pass 2 to fresh-context thread
+  `019ea01e-2a09-7303-b680-f341c190bd00`. Active streams: Workstream 6 only. Ownership boundary:
+  audit/harden source-owned docs IA, Mintlify config, `/docs` routes, LLM exports, generated docs
+  snapshot, docs drift checks, contract-aligned examples, `docs/README.md`, active roadmap, and
+  changelog. Next coordinator action: poll to terminal result and gate the pass 2 commit.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 
@@ -960,6 +965,23 @@ boundary after pass 11 verification.
   coordinator action: poll for the pass 1 result, record it in
   `docs/engineering/agents/orchestrator-logs/`, then dispatch mandatory Workstream 6 pass 2 after
   the pass 1 commit/result lands.
+- 2026-06-06T23:25:00-04:00 — Workstream 6 pass 1 returned complete. Commit:
+  `ee16e3dbd27dc5f7b28008826f05e398436eae0a` (`docs: add public docs exports`),
+  pushed to `origin/main`. Changed files: source-owned public docs manifest/pages, Mintlify
+  `docs.json`, `llms.txt`, `llms-full.txt`, dashboard `/docs` and AI-export routes, generated docs
+  snapshot, docs drift check script, `package.json` `docs:check`, `docs/README.md`, active
+  roadmap, and changelog. Verification reported: `pnpm docs:check`, diff checks, format/lint,
+  dashboard typecheck/test/build, `pnpm contracts:check`, and changed-file secret scan passed. No
+  Workstream 6 blocker reported. Next coordinator action: dispatch mandatory Workstream 6 pass 2
+  with fresh context.
+- 2026-06-06T23:27:00-04:00 — Dispatched Workstream 6 pass 2 to agent
+  `019ea01e-1c2e-7060-95fc-da64ba4b3438` (`Bernoulli`). Ownership boundary:
+  fresh-context audit and necessary fixes to the pass 1 public docs IA, Mintlify config,
+  same-origin docs/export routes, generated docs snapshot, docs drift checks, generated
+  OpenAPI/SDK/MCP example references, `docs/README.md`, active-roadmap status, and changelog.
+  Workstreams 1 through 5 are closed; Workstreams 7 through 9 remain out of scope except
+  dependency notes. Next coordinator action: poll for the pass 2 result, record it in
+  `docs/engineering/agents/orchestrator-logs/`, then apply the second-pass gate.
 
 ## Workstream 5: Public Intercal Knowledge Experience
 

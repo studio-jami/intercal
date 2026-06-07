@@ -473,6 +473,11 @@ The first proof consumes the same adapters, provenance rules, and public query p
   `verifyClaim` as deferred 501 surfaces; it was aligned to the live shared query-layer behavior.
   Next coordinator action: gate this small pass 11 cleanup commit and close Workstream 4 as quiet if
   accepted.
+- 2026-06-06T21:42:31-04:00 — Dispatched Workstream 5 pass 1 to agent
+  `019e9fbe-4463-7f92-a0f3-9d4985054cfc` (`Sagan`). Ownership boundary: dashboard public product
+  routes, SDK/dashboard integration, relevant architecture docs, related tests, Workstream 5 roadmap
+  status, and changelog. Next coordinator action: poll in short intervals, record result, then
+  dispatch mandatory Workstream 5 pass 2 after pass 1 lands.
 
 ## Workstream 1: Corpus Scope And Source Taxonomy
 

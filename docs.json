@@ -41,9 +41,5 @@
         "openapi": "packages/shared/generated/openapi/openapi.json"
       }
     ]
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
   }
 }

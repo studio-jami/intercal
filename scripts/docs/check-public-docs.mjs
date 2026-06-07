@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -47,6 +47,7 @@ function buildLlmsIndex(manifest) {
     '',
     '## Docs',
     '',
+    `- [Docs home](${manifest.baseUrl}/docs): ${manifest.title}`,
     ...manifest.pages.map(
       (page) => `- [${page.title}](${manifest.baseUrl}/docs/${page.slug}): ${page.description}`,
     ),
@@ -106,12 +107,129 @@ function markdownLinks(text) {
   return [...text.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)].map((match) => match[1]);
 }
 
+function dashboardRouteFromSegments(segments) {
+  const routeSegments = segments.filter(
+    (segment) => !(segment.startsWith('(') && segment.endsWith(')')),
+  );
+  return routeSegments.length ? `/${routeSegments.join('/')}` : '/';
+}
+
+function scanDashboardPageRoutes(dir = repoPath('packages/dashboard/app'), segments = []) {
+  const routes = [];
+  for (const entry of readdirSync(dir)) {
+    const fullPath = path.join(dir, entry);
+    if (statSync(fullPath).isDirectory()) {
+      routes.push(...scanDashboardPageRoutes(fullPath, [...segments, entry]));
+      continue;
+    }
+    if (entry === 'page.tsx') routes.push(dashboardRouteFromSegments(segments));
+  }
+  return routes.sort();
+}
+
+function scanPublicDocSources(dir = repoPath('docs/public/pages')) {
+  const sources = [];
+  for (const entry of readdirSync(dir)) {
+    const fullPath = path.join(dir, entry);
+    if (statSync(fullPath).isDirectory()) {
+      sources.push(...scanPublicDocSources(fullPath));
+      continue;
+    }
+    if (entry.endsWith('.md')) {
+      sources.push(path.relative(repoRoot, fullPath).replaceAll(path.sep, '/'));
+    }
+  }
+  return sources.sort();
+}
+
+function assertSameSet(label, actual, expected) {
+  const actualSet = new Set(actual);
+  const expectedSet = new Set(expected);
+  for (const item of expectedSet) {
+    if (!actualSet.has(item)) fail(`${label} missing: ${item}`);
+  }
+  for (const item of actualSet) {
+    if (!expectedSet.has(item)) fail(`${label} unexpected: ${item}`);
+  }
+}
+
+function docsJsonAssetPaths(node, assets = []) {
+  if (typeof node === 'string') {
+    if (node.startsWith('/') && /\.(svg|png|jpe?g|webp|ico)$/i.test(node)) {
+      assets.push(node);
+    }
+    return assets;
+  }
+  if (Array.isArray(node)) {
+    for (const item of node) docsJsonAssetPaths(item, assets);
+    return assets;
+  }
+  if (!node || typeof node !== 'object') return assets;
+  for (const value of Object.values(node)) docsJsonAssetPaths(value, assets);
+  return assets;
+}
+
+function openApiParameterNames(openapiDocument, operation) {
+  return new Set(
+    (operation.parameters ?? []).map((parameter) => {
+      if (parameter.$ref) {
+        const key = parameter.$ref.replace('#/components/parameters/', '');
+        return openapiDocument.components?.parameters?.[key]?.name;
+      }
+      return parameter.name;
+    }),
+  );
+}
+
+function assertRestExamplesMatchOpenApi(openapiDocument, examplesMarkdown) {
+  const requestLines = [
+    ...examplesMarkdown.matchAll(/^(GET|POST|PUT|PATCH|DELETE)\s+\/api([^\s]+)$/gm),
+  ];
+  if (requestLines.length === 0) fail('examples page must include at least one REST request line');
+
+  for (const match of requestLines) {
+    const method = match[1]?.toLowerCase();
+    const route = match[2] ?? '';
+    const [apiPath, query = ''] = route.split('?');
+    const operation = openapiDocument.paths?.[apiPath]?.[method];
+    if (!operation) {
+      fail(`examples page REST request is not in OpenAPI: ${match[1]} /api${route}`);
+      continue;
+    }
+    const parameterNames = openApiParameterNames(openapiDocument, operation);
+    for (const key of new URLSearchParams(query).keys()) {
+      if (!parameterNames.has(key)) {
+        fail(`examples page REST request uses unknown query parameter "${key}" for ${apiPath}`);
+      }
+    }
+  }
+}
+
+function sharedV1ToolNames() {
+  const sharedSource = readText('packages/shared/src/index.ts');
+  return [...sharedSource.matchAll(/name:\s+'([^']+)'/g)].map((match) => match[1]).sort();
+}
+
 const manifest = readJson('docs/public/manifest.json');
 const docsJson = readJson('docs.json');
 const openapi = readJson(manifest.api.openapiSource);
 const expectedLlmsIndex = buildLlmsIndex(manifest);
 const expectedLlmsFull = buildLlmsFull(manifest);
 const expectedDashboardModule = buildDashboardGeneratedModule(manifest);
+const requiredDocSlugs = [
+  'introduction',
+  'concepts',
+  'quickstart',
+  'mcp',
+  'rest',
+  'sdk',
+  'authentication',
+  'examples',
+  'source-policy',
+  'provenance',
+  'corpus-coverage',
+  'operations-transparency',
+];
 
 if (writeMode) {
   writeText(manifest.exports.index, expectedLlmsIndex);
@@ -123,6 +241,9 @@ const slugs = new Set();
 for (const page of manifest.pages) {
   if (slugs.has(page.slug)) fail(`duplicate docs slug: ${page.slug}`);
   slugs.add(page.slug);
+  if (path.basename(page.source, '.md') !== page.slug) {
+    fail(`${page.source} basename must match docs slug "${page.slug}"`);
+  }
   assertExists(page.source, `docs page ${page.slug}`);
   const markdown = readText(page.source);
   if (!markdown.startsWith(`# ${page.title}\n`)) {
@@ -141,6 +262,18 @@ for (const page of manifest.pages) {
     assertExists(path.posix.normalize(path.posix.join(path.posix.dirname(page.source), href)));
   }
 }
+
+assertSameSet(
+  'docs/public/manifest.json page sources',
+  manifest.pages.map((page) => page.source).sort(),
+  scanPublicDocSources(),
+);
+assertSameSet('docs/public/manifest.json slugs', [...slugs].sort(), requiredDocSlugs);
+assertSameSet(
+  'docs/public/manifest.json dashboardRoutes',
+  manifest.dashboardRoutes,
+  scanDashboardPageRoutes(),
+);
 
 for (const route of manifest.dashboardRoutes) {
   assertExists(routeToFile(route), `dashboard route ${route}`);
@@ -171,8 +304,23 @@ for (const page of docsPages) {
 if (!readText('docs.json').includes(manifest.api.openapiSource)) {
   fail(`docs.json must reference generated OpenAPI source: ${manifest.api.openapiSource}`);
 }
+if (!docsJson.navigation?.groups?.some((group) => group?.openapi === manifest.api.openapiSource)) {
+  fail(`docs.json navigation must expose generated OpenAPI source: ${manifest.api.openapiSource}`);
+}
+for (const assetPath of docsJsonAssetPaths(docsJson)) {
+  const relativeAssetPath = assetPath.replace(/^\/+/, '');
+  if (!existsSync(repoPath(relativeAssetPath)) || !statSync(repoPath(relativeAssetPath)).isFile()) {
+    fail(`docs.json references missing asset: ${assetPath}`);
+  }
+}
+
+const rest = readText('docs/public/pages/rest.md');
+for (const apiPath of Object.keys(openapi.paths ?? {}).sort()) {
+  if (!rest.includes(apiPath)) fail(`REST docs missing OpenAPI path: ${apiPath}`);
+}
 
 const examples = readText('docs/public/pages/examples.md');
+assertRestExamplesMatchOpenApi(openapi, examples);
 for (const required of [
   'GET /api/v1/delta',
   'GET /api/v1/claims/verify',
@@ -182,6 +330,11 @@ for (const required of [
   '"name": "verify_claim"',
 ]) {
   if (!examples.includes(required)) fail(`examples page missing checked example: ${required}`);
+}
+
+const mcp = readText('docs/public/pages/mcp.md');
+for (const toolName of sharedV1ToolNames()) {
+  if (!mcp.includes(toolName)) fail(`MCP docs missing tool: ${toolName}`);
 }
 
 if (readText(manifest.exports.index) !== expectedLlmsIndex) {

@@ -55,6 +55,7 @@ export function buildLlmsIndex(): string {
     '',
     '## Docs',
     '',
+    `- [Docs home](${manifest.baseUrl}/docs): ${manifest.title}`,
     ...manifest.pages.map(
       (page) => `- [${page.title}](${manifest.baseUrl}/docs/${page.slug}): ${page.description}`,
     ),

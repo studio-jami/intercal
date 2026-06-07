@@ -4,6 +4,7 @@ Intercal is an open, provenance-backed temporal knowledge substrate for agents a
 
 ## Docs
 
+- [Docs home](https://intercal.jami.studio/docs): Intercal Docs
 - [Introduction](https://intercal.jami.studio/docs/introduction): What Intercal is and which public surfaces exist today.
 - [Concepts](https://intercal.jami.studio/docs/concepts): Sources, claims, entities, relationships, fact versions, and bitemporal reads.
 - [Quickstart](https://intercal.jami.studio/docs/quickstart): Use the public UI, REST, SDK, and MCP surfaces from the same domain.

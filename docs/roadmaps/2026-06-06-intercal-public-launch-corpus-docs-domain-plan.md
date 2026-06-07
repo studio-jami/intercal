@@ -1137,6 +1137,18 @@ instead of copying schemas. `pnpm docs:check` verifies docs route inventory, gen
 availability, checked REST/SDK/MCP examples, Mintlify navigation coverage, links, and AI export
 drift. Sitemap, robots, canonical metadata, and broader marketing/SEO polish remain Workstream 7.
 
+Pass 2 closeout note: fresh-context audit kept the pass 1 docs shape and hardened drift detection
+without adding marketing, domain routing, or release-audit scope. `pnpm docs:check` now compares
+`docs/public/manifest.json` against the actual dashboard page-route tree and exact source Markdown
+inventory, verifies the Mintlify OpenAPI navigation group, checks REST docs against every generated
+OpenAPI path, checks REST example request paths/query parameters against generated OpenAPI, checks
+MCP docs against the shared V1 tool inventory, and fails on missing Mintlify asset paths. The
+broken placeholder logo paths were removed from `docs.json` because no repo-owned logo assets exist
+yet. The checked `llms.txt` export now includes the `/docs` index route in addition to every
+source-owned docs page. Public examples and prose remain contract-aligned and continue to describe
+bounded proof coverage, unpublished SDK posture, source-policy limits, and unavailable operational
+telemetry honestly.
+
 Suggested verification:
 
 - `pnpm contracts:check`

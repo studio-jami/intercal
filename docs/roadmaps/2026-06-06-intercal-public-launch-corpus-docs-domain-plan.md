@@ -1241,6 +1241,19 @@ Suggested verification:
 - `pnpm --filter @intercal/dashboard build`
 - link, sitemap, metadata, and browser checks
 
+Pass 1 dispatch note:
+
+- 2026-06-07T00:55:00-04:00 — Dispatched Workstream 7 pass 1 to fresh-context thread
+  `019ea033-102b-72b3-854b-ad59f849fcac`. Active streams: Workstream 7 only. Workstreams 1
+  through 6 are closed; Workstreams 8 and 9 remain out of scope except dependency notes. Ownership
+  boundary: Intercal marketing/public copy, AI SEO surfaces, sitemap/robots/canonical metadata,
+  OpenGraph/Twitter metadata, structured data where useful, stable share-image support if
+  repo-owned, public entity/topic explanations, route/metadata tests, docs/roadmap/changelog
+  accuracy. Do not do domain verification, Vercel project wiring, Cloudflare DNS, redirects, TLS,
+  production account changes, or Jami Studio site implementation. Next coordinator action: poll to
+  terminal result, record it in `docs/engineering/agents/orchestrator-logs/`, then dispatch the
+  mandatory Workstream 7 pass 2 after pass 1 lands.
+
 ## Workstream 8: Domain Routing, Vercel Projects, And Cloudflare DNS
 
 Goal: Verify and document the Intercal domain without moving compute prematurely or depending on unrelated studio-site work.

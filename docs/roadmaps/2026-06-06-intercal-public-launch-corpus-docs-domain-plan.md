@@ -1604,6 +1604,22 @@ metadata proof, not fresh source-document object IO through the S3 adapter. No c
 generated contracts, Cloudflare Workers/Pages compute, domain purchase, DNS change, or unrelated
 Jami Studio routing was changed.
 
+Pass 5 orchestrator gate note: the orchestrator classifies pass 5 as B because it corrected a real
+provider-posture overclaim in durable architecture/decision docs. Workstream 9 is not closed yet.
+
+Pass 6 dispatch note:
+
+- 2026-06-07T02:14:00-04:00 — Dispatched Workstream 9 pass 6 strict quiet-confirmation audit to
+  fresh-context thread `019ea0aa-2568-7ac1-aa80-2ccf3eab270c`. Scope: confirm pass 5 introduced no
+  contradictions or overcorrections in provider boundaries, foundation stack decision wording,
+  roadmap, changelog fragment, R2 proof wording, public docs exports, and the final provider posture:
+  REST/MCP semantics are portable by contract, the current public front door remains proven on
+  Vercel/Next.js until another provider proves mount/runtime/trusted-header behavior, Cloudflare
+  compute migration remains future proof, and adapter-swappable dependencies do not equal proven
+  current host portability. If no issue is found, pass 6 should make no changes and report no-change
+  evidence; if it finds a real issue, it should fix narrowly, verify, commit, and push. Active stream:
+  Workstream 9 only.
+
 ## Final Verification And Closeout
 
 - `pnpm format:check`

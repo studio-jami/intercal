@@ -34,7 +34,7 @@ git check-ignore .env
 The setup operator needs:
 
 - Domain/DNS registrar or DNS provider access for the production domain.
-- GitHub access to `JamiStudio/intercal` with Actions, repository secrets, variables, workflow
+- GitHub access to `studio-jami/intercal` with Actions, repository secrets, variables, workflow
   dispatch, and branch-protection visibility.
 - Vercel access to the Intercal project and team, including domains and environment variables.
 - Neon project access for branch creation, connection strings, PITR/restore, and role rotation.
@@ -317,7 +317,7 @@ Operator-gated: real deploys, secret updates, and job executions require authent
 Prerequisites:
 
 - `gh` is authenticated to GitHub.
-- Repo is `JamiStudio/intercal`.
+- Repo is `studio-jami/intercal`.
 - Actions are enabled.
 - Runtime secrets and variables are present by name only; values are never printed.
 - Workflows `.github/workflows/pipeline.yml` and `.github/workflows/deploy-cloud-run.yml` are
@@ -327,10 +327,10 @@ Proof commands:
 
 ```powershell
 gh auth status
-gh repo view JamiStudio/intercal --json nameWithOwner,visibility,defaultBranchRef
-gh workflow list --repo JamiStudio/intercal
-gh secret list --repo JamiStudio/intercal
-gh variable list --repo JamiStudio/intercal
+gh repo view studio-jami/intercal --json nameWithOwner,visibility,defaultBranchRef
+gh workflow list --repo studio-jami/intercal
+gh secret list --repo studio-jami/intercal
+gh variable list --repo studio-jami/intercal
 pnpm ops:secrets-fanout -- --target github --dry-run
 ```
 
@@ -338,7 +338,7 @@ Safe workflow-dispatch proof requires a throwaway Neon branch DSN and should not
 Actions UI or set it in the current shell, then run:
 
 ```powershell
-gh workflow run pipeline.yml --repo JamiStudio/intercal -f mode=run-all -f max_documents=5 -f database_url_override="$env:RESTORE_DATABASE_URL"
+gh workflow run pipeline.yml --repo studio-jami/intercal -f mode=run-all -f max_documents=5 -f database_url_override="$env:RESTORE_DATABASE_URL"
 ```
 
 Operator-gated: live workflow dispatch writes to the target database named by the selected secret or

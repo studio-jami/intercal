@@ -52,7 +52,7 @@ _log = logging.getLogger(__name__)
 
 _DEFAULT_GITHUB_API = "https://api.github.com"
 _USER_AGENT = (
-    "intercal/0.1 (https://github.com/JamiStudio/intercal; jamie@yrka.io) python-httpx/0.2x"
+    "intercal/0.1 (https://github.com/studio-jami/intercal; jamie@yrka.io) python-httpx/0.2x"
 )
 
 

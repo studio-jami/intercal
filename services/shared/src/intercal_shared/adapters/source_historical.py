@@ -24,7 +24,7 @@ from intercal_shared.ssrf import SsrfError, create_guarded_client, resolve_and_v
 _log = logging.getLogger(__name__)
 
 _USER_AGENT = (
-    "intercal/0.1 (https://github.com/JamiStudio/intercal; jamie@yrka.io) python-httpx/0.2x"
+    "intercal/0.1 (https://github.com/studio-jami/intercal; jamie@yrka.io) python-httpx/0.2x"
 )
 _DEFAULT_ARXIV_API = "https://export.arxiv.org/api/query"
 _DEFAULT_WIKIDATA_SPARQL = "https://query.wikidata.org/bigdata/namespace/wdq/sparql"

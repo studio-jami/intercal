@@ -48,7 +48,7 @@ _log = logging.getLogger(__name__)
 _DEFAULT_WIKIDATA_API = "https://www.wikidata.org/w/api.php"
 _DEFAULT_WIKIPEDIA_SUMMARY = "https://en.wikipedia.org/api/rest_v1/page/summary"
 _USER_AGENT = (
-    "intercal/0.1 (https://github.com/JamiStudio/intercal; jamie@yrka.io) python-httpx/0.2x"
+    "intercal/0.1 (https://github.com/studio-jami/intercal; jamie@yrka.io) python-httpx/0.2x"
 )
 
 

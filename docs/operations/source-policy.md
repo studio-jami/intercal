@@ -27,6 +27,52 @@ Policy is **snapshotted onto each `source_documents` row at ingest time**
 evidence unit. A later edit to the parent source row cannot retroactively change what was already
 stored or how an already-stored document may be served — the snapshot is the authority for that row.
 
+## Access tiers (license-sorted source canon)
+
+Sources are sorted into **access tiers by what the license lets the governed corpus *do* with the
+fact** — redistribute it, summarize it, or cite it only. The tier sets the *default* policy booleans
+(`redistribution_allowed`, `summary_allowed`, `citation_only`) and is recorded on the source row as
+`metadata.source_class`'s companion field `metadata.access_tier` (`"S"`/`"A"`/`"B"`/`"C"`). A row may
+always **tighten** (e.g. to `citation_only=true`), and may **loosen** only when `license_spdx` /
+`license_notes` records the concrete reason — the same rule the corpus-class defaults already carry.
+The tier never changes the citation requirement: every fact remains a cited claim (claim →
+`claim_evidence` → `source_document`). Tier governs **redistribution rights only**.
+
+Governing principle — **CC0-first**: prefer a CC0 (Tier S) source for anything the substrate wants to
+**redistribute as fact**; cap share-alike (Tier B) sources at `summary_allowed` and never redistribute
+their full text. Use a thinner-licensed source only where it adds unique value a CC0 source cannot.
+
+| Tier | License posture | Default policy booleans | `metadata.access_tier` | Representative sources |
+| --- | --- | --- | --- | --- |
+| **S — CC0 / public domain** (fact-redistributable spine) | CC0 / PD | `redistribution_allowed=true`, `summary_allowed=true`, `citation_only=false` | `"S"` | Wikidata, **OpenAlex**, Data Commons (staged) |
+| **A — permissive / open-API** (attribution-friendly chronicle) | per-row permissive; metadata+abstracts reusable | `redistribution_allowed` per-row (often true for metadata/abstracts), `summary_allowed=true`, attribution preserved | `"A"` | arXiv, GitHub releases, PyPI / npm / Hugging Face registries |
+| **B — CC BY-SA** (share-alike → summary/cite posture) | CC BY-SA | `redistribution_allowed=false`, `summary_allowed=true`, `citation_only` where storing full text would trigger share-alike | `"B"` | Wikipedia revisions, Wikimedia Enterprise Structured Contents, DBpedia, ConceptNet |
+| **C — per-source / mixed** | decided per terms; conservative until verified | set per row; conservative default (`redistribution_allowed=false`, `summary_allowed=true`) | `"C"` | Lab announcement RSS, MCP/W3C/IETF spec repos, EUR-Lex / Federal Register regulation feeds |
+| **X — EXCLUDED** (never an evidence source) | n/a | not seeded as a `source_document` origin | n/a | Grokipedia, Google Knowledge Graph API, GDELT, raw web crawl / Common Crawl |
+
+**Tier X — excluded as evidence (rationale, so "comprehensiveness" cannot smuggle them back in):**
+
+- **Grokipedia** — LLM prose **without citation infrastructure**, so it violates the provenance
+  invariant (a fact must carry its evidence); closed backend/weights/regeneration with no bulk dump;
+  a CC BY-SA Wikipedia fork, hence **strictly dominated** by going to Wikipedia/Wikidata direct. At
+  most a future out-of-band corroboration *signal*, never a `source_document`.
+- **Google Knowledge Graph Search API / Enterprise KG** — proprietary, non-redistributable, no bulk
+  access; unusable as evidence.
+- **GDELT / general news firehose** — out of scope (news/gossip is a non-goal). Revisit only if a
+  world-events cluster is greenlit.
+- **Raw web crawl / Common Crawl** — no provenance discipline; against the curated-source thesis.
+
+### Structure now, data gated-later
+
+The full canon — including staged/disabled rows for out-of-current-scope sources (Tier S Data
+Commons, Tier C regulation feeds, broader scopes) — is **encoded now** in the taxonomy and seeded
+source rows, because in Intercal **scope expansion is a config/seed change, not a migration**
+(`source_class`/`access_tier` are metadata; new banks are adapters behind the `SourcePort`). Seeding
+the wide map costs nothing structurally. **Ingest stays narrow:** only the in-scope AI-history corpus
+is harvested now; broader scopes are switched on in **gated waves**, each passing its own coverage
+gates and policy review before its rows are activated. Disabled/staged rows are seeded with
+`is_active=false` (or `is_paused=true`) so the map is complete without ingesting out-of-scope data.
+
 ## Corpus source-class defaults
 
 The broad AI-history corpus uses source classes defined in

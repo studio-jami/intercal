@@ -26,6 +26,19 @@ once historical sources are added. `sources.source_type` remains the broad
 storage-level type (`api`, `registry`, `rss`, `dump`, etc.); `source_class`
 describes the corpus role and policy default.
 
+The **access tier** (`sources.metadata.access_tier`, one of `S`/`A`/`B`/`C`)
+is the orthogonal, license-driven axis that sets the *redistribution* defaults
+(`redistribution_allowed`, `summary_allowed`, `citation_only`). Source class
+describes the corpus *role*; access tier describes what the *license* lets the
+corpus do with the fact. The canonical tier definitions, the CC0-first
+principle, the Tier X exclusion list (Grokipedia, Google KG API, GDELT, raw web
+crawl), and the structure-now/data-gated-later policy live in
+[`../operations/source-policy.md`](../operations/source-policy.md) and govern
+these defaults. Tier S (CC0 — e.g. Wikidata, OpenAlex) is the
+fact-redistributable spine for `research_paper`, `ml_research`, and
+`benchmark`/`evaluation_benchmarks` work; Tier B (CC BY-SA — e.g. Wikipedia
+revisions feeding `mediawiki_revision`) stays summary/cite-only.
+
 | Source class | Owner | Adapter strategy | Default source policy | Public display rule |
 | --- | --- | --- | --- | --- |
 | `model_release` | Pipeline/source registry | Registry, RSS, GitHub release, or lab API adapter for dated model/product releases. | Verify per origin before activation; default `redistribution_allowed=false`, `summary_allowed=true`, `citation_only=false`. | Show title, source, date, cited claims, and summaries; never show full body unless redistribution is explicitly verified. |

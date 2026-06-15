@@ -69,6 +69,7 @@ def test_registry_register_all_defaults() -> None:
     assert "rss_feed_v1" in names
     assert "wikidata_sparql_batch_v1" in names
     assert "mediawiki_revisions_v1" in names
+    assert "openalex_v1" in names
 
 
 # ── SourcePort contract for built-in adapters ────────────────────────────────
@@ -86,6 +87,13 @@ def test_github_adapter_has_correct_name() -> None:
 
     adapter = GitHubReleasesAdapter()
     assert adapter.adapter_name == "github_releases_v1"
+
+
+def test_openalex_adapter_has_correct_name() -> None:
+    from intercal_shared.adapters.source_openalex import OpenAlexWorksAdapter
+
+    adapter = OpenAlexWorksAdapter()
+    assert adapter.adapter_name == "openalex_v1"
 
 
 # ── _parse_timestamp ─────────────────────────────────────────────────────────
@@ -529,6 +537,305 @@ async def test_github_adapter_does_not_mutate_borrowed_client_headers() -> None:
     assert "authorization" not in {k.lower() for k in client.headers}
     assert dict(client.headers) == before
     await client.aclose()
+
+
+# ── OpenAlexWorksAdapter.fetch — mock HTTP ───────────────────────────────────
+
+
+def _openalex_work(work_id: str, *, title: str, date: str) -> dict[str, Any]:
+    return {
+        "id": f"https://openalex.org/{work_id}",
+        "display_name": title,
+        "doi": f"https://doi.org/10.1234/{work_id}",
+        "publication_date": date,
+        "primary_topic": {"id": "https://openalex.org/T10001"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_openalex_adapter_yields_raw_documents() -> None:
+    """Adapter yields one RawDocument per work and surfaces id/title/date."""
+    import httpx
+    from intercal_shared.adapters.source_openalex import OpenAlexWorksAdapter
+
+    api_response = {
+        "results": [_openalex_work("W1", title="A Survey of LLMs", date="2023-03-01")],
+        "meta": {"next_cursor": None},
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=api_response)
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.AsyncClient(transport=transport)
+
+    adapter = OpenAlexWorksAdapter()
+    docs: list[RawDocument] = []
+    async for doc in adapter.fetch(
+        adapter_config={"start_date": "2022-11-01", "end_date": "2024-01-01"},
+        cursor_state=None,
+        max_documents=10,
+        http_client=client,
+    ):
+        docs.append(doc)
+    await client.aclose()
+
+    assert len(docs) == 1
+    doc = docs[0]
+    assert doc.external_id == "https://openalex.org/W1"
+    assert doc.title == "A Survey of LLMs"
+    assert doc.published_at == "2023-03-01"
+    assert doc.content_type == "application/json"
+    assert doc.metadata["adapter"] == "openalex_v1"
+    assert doc.metadata["openalex_id"] == "W1"
+    payload = json.loads(doc.content)
+    assert payload["display_name"] == "A Survey of LLMs"
+
+
+@pytest.mark.asyncio
+async def test_openalex_adapter_sends_filter_and_mailto() -> None:
+    """The date window maps to from/to filters and mailto rides the polite pool."""
+    import httpx
+    from intercal_shared.adapters.source_openalex import OpenAlexWorksAdapter
+
+    seen_params: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_params.update(dict(request.url.params))
+        return httpx.Response(200, json={"results": [], "meta": {"next_cursor": None}})
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.AsyncClient(transport=transport)
+
+    adapter = OpenAlexWorksAdapter()
+    async for _ in adapter.fetch(
+        adapter_config={
+            "start_date": "2022-11-01",
+            "end_date": "2024-01-01",
+            "mailto": "jamie@yrka.io",
+        },
+        cursor_state=None,
+        max_documents=10,
+        http_client=client,
+    ):
+        pass
+    await client.aclose()
+
+    assert "from_publication_date:2022-11-01" in seen_params["filter"]
+    assert "to_publication_date:2024-01-01" in seen_params["filter"]
+    assert seen_params["mailto"] == "jamie@yrka.io"
+    # First request must open the OpenAlex cursor at "*".
+    assert seen_params["cursor"] == "*"
+
+
+@pytest.mark.asyncio
+async def test_openalex_adapter_follows_cursor_pagination() -> None:
+    """The adapter walks meta.next_cursor across pages until exhausted."""
+    import httpx
+    from intercal_shared.adapters.source_openalex import OpenAlexWorksAdapter
+
+    cursors_seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        cursor = request.url.params.get("cursor", "")
+        cursors_seen.append(cursor)
+        if cursor == "*":
+            return httpx.Response(
+                200,
+                json={
+                    "results": [_openalex_work("W1", title="Page one", date="2023-01-01")],
+                    "meta": {"next_cursor": "CURSOR_2"},
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "results": [_openalex_work("W2", title="Page two", date="2023-02-01")],
+                "meta": {"next_cursor": None},
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.AsyncClient(transport=transport)
+
+    adapter = OpenAlexWorksAdapter()
+    sink: dict[str, object] = {}
+    docs: list[RawDocument] = []
+    async for doc in adapter.fetch(
+        adapter_config={"start_date": "2022-11-01", "end_date": "2024-01-01"},
+        cursor_state=None,
+        max_documents=10,
+        http_client=client,
+        cursor_sink=sink,
+    ):
+        docs.append(doc)
+    await client.aclose()
+
+    assert [d.external_id for d in docs] == [
+        "https://openalex.org/W1",
+        "https://openalex.org/W2",
+    ]
+    assert cursors_seen == ["*", "CURSOR_2"]
+    # Scan exhausted -> cursor reset so a later run restarts the extended window.
+    assert sink["next_cursor"] == ""
+    assert sink["query_hash"]
+
+
+@pytest.mark.asyncio
+async def test_openalex_adapter_resumes_from_stored_cursor() -> None:
+    """A stored next_cursor with a matching query hash resumes mid-scan."""
+    import hashlib as _hashlib
+    import json as _json
+
+    import httpx
+    from intercal_shared.adapters.source_openalex import OpenAlexWorksAdapter
+
+    api_url = "https://api.openalex.org/works"
+    filter_value = "from_publication_date:2022-11-01,to_publication_date:2024-01-01"
+    query_hash = _hashlib.sha256(
+        _json.dumps(
+            {"url": api_url, "filter": filter_value, "search": ""}, sort_keys=True
+        ).encode()
+    ).hexdigest()
+
+    seen_cursors: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_cursors.append(request.url.params.get("cursor", ""))
+        return httpx.Response(200, json={"results": [], "meta": {"next_cursor": None}})
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.AsyncClient(transport=transport)
+
+    adapter = OpenAlexWorksAdapter()
+    async for _ in adapter.fetch(
+        adapter_config={"start_date": "2022-11-01", "end_date": "2024-01-01"},
+        cursor_state={"next_cursor": "RESUME_HERE", "query_hash": query_hash},
+        max_documents=10,
+        http_client=client,
+    ):
+        pass
+    await client.aclose()
+
+    # Matching query hash -> resume from the stored token, not "*".
+    assert seen_cursors == ["RESUME_HERE"]
+
+
+@pytest.mark.asyncio
+async def test_openalex_adapter_ignores_stale_cursor_on_query_change() -> None:
+    """A stored cursor from a different query is discarded (restart at '*')."""
+    import httpx
+    from intercal_shared.adapters.source_openalex import OpenAlexWorksAdapter
+
+    seen_cursors: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_cursors.append(request.url.params.get("cursor", ""))
+        return httpx.Response(200, json={"results": [], "meta": {"next_cursor": None}})
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.AsyncClient(transport=transport)
+
+    adapter = OpenAlexWorksAdapter()
+    async for _ in adapter.fetch(
+        adapter_config={"start_date": "2022-11-01", "end_date": "2024-01-01"},
+        cursor_state={"next_cursor": "OLD_TOKEN", "query_hash": "some-other-query"},
+        max_documents=10,
+        http_client=client,
+    ):
+        pass
+    await client.aclose()
+
+    assert seen_cursors == ["*"]
+
+
+@pytest.mark.asyncio
+async def test_openalex_adapter_max_documents_respected() -> None:
+    """Adapter must not yield more than max_documents even across pages."""
+    import httpx
+    from intercal_shared.adapters.source_openalex import OpenAlexWorksAdapter
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        works = [
+            _openalex_work(f"W{i}", title=f"Work {i}", date="2023-01-01") for i in range(10)
+        ]
+        return httpx.Response(200, json={"results": works, "meta": {"next_cursor": "MORE"}})
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.AsyncClient(transport=transport)
+
+    adapter = OpenAlexWorksAdapter()
+    docs: list[RawDocument] = []
+    async for doc in adapter.fetch(
+        adapter_config={"start_date": "2022-11-01", "end_date": "2024-01-01"},
+        cursor_state=None,
+        max_documents=5,
+        http_client=client,
+    ):
+        docs.append(doc)
+    await client.aclose()
+
+    assert len(docs) == 5
+
+
+@pytest.mark.asyncio
+async def test_openalex_adapter_rate_limit_raises() -> None:
+    import httpx
+    from intercal_shared.adapters.source_openalex import OpenAlexWorksAdapter
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429)
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.AsyncClient(transport=transport)
+
+    adapter = OpenAlexWorksAdapter()
+    with pytest.raises(SourceRateLimitError):
+        async for _ in adapter.fetch(
+            adapter_config={"start_date": "2022-11-01", "end_date": "2024-01-01"},
+            cursor_state=None,
+            max_documents=10,
+            http_client=client,
+        ):
+            pass
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_openalex_adapter_server_error_raises() -> None:
+    import httpx
+    from intercal_shared.adapters.source_openalex import OpenAlexWorksAdapter
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, text="Service Unavailable")
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.AsyncClient(transport=transport)
+
+    adapter = OpenAlexWorksAdapter()
+    with pytest.raises(SourceFetchError):
+        async for _ in adapter.fetch(
+            adapter_config={"start_date": "2022-11-01", "end_date": "2024-01-01"},
+            cursor_state=None,
+            max_documents=10,
+            http_client=client,
+        ):
+            pass
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_openalex_adapter_invalid_date_raises() -> None:
+    from intercal_shared.adapters.source_openalex import OpenAlexWorksAdapter
+
+    adapter = OpenAlexWorksAdapter()
+    with pytest.raises(SourceFetchError, match="ISO date"):
+        async for _ in adapter.fetch(
+            adapter_config={"start_date": "not-a-date"},
+            cursor_state=None,
+            max_documents=10,
+        ):
+            pass
 
 
 # ── ingest_source job — fake asyncpg pool ────────────────────────────────────

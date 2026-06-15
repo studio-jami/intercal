@@ -175,6 +175,35 @@ INSERT INTO sources (
     true,
     false,
     '{"source_class":"protocol","topic_cluster":"model_context_protocol","corpus_taxonomy":"ai_history","corpus_track":"broad_proof"}'::jsonb
+),
+(
+    -- Tier S (CC0): OpenAlex is the fact-redistributable scholarly spine for the
+    -- research_paper / ml_research / evaluation_benchmarks clusters. Per the
+    -- access-tier canon (docs/operations/source-policy.md), CC0 sets the Tier S
+    -- defaults: redistribution_allowed=true, summary_allowed=true,
+    -- citation_only=false. The work metadata is CC0; OpenAlex is part of the
+    -- redistributable backbone, not merely a citable source.
+    '00000000-0000-4500-8500-000000000109',
+    'broad-proof-openalex-research',
+    'Broad Proof - OpenAlex Research (CC0)',
+    'OpenAlex scholarly works (CC0) for the research/benchmark clusters: dated, '
+    'graph-structured works filtered to the AI/ML topic for broad AI-history coverage.',
+    'api',
+    'openalex_v1',
+    -- Default query bounds the AI/ML corpus by the artificial-intelligence
+    -- concept (OpenAlex concept C154945302) over the corpus epoch. mailto rides
+    -- the OpenAlex polite pool. Operators widen concepts/topics in gated waves.
+    '{"openalex_api_url":"https://api.openalex.org/works","mailto":"jamie@yrka.io","date_field":"publication","start_date":"2022-11-01","concepts":["C154945302"],"per_page":"200"}'::jsonb,
+    null,
+    'CC0-1.0',
+    true,
+    true,
+    false,
+    'OpenAlex data is CC0 (public domain). Tier S: facts are redistributable, not citation-only. https://docs.openalex.org/additional-help/faq',
+    null,
+    true,
+    false,
+    '{"source_class":"research_paper","topic_cluster":"ml_research","access_tier":"S","corpus_taxonomy":"ai_history","corpus_track":"broad_proof"}'::jsonb
 )
 ON CONFLICT (slug) DO UPDATE SET
     name = EXCLUDED.name,

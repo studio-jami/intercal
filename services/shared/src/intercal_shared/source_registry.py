@@ -91,6 +91,7 @@ class SourceRegistry:
             RssFeedAdapter,
             WikidataSparqlBatchAdapter,
         )
+        from intercal_shared.adapters.source_openalex import OpenAlexWorksAdapter
         from intercal_shared.adapters.source_wikidata import WikidataChangesAdapter
 
         self.register(WikidataChangesAdapter())
@@ -100,6 +101,7 @@ class SourceRegistry:
         self.register(RssFeedAdapter())
         self.register(WikidataSparqlBatchAdapter())
         self.register(MediaWikiRevisionsAdapter())
+        self.register(OpenAlexWorksAdapter())
         _log.debug("Registered all default source adapters: %s", self.all_names())
 
 

@@ -135,7 +135,7 @@ jobs:
       LOG_LEVEL: ${{ secrets.LOG_LEVEL || 'info' }}
       SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup uv
         # setup-uv stopped publishing a moving major tag at v8 (immutable/secure

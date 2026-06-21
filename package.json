@@ -39,13 +39,13 @@
     "backup:test": "node scripts/ops/backup-restore.mjs restore-proof"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.3.0",
+    "@biomejs/biome": "^2.5.0",
     "@intercal/api": "workspace:*",
     "@intercal/core": "workspace:*",
     "@intercal/mcp-server": "workspace:*",
     "jose": "catalog:",
-    "pg": "^8.13.0",
-    "typescript": "^5.9.2"
+    "pg": "^8.22.0",
+    "typescript": "^6.0.3"
   },
   "pnpm": {
     "overrides": {

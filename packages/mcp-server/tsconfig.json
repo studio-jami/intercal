@@ -2,7 +2,9 @@
   "extends": "../../config/tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"]
   },
   "references": [{ "path": "../shared" }, { "path": "../core" }],
   "include": ["src"]

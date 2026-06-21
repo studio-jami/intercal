@@ -8,9 +8,14 @@ import { spawnSync } from 'node:child_process';
 
 const steps = [
   { name: 'biome lint/format', cmd: 'pnpm lint' },
+  { name: 'public docs', cmd: 'pnpm docs:check' },
+  { name: 'contracts build', cmd: 'pnpm contracts:build' },
+  { name: 'shared build', cmd: 'pnpm --filter @intercal/shared build' },
+  { name: 'core build', cmd: 'pnpm --filter @intercal/core build' },
   { name: 'ts typecheck', cmd: 'pnpm typecheck' },
   { name: 'contracts drift', cmd: 'pnpm contracts:check' },
   { name: 'ts tests', cmd: 'pnpm test' },
+  { name: 'ts build', cmd: 'pnpm build' },
   { name: 'ruff lint', cmd: 'pnpm py:lint' },
   { name: 'pyright', cmd: 'pnpm py:typecheck' },
   { name: 'pytest', cmd: 'pnpm py:test' },

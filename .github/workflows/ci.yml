@@ -47,10 +47,16 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install Python deps
-        run: uv sync
+        run: uv sync --all-packages --all-extras
 
       - name: Build contracts
         run: pnpm contracts:build
+
+      - name: Build shared package
+        run: pnpm --filter @intercal/shared build
+
+      - name: Build core package
+        run: pnpm --filter @intercal/core build
 
       - name: Lint (Biome)
         run: pnpm lint

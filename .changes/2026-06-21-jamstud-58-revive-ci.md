@@ -6,3 +6,4 @@
 - Kept `docs/_standards` as a dev symlink while excluding it from Biome traversal.
 - Pinned `js-yaml` to the compatible patched 4.2.0 release for contracts generation.
 - Forced composite package builds so stale incremental state cannot mask missing `dist` outputs.
+- Sorted embedded generated contract JSON so `contracts:check` is deterministic across platforms.

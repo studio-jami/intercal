@@ -51,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # Authenticate to GCP with the operator service-account key (GitHub secret GCP_SA_KEY).
       # The key material lives only in the runner's ephemeral workspace and is never echoed.

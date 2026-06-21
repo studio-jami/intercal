@@ -1,0 +1,49 @@
+name: Multica second-pass on land
+
+# When an agent's PR merges to main, notify the Multica second-pass audit gate so a
+# fresh agent independently audits the landed work (find + fix what the first pass missed).
+# The webhook URL is the org secret MULTICA_SECONDPASS_WEBHOOK_URL. The Multica issue
+# identifier (JAMSTUD-<n>) is read from the PR branch / title / body, so agent PRs must
+# carry it (enforced by the workspace agent context). No identifier -> no-op.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  notify-second-pass:
+    if: ${{ github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Multica second-pass gate
+        env:
+          WEBHOOK_URL: ${{ secrets.MULTICA_SECONDPASS_WEBHOOK_URL }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WEBHOOK_URL:-}" ]; then
+            echo "MULTICA_SECONDPASS_WEBHOOK_URL not set; skipping."
+            exit 0
+          fi
+          ISSUE=$(printf '%s\n%s\n%s\n' "$PR_BRANCH" "$PR_TITLE" "$PR_BODY" \
+            | grep -oiE 'JAMSTUD-[0-9]+' | head -n1 | tr '[:lower:]' '[:upper:]' || true)
+          if [ -z "${ISSUE:-}" ]; then
+            echo "No JAMSTUD-<n> identifier in branch/title/body; nothing to audit."
+            exit 0
+          fi
+          echo "Landed ${ISSUE} via ${REPO}#${PR_NUMBER} (${MERGE_SHA}) -> notifying second-pass."
+          payload=$(jq -nc \
+            --arg issue "$ISSUE" --arg repo "$REPO" --arg pr "$PR_NUMBER" \
+            --arg sha "$MERGE_SHA" --arg url "$PR_URL" \
+            '{event:"issue.status_changed", eventPayload:{action:"in_review", issue:$issue, repo:$repo, pr:$pr, merge_sha:$sha, pr_url:$url, source:"github_pr_merged"}}')
+          curl -fsS -X POST "$WEBHOOK_URL" -H 'Content-Type: application/json' -d "$payload"
+          echo "Second-pass notified for ${ISSUE}."

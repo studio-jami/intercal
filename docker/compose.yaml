@@ -10,7 +10,7 @@
 services:
   postgres:
     # pgvector ships an official image tracking Postgres major + pgvector version.
-    image: pgvector/pgvector:pg18
+    image: pgvector/pgvector:pg17
     environment:
       POSTGRES_USER: intercal
       POSTGRES_PASSWORD: intercal

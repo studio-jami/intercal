@@ -58,6 +58,9 @@ jobs:
       - name: Build core package
         run: pnpm --filter @intercal/core build
 
+      - name: Build SDK package
+        run: pnpm --filter @intercal/sdk build
+
       - name: Lint (Biome)
         run: pnpm lint
 

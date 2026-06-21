@@ -12,6 +12,7 @@ const steps = [
   { name: 'contracts build', cmd: 'pnpm contracts:build' },
   { name: 'shared build', cmd: 'pnpm --filter @intercal/shared build' },
   { name: 'core build', cmd: 'pnpm --filter @intercal/core build' },
+  { name: 'sdk build', cmd: 'pnpm --filter @intercal/sdk build' },
   { name: 'ts typecheck', cmd: 'pnpm typecheck' },
   { name: 'contracts drift', cmd: 'pnpm contracts:check' },
   { name: 'ts tests', cmd: 'pnpm test' },

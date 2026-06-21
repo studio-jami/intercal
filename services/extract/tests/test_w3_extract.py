@@ -1394,7 +1394,7 @@ def test_cli_extract_claims_help_mentions_max_chunks() -> None:
     from typer.testing import CliRunner
 
     runner = CliRunner()
-    result = runner.invoke(app, ["extract-claims", "--help"])
+    result = runner.invoke(app, ["extract-claims", "--help"], color=False, terminal_width=200)
     assert result.exit_code == 0
     assert "max-chunks" in result.output
 

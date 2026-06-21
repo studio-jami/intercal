@@ -7,3 +7,4 @@
 - Pinned `js-yaml` to the compatible patched 4.2.0 release for contracts generation.
 - Forced composite package builds so stale incremental state cannot mask missing `dist` outputs.
 - Sorted embedded generated contract JSON so `contracts:check` is deterministic across platforms.
+- Made CLI help-output assertions independent of Rich's default terminal-width rendering.

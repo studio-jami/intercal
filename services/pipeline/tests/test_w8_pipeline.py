@@ -1161,7 +1161,7 @@ def test_cli_help_lists_commands() -> None:
 
 def test_cli_run_help() -> None:
     runner = CliRunner()
-    result = runner.invoke(app, ["run", "--help"])
+    result = runner.invoke(app, ["run", "--help"], color=False, terminal_width=200)
     assert result.exit_code == 0
     assert "--source-id" in result.output
     assert "--max-documents" in result.output
@@ -1172,14 +1172,14 @@ def test_cli_run_help() -> None:
 
 def test_cli_run_all_help() -> None:
     runner = CliRunner()
-    result = runner.invoke(app, ["run-all", "--help"])
+    result = runner.invoke(app, ["run-all", "--help"], color=False, terminal_width=200)
     assert result.exit_code == 0
     assert "--max-documents" in result.output
 
 
 def test_cli_backfill_help() -> None:
     runner = CliRunner()
-    result = runner.invoke(app, ["backfill", "--help"])
+    result = runner.invoke(app, ["backfill", "--help"], color=False, terminal_width=200)
     assert result.exit_code == 0
     assert "--source-class" in result.output
     assert "--start-date" in result.output

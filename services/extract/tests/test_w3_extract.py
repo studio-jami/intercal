@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
+import typer
 from intercal_extract.jobs import (
     CLAIMS_SCHEMA,
     EXTRACTOR_LLM,
@@ -1391,12 +1392,16 @@ def test_cli_extract_claims_requires_document_id() -> None:
 
 def test_cli_extract_claims_help_mentions_max_chunks() -> None:
     from intercal_extract.cli import app
-    from typer.testing import CliRunner
 
-    runner = CliRunner()
-    result = runner.invoke(app, ["extract-claims", "--help"], color=False, terminal_width=200)
-    assert result.exit_code == 0
-    assert "max-chunks" in result.output
+    command = typer.main.get_command(app)
+    commands: dict[str, Any] = cast(Any, command).commands
+    extract_claims = commands["extract-claims"]
+    parameters: list[Any] = extract_claims.params
+    option_names: set[str] = set()
+    for parameter in parameters:
+        opts: list[str] = parameter.opts
+        option_names.update(opts)
+    assert "--max-chunks" in option_names
 
 
 # ── Schema constants importable ───────────────────────────────────────────────

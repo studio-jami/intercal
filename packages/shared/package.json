@@ -19,7 +19,7 @@
   "scripts": {
     "contracts:build": "node scripts/build-contracts.mjs",
     "contracts:check": "node scripts/check-contracts.mjs",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -b tsconfig.json --force",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests"
   },

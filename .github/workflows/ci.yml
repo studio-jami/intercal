@@ -61,6 +61,12 @@ jobs:
       - name: Build SDK package
         run: pnpm --filter @intercal/sdk build
 
+      - name: Build API package
+        run: pnpm --filter @intercal/api build
+
+      - name: Build MCP server package
+        run: pnpm --filter @intercal/mcp-server build
+
       - name: Lint (Biome)
         run: pnpm lint
 

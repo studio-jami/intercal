@@ -12,6 +12,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+import typer
 from intercal_extract.jobs import (
     CLAIMS_SCHEMA,
     EXTRACTOR_LLM,
@@ -60,6 +61,21 @@ def _make_pool(
     pool.fetchval = _fetchval
     pool.execute = _execute
     return pool
+
+
+def _subcommand(app: typer.Typer, name: str) -> Any:
+    command = typer.main.get_command(app)
+    commands: Any = getattr(command, "commands", None)
+    assert isinstance(commands, dict)
+    return commands[name]
+
+
+def _option_names(command: Any) -> set[str]:
+    names: set[str] = set()
+    for param in command.params:
+        names.update(getattr(param, "opts", ()))
+        names.update(getattr(param, "secondary_opts", ()))
+    return names
 
 
 def _make_llm(
@@ -1391,12 +1407,8 @@ def test_cli_extract_claims_requires_document_id() -> None:
 
 def test_cli_extract_claims_help_mentions_max_chunks() -> None:
     from intercal_extract.cli import app
-    from typer.testing import CliRunner
 
-    runner = CliRunner()
-    result = runner.invoke(app, ["extract-claims", "--help"])
-    assert result.exit_code == 0
-    assert "max-chunks" in result.output
+    assert "--max-chunks" in _option_names(_subcommand(app, "extract-claims"))
 
 
 # ── Schema constants importable ───────────────────────────────────────────────

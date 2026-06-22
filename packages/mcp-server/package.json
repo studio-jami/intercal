@@ -16,7 +16,7 @@
     "intercal-mcp-stdio": "./bin/intercal-mcp-stdio.mjs"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -b tsconfig.json --force",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/http.js",
     "start:stdio": "node dist/stdio.js",

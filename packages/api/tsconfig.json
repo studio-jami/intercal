@@ -3,6 +3,8 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"],
     "verbatimModuleSyntax": false
   },
   "references": [{ "path": "../shared" }, { "path": "../core" }],

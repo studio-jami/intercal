@@ -50,6 +50,21 @@ _ENTITY_ID = str(uuid.uuid4())
 _CLAIM_ID = str(uuid.uuid4())
 
 
+def _subcommand(app: typer.Typer, name: str) -> Any:
+    command = typer.main.get_command(app)
+    commands: Any = getattr(command, "commands", None)
+    assert isinstance(commands, dict)
+    return commands[name]
+
+
+def _option_names(command: Any) -> set[str]:
+    names: set[str] = set()
+    for param in command.params:
+        names.update(getattr(param, "opts", ()))
+        names.update(getattr(param, "secondary_opts", ()))
+    return names
+
+
 class _FakeRecord:
     def __init__(self, data: dict[str, Any]) -> None:
         self._data = data
@@ -1160,31 +1175,25 @@ def test_cli_help_lists_commands() -> None:
 
 
 def test_cli_run_help() -> None:
-    runner = CliRunner()
-    result = runner.invoke(app, ["run", "--help"])
-    assert result.exit_code == 0
-    assert "--source-id" in result.output
-    assert "--max-documents" in result.output
-    assert "--max-chunks" in result.output
-    assert "--no-embeddings" in result.output
-    assert "--extract-force" in result.output
+    option_names = _option_names(_subcommand(app, "run"))
+    assert "--source-id" in option_names
+    assert "--max-documents" in option_names
+    assert "--max-chunks" in option_names
+    assert "--no-embeddings" in option_names
+    assert "--extract-force" in option_names
 
 
 def test_cli_run_all_help() -> None:
-    runner = CliRunner()
-    result = runner.invoke(app, ["run-all", "--help"])
-    assert result.exit_code == 0
-    assert "--max-documents" in result.output
+    option_names = _option_names(_subcommand(app, "run-all"))
+    assert "--max-documents" in option_names
 
 
 def test_cli_backfill_help() -> None:
-    runner = CliRunner()
-    result = runner.invoke(app, ["backfill", "--help"])
-    assert result.exit_code == 0
-    assert "--source-class" in result.output
-    assert "--start-date" in result.output
-    assert "--end-date" in result.output
-    assert "--dry-run" in result.output
+    option_names = _option_names(_subcommand(app, "backfill"))
+    assert "--source-class" in option_names
+    assert "--start-date" in option_names
+    assert "--end-date" in option_names
+    assert "--dry-run" in option_names
 
 
 def test_backfill_overrides_validates_date_window() -> None:

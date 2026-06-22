@@ -63,6 +63,21 @@ def _make_pool(
     return pool
 
 
+def _subcommand(app: typer.Typer, name: str) -> Any:
+    command = typer.main.get_command(app)
+    commands: Any = getattr(command, "commands", None)
+    assert isinstance(commands, dict)
+    return commands[name]
+
+
+def _option_names(command: Any) -> set[str]:
+    names: set[str] = set()
+    for param in command.params:
+        names.update(getattr(param, "opts", ()))
+        names.update(getattr(param, "secondary_opts", ()))
+    return names
+
+
 def _make_llm(
     *, mentions_data: dict[str, Any] | None = None, claims_data: dict[str, Any] | None = None
 ) -> MagicMock:
@@ -1393,15 +1408,7 @@ def test_cli_extract_claims_requires_document_id() -> None:
 def test_cli_extract_claims_help_mentions_max_chunks() -> None:
     from intercal_extract.cli import app
 
-    command = typer.main.get_command(app)
-    commands: dict[str, Any] = cast(Any, command).commands
-    extract_claims = commands["extract-claims"]
-    parameters: list[Any] = extract_claims.params
-    option_names: set[str] = set()
-    for parameter in parameters:
-        opts: list[str] = parameter.opts
-        option_names.update(opts)
-    assert "--max-chunks" in option_names
+    assert "--max-chunks" in _option_names(_subcommand(app, "extract-claims"))
 
 
 # ── Schema constants importable ───────────────────────────────────────────────

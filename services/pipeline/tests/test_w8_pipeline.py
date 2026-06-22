@@ -25,7 +25,7 @@ import datetime
 import inspect
 import json
 import uuid
-from typing import Any, cast
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -48,6 +48,21 @@ _SOURCE_ID = str(uuid.uuid4())
 _DOC_ID = str(uuid.uuid4())
 _ENTITY_ID = str(uuid.uuid4())
 _CLAIM_ID = str(uuid.uuid4())
+
+
+def _subcommand(app: typer.Typer, name: str) -> Any:
+    command = typer.main.get_command(app)
+    commands: Any = getattr(command, "commands", None)
+    assert isinstance(commands, dict)
+    return commands[name]
+
+
+def _option_names(command: Any) -> set[str]:
+    names: set[str] = set()
+    for param in command.params:
+        names.update(getattr(param, "opts", ()))
+        names.update(getattr(param, "secondary_opts", ()))
+    return names
 
 
 class _FakeRecord:
@@ -1151,18 +1166,6 @@ async def test_run_pipeline_health_run_id_is_unique() -> None:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def _cli_option_names(command_name: str) -> set[str]:
-    command = typer.main.get_command(app)
-    commands: dict[str, Any] = cast(Any, command).commands
-    subcommand = commands[command_name]
-    parameters: list[Any] = subcommand.params
-    option_names: set[str] = set()
-    for parameter in parameters:
-        opts: list[str] = parameter.opts
-        option_names.update(opts)
-    return option_names
-
-
 def test_cli_help_lists_commands() -> None:
     runner = CliRunner()
     result = runner.invoke(app, ["--help"])
@@ -1172,7 +1175,7 @@ def test_cli_help_lists_commands() -> None:
 
 
 def test_cli_run_help() -> None:
-    option_names = _cli_option_names("run")
+    option_names = _option_names(_subcommand(app, "run"))
     assert "--source-id" in option_names
     assert "--max-documents" in option_names
     assert "--max-chunks" in option_names
@@ -1181,11 +1184,12 @@ def test_cli_run_help() -> None:
 
 
 def test_cli_run_all_help() -> None:
-    assert "--max-documents" in _cli_option_names("run-all")
+    option_names = _option_names(_subcommand(app, "run-all"))
+    assert "--max-documents" in option_names
 
 
 def test_cli_backfill_help() -> None:
-    option_names = _cli_option_names("backfill")
+    option_names = _option_names(_subcommand(app, "backfill"))
     assert "--source-class" in option_names
     assert "--start-date" in option_names
     assert "--end-date" in option_names

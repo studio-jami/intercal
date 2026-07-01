@@ -39,7 +39,7 @@
     "backup:test": "node scripts/ops/backup-restore.mjs restore-proof"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.0",
+    "@biomejs/biome": "^2.5.2",
     "@intercal/api": "workspace:*",
     "@intercal/core": "workspace:*",
     "@intercal/mcp-server": "workspace:*",
